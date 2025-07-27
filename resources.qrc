@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/ArrowMoveDownRight.svg</file>
+        <file>qml/MapView.qml</file>
+        <file>resources/dump.js</file>
+    </qresource>
+</RCC>

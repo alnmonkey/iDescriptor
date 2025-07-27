@@ -1,0 +1,1 @@
+// Detect AFC2 (Apple File Conduit 2) support
