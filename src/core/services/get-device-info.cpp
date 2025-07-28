@@ -70,46 +70,44 @@ plist_t get_device_info(const char *udid, int use_network, int simple,
     idevice_error_t ret = IDEVICE_E_UNKNOWN_ERROR;
     plist_t node = NULL;
 
-#ifndef _WIN32
-    signal(SIGPIPE, SIG_IGN);
-#endif
-    // FIXME: network support does not properly work yet
-    // ret = idevice_new_with_options(&device, udid, (use_network) ?
-    // IDEVICE_LOOKUP_NETWORK : IDEVICE_LOOKUP_USBMUX);
-    ret = idevice_new_with_options(&device, udid, IDEVICE_LOOKUP_USBMUX);
-    if (ret != IDEVICE_E_SUCCESS) {
-        if (udid) {
-            fprintf(stderr, "ERROR: Device %s not found!\n", udid);
-        } else {
-            fprintf(stderr, "ERROR: No device found!\n");
-        }
-        return NULL;
-    }
-
-    if (LOCKDOWN_E_SUCCESS !=
-        (ldret = simple ? lockdownd_client_new(device, &client, "iDescriptor")
-                        : lockdownd_client_new_with_handshake(device, &client,
-                                                              "iDescriptor"))) {
-        fprintf(stderr, "ERROR: Could not connect to lockdownd: %s (%d)\n",
-                lockdownd_strerror(ldret), ldret);
-        return NULL;
-    }
-
     /* run query and output information */
     if (lockdownd_get_value(client, NULL, NULL, &node) != LOCKDOWN_E_SUCCESS) {
         fprintf(stderr, "ERROR: Could not get value\n");
     }
 
+    plist_t disk_info = nullptr;
+    u_int64_t total_space = 0;
+    u_int64_t free_space = 0;
+    /* {
+    "AmountDataAvailable": 6663077888,
+    "AmountDataReserved": 209715200,
+    "AmountRestoreAvailable": 11524079616,
+    "CalculateDiskUsage": "OkilyDokily",
+    "NANDInfo": <01000000 01000000 01000000 00000080 ... 00 00000000 000000>,
+    "TotalDataAvailable": 6872793088,
+    "TotalDataCapacity": 11306721280,
+    "TotalDiskCapacity": 16000000000,
+    "TotalSystemAvailable": 0,
+    "TotalSystemCapacity": 4693204992
+    }*/
+    /* trying to set DiskInfo as key results in
+    xplist.c:365: node_to_xml: Assertion `(node->children->count % 2) == 0'
+    failed. so lets do merge it*/
+    if (lockdownd_get_value(client, "com.apple.disk_usage", nullptr,
+                            &disk_info) == LOCKDOWN_E_SUCCESS) {
+        // merge dict
+        plist_dict_merge(&node, disk_info);
+        plist_free(disk_info);
+    }
+
     return node;
 }
 
-// Change return type to void
 void get_device_info_xml(const char *udid, int use_network, int simple,
                          pugi::xml_document &infoXml, lockdownd_client_t client,
                          idevice_t device)
 {
     plist_t node = get_device_info(udid, use_network, simple, client, device);
-
     if (!node)
         return;
 
@@ -122,5 +120,4 @@ void get_device_info_xml(const char *udid, int use_network, int simple,
         infoXml.load_string(xml_string);
         free(xml_string);
     }
-    // No return statement needed
 }

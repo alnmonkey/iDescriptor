@@ -4,14 +4,15 @@
 #include "./get-device-info.cpp"
 #include "libirecovery.h"
 #include <QDebug>
+#include <libimobiledevice/diagnostics_relay.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 #include <pugixml.hpp>
 
-DeviceInfo xmlToDeviceInfo(const pugi::xml_document &doc,
-                           afc_client_t afcClient)
+DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
+                          afc_client_t &afcClient, plist_t &diagnostics,
+                          DeviceInfo &d)
 {
-    DeviceInfo d;
     pugi::xml_node dict = doc.child("plist").child("dict");
 
     auto safeGet = [&](const char *key) -> std::string {
@@ -26,6 +27,7 @@ DeviceInfo xmlToDeviceInfo(const pugi::xml_document &doc,
         }
         return "";
     };
+
     d.deviceName = safeGet("DeviceName");
     d.deviceClass = safeGet("DeviceClass");
     d.deviceColor = safeGet("DeviceColor");
@@ -38,7 +40,25 @@ DeviceInfo xmlToDeviceInfo(const pugi::xml_document &doc,
     d.bluetoothAddress = safeGet("BluetoothAddress");
     d.firmwareVersion = safeGet("FirmwareVersion");
     d.productVersion = safeGet("ProductVersion");
+
+    /*DiskInfo*/
+    try {
+        d.diskInfo.totalDiskCapacity =
+            std::stoull(safeGet("TotalDiskCapacity"));
+        d.diskInfo.totalDataCapacity =
+            std::stoull(safeGet("TotalDataCapacity"));
+        d.diskInfo.totalSystemCapacity =
+            std::stoull(safeGet("TotalSystemCapacity"));
+        d.diskInfo.totalDataAvailable =
+            std::stoull(safeGet("TotalDataAvailable"));
+    } catch (const std::exception &e) {
+        qDebug() << e.what();
+        /*It's ok if any of those fails*/
+    }
+
     std::string _activationState = safeGet("ActivationState");
+    // TODO: does "ProductionSOC: true" work as well ?
+    d.productionDevice = std::stoi(safeGet("FusingStatus")) == 3;
     if (_activationState == "Activated") {
         d.activationState = DeviceInfo::ActivationState::Activated;
     } else if (_activationState == "FactoryActivated") {
@@ -49,10 +69,42 @@ DeviceInfo xmlToDeviceInfo(const pugi::xml_document &doc,
         d.activationState =
             DeviceInfo::ActivationState::Unactivated; // Default value
     }
+    // TODO:RegionInfo: LL/A
     d.productType = parse_product_type(safeGet("ProductType"));
-    d.jailbroken = detect_jailbroken(
-        afcClient); // Default value, can be set later if needed
-    // d.udid = safeGet("UniqueDeviceID");
+    d.jailbroken = detect_jailbroken(afcClient);
+
+    uint64_t cycleCount;
+    plist_get_uint_val(
+        PlistNavigator(diagnostics)["IORegistry"]["BatteryData"]["CycleCount"],
+        &cycleCount);
+
+    char *batterySerialNumber;
+    plist_get_string_val(
+        PlistNavigator(
+            diagnostics)["IORegistry"]["BatteryData"]["BatterySerialNumber"],
+        &batterySerialNumber);
+
+    uint64_t designCapacity;
+    plist_get_uint_val(
+        PlistNavigator(
+            diagnostics)["IORegistry"]["BatteryData"]["DesignCapacity"],
+        &designCapacity);
+
+    uint64_t absoluteCapacity;
+    plist_get_uint_val(
+        PlistNavigator(diagnostics)["IORegistry"]["AbsoluteCapacity"],
+        &absoluteCapacity);
+
+    d.batteryInfo.health =
+        QString::number((absoluteCapacity * 100) / designCapacity) + "%";
+    d.batteryInfo.cycleCount = cycleCount;
+    d.batteryInfo.serialNumber = batterySerialNumber
+                                     ? batterySerialNumber
+                                     : "Error retrieving serial number";
+
+    plist_free(diagnostics);
+    diagnostics = nullptr;
+
     return d;
 }
 
@@ -65,6 +117,7 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
     lockdownd_client_t client;
     lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
     lockdownd_service_descriptor_t lockdownService = nullptr;
+    diagnostics_relay_client_t diagnostics_client = nullptr;
     afc_client_t afcClient = nullptr;
     try {
         idevice_error_t ret = idevice_new_with_options(&result.device, udid,
@@ -108,6 +161,35 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
             return result;
         }
 
+        if (diagnostics_relay_client_start_service(
+                result.device, &diagnostics_client, nullptr) !=
+            DIAGNOSTICS_RELAY_E_SUCCESS) {
+            qDebug() << "Failed to start diagnostics relay service.";
+            return result;
+        }
+
+        plist_t diagnostics = nullptr;
+
+        // TODO: iPhone 8 and above should query AppleSmartBattery
+        if (diagnostics_relay_query_ioregistry_entry(
+                diagnostics_client, nullptr, "AppleARMPMUCharger",
+                &diagnostics) != DIAGNOSTICS_RELAY_E_SUCCESS &&
+            !diagnostics) {
+
+            qDebug()
+                << "Failed to query diagnostics relay for AppleARMPMUCharger.";
+            // Clean up resources before returning
+            if (afcClient)
+                afc_client_free(afcClient);
+            if (lockdownService)
+                lockdownd_service_descriptor_free(lockdownService);
+            if (client)
+                lockdownd_client_free(client);
+            if (diagnostics_client)
+                diagnostics_relay_client_free(diagnostics_client);
+            return result;
+        }
+
         pugi::xml_document infoXml;
         get_device_info_xml(udid, 0, 0, infoXml, client, result.device);
 
@@ -124,7 +206,7 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
 
         // if (result.device) idevice_free(result.device);
 
-        result.deviceInfo = xmlToDeviceInfo(infoXml, afcClient);
+        fullDeviceInfo(infoXml, afcClient, diagnostics, result.deviceInfo);
         result.success = true;
 
         if (afcClient)
@@ -133,6 +215,8 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
             lockdownd_service_descriptor_free(lockdownService);
         if (client)
             lockdownd_client_free(client);
+        if (diagnostics_client)
+            diagnostics_relay_client_free(diagnostics_client);
         return result;
 
     } catch (const std::exception &e) {
