@@ -1,5 +1,4 @@
 #include "fileexplorerwidget.h"
-#include "./core/services/get-media.cpp"
 #include "iDescriptor.h"
 #include <QDebug>
 #include <QDesktopServices>
@@ -24,40 +23,54 @@ bool FileExplorerWidget::ensureConnection()
         return false;
     }
 
-    lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
-
-    if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
-                                   device->device, &client, APP_LABEL))) {
-        return false; // Failed to create lockdown client
-        // result.error = ldret;
-        qDebug() << "In fileexplorer Failed to create lockdown client:  "
-                 << ldret;
-        // idevice_free(result.device);
-        // return result;
+    if (device->afcClient) {
+        qDebug() << "AFC client is defined";
     }
-    // if (!lockdownService) {
-    // qDebug() << "Failed to connect to lockdown service";
-    // QMessageBox::warning(this, "Error", "Lockdown service unavailable");
+    char **dirs = NULL;
 
-    // Try to reinitialize the AFC service
-    if (lockdownd_start_service(client, "com.apple.afc", &lockdownService) !=
-        LOCKDOWN_E_SUCCESS) {
-        qDebug() << "Failed to restart AFC service";
-        QMessageBox::warning(this, "Error", "Could not restart AFC service");
+    afc_error_t err = afc_read_directory(device->afcClient, "/", &dirs);
+    if (err != AFC_E_SUCCESS) {
+        qDebug() << "Failed to read directory";
+        qDebug() << "AFC error code: " << err;
+        QMessageBox::warning(this, "Error", "Need to reinitialize AFC service");
         return false;
     }
-
-    if (afc_client_new(device->device, lockdownService, &afcClient) !=
-        AFC_E_SUCCESS) {
-        qDebug() << "Failed to create new AFC client";
-        lockdownd_service_descriptor_free(lockdownService);
-        QMessageBox::warning(this, "Error", "Could not create AFC client");
-        return false;
-    }
-
-    qDebug() << "Successfully reinitialized AFC service";
-    // }
     return true;
+
+    // lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
+
+    // if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
+    //                                device->device, &client, APP_LABEL))) {
+    //     return false; // Failed to create lockdown client
+    //     // result.error = ldret;
+    //     qDebug() << "In fileexplorer Failed to create lockdown client:  "
+    //              << ldret;
+    //     // idevice_free(result.device);
+    //     // return result;
+    // }
+    // // if (!lockdownService) {
+    // // qDebug() << "Failed to connect to lockdown service";
+    // // QMessageBox::warning(this, "Error", "Lockdown service unavailable");
+
+    // // Try to reinitialize the AFC service
+    // if (lockdownd_start_service(client, "com.apple.afc", &lockdownService) !=
+    //     LOCKDOWN_E_SUCCESS) {
+    //     qDebug() << "Failed to restart AFC service";
+    //     QMessageBox::warning(this, "Error", "Could not restart AFC service");
+    //     return false;
+    // }
+
+    // if (afc_client_new(device->device, lockdownService, &afcClient) !=
+    //     AFC_E_SUCCESS) {
+    //     qDebug() << "Failed to create new AFC client";
+    //     lockdownd_service_descriptor_free(lockdownService);
+    //     QMessageBox::warning(this, "Error", "Could not create AFC client");
+    //     return false;
+    // }
+
+    // qDebug() << "Successfully reinitialized AFC service";
+    // // }
+    // return true;
 }
 
 FileExplorerWidget::FileExplorerWidget(iDescriptorDevice *device,
@@ -210,7 +223,7 @@ void FileExplorerWidget::loadPath(const QString &path)
     updateBreadcrumb(path);
 
     MediaFileTree tree =
-        getMediaFileTree(afcClient, lockdownService, path.toStdString());
+        get_file_tree(device->afcClient, device->device, path.toStdString());
     if (!tree.success) {
         fileList->addItem("Failed to load directory");
         return;
@@ -331,7 +344,7 @@ void FileExplorerWidget::exportSelectedFile(QListWidgetItem *item,
 
     // Export file using the validated connections
     int result =
-        export_file_to_path(afcClient, devicePath.toStdString().c_str(),
+        export_file_to_path(device->afcClient, devicePath.toStdString().c_str(),
                             savePath.toStdString().c_str());
 
     qDebug() << "Export result:" << result;
@@ -360,6 +373,7 @@ int FileExplorerWidget::export_file_to_path(afc_client_t afc,
                                             const char *local_path)
 {
     uint64_t handle = 0;
+    // TODO: implement safe_afc_file_open
     if (afc_file_open(afc, device_path, AFC_FOPEN_RDONLY, &handle) !=
         AFC_E_SUCCESS) {
         qDebug() << "Failed to open file on device:" << device_path;
@@ -374,6 +388,7 @@ int FileExplorerWidget::export_file_to_path(afc_client_t afc,
 
     char buffer[4096];
     uint32_t bytes_read = 0;
+    // TODO: implement safe_afc_file_read
     while (afc_file_read(afc, handle, buffer, sizeof(buffer), &bytes_read) ==
                AFC_E_SUCCESS &&
            bytes_read > 0) {
@@ -381,6 +396,7 @@ int FileExplorerWidget::export_file_to_path(afc_client_t afc,
     }
 
     fclose(out);
+    // TODO: implement safe_afc_file_close
     afc_file_close(afc, handle);
     return 0;
 }
@@ -411,9 +427,9 @@ void FileExplorerWidget::onImportClicked()
     for (const QString &localPath : fileNames) {
         QFileInfo fi(localPath);
         QString devicePath = currPath + fi.fileName();
-        int result =
-            import_file_to_device(afcClient, devicePath.toStdString().c_str(),
-                                  localPath.toStdString().c_str());
+        int result = import_file_to_device(device->afcClient,
+                                           devicePath.toStdString().c_str(),
+                                           localPath.toStdString().c_str());
         if (result == 0)
             qDebug() << "Imported" << localPath << "to" << devicePath;
         else

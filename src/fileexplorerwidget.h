@@ -1,6 +1,6 @@
-#pragma once
+#ifndef FILEEXPLORERWIDGET_H
+#define FILEEXPLORERWIDGET_H
 
-#include "./core/services/get-media.h"
 #include "iDescriptor.h"
 #include <QHBoxLayout>
 #include <QLabel>
@@ -41,10 +41,6 @@ private:
     QStack<QString> history;
     QHBoxLayout *breadcrumbLayout;
     iDescriptorDevice *device;
-    lockdownd_error_t error;
-    lockdownd_client_t client;
-    lockdownd_service_descriptor_t lockdownService;
-    afc_client_t afcClient;
 
     void loadPath(const QString &path);
     void updateBreadcrumb(const QString &path);
@@ -58,3 +54,5 @@ private:
                               const char *local_path);
     bool ensureConnection();
 };
+
+#endif // FILEEXPLORERWIDGET_H
