@@ -1,29 +1,24 @@
-#include "./get-media.h"
 #include "../../iDescriptor.h"
+#include <QDebug>
 #include <iostream>
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/lockdown.h>
 #include <string.h>
 
-MediaFileTree getMediaFileTree(afc_client_t afcClient,
-                               lockdownd_service_descriptor_t lockdownService,
-
-                               const std::string &path = "/")
+MediaFileTree get_file_tree(afc_client_t afcClient, idevice_t device,
+                            const std::string &path)
 {
 
     MediaFileTree result;
     result.currentPath = path;
 
     if (afcClient == nullptr) {
-        qDebug() << "AFC client is not initialized in getMediaFileTree";
-    }
-
-    if (lockdownService == nullptr) {
-        qDebug() << "Lockdown service is not initialized in getMediaFileTree";
+        qDebug() << "AFC client is not initialized in get_file_tree";
     }
 
     char **dirs = NULL;
-    if (afc_read_directory(afcClient, path.c_str(), &dirs) != AFC_E_SUCCESS) {
+    if (safe_afc_read_directory(afcClient, device, path.c_str(), &dirs) !=
+        AFC_E_SUCCESS) {
         // afc_client_free(afcClient);
         // lockdownd_service_descriptor_free(lockdownService);
         result.success = false;
@@ -57,6 +52,7 @@ MediaFileTree getMediaFileTree(afc_client_t afcClient,
         }
         result.entries.push_back({entryName, isDir});
     }
+    free(dirs);
     // TODO : Freed when device is disconnected
     // afc_client_free(afc);
     // lockdownd_service_descriptor_free(service);
