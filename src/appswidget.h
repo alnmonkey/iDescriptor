@@ -18,19 +18,6 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-class LoginDialog : public QDialog
-{
-    Q_OBJECT
-public:
-    explicit LoginDialog(QWidget *parent = nullptr);
-    QString getEmail() const;
-    QString getPassword() const;
-
-private:
-    QLineEdit *m_emailEdit;
-    QLineEdit *m_passwordEdit;
-};
-
 class AppsWidget : public QWidget
 {
     Q_OBJECT
