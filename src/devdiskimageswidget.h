@@ -23,22 +23,25 @@ public:
                                  QWidget *parent = nullptr);
 
 private slots:
-    void fetchImageList();
-    void onImageListFetchFinished(QNetworkReply *reply);
+    void fetchImages();
     void onDownloadButtonClicked();
     void onDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
     void onFileDownloadFinished();
     void changeDownloadDirectory();
     void updateDeviceList();
     void onMountButtonClicked();
+    void onImageListFetched(bool success,
+                            const QString &errorMessage = QString());
 
 private:
     void setupUi();
-    void parseAndDisplayImages(const QByteArray &jsonData);
+    void displayImages();
     void startDownload(const QString &version);
     void mountImage(const QString &version);
     void onDeviceSelectionChanged(int index);
     void closeEvent(QCloseEvent *event) override;
+    void checkMountedImage();
+
     struct DownloadItem {
         QNetworkReply *dmgReply = nullptr;
         QNetworkReply *sigReply = nullptr;
@@ -51,6 +54,9 @@ private:
         qint64 sigReceived = 0;
     };
 
+    char *m_mounted_sig = NULL;
+    uint64_t m_mounted_sig_len = 0;
+
     QStackedWidget *m_stackedWidget;
     QListWidget *m_imageListWidget;
     QLabel *m_statusLabel;
@@ -59,15 +65,16 @@ private:
     QLineEdit *m_downloadPathEdit;
     QComboBox *m_deviceComboBox;
     QPushButton *m_mountButton;
+    QPushButton *m_check_mountedButton;
 
-    QNetworkAccessManager *m_networkManager;
     QString m_downloadPath;
     iDescriptorDevice *m_currentDevice;
+    QStringList m_compatibleVersions;
+    QStringList m_otherVersions;
 
     QMap<QString, QPair<QString, QString>>
         m_availableImages; // version -> {dmg_path, sig_path}
     QMap<QNetworkReply *, DownloadItem *> m_activeDownloads;
-    QByteArray m_imageListJsonData;
 };
 
 #endif // DEVDISKIMAGESWIDGET_H

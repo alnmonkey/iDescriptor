@@ -1,5 +1,6 @@
 #include "devdiskimageswidget.h"
 #include "appcontext.h"
+#include "devdiskmanager.h"
 #include "iDescriptor.h"
 #include <QCloseEvent>
 #include <QComboBox>
@@ -23,33 +24,21 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVBoxLayout>
+#include <string>
 
-// Handle errors , event though it failed, ui thinks it is mounted
-/*DetailedError: Error Domain=com.apple.MobileStorage.ErrorDomain Code=-2
- * "Failed to mount
- * /private/var/run/mobile_image_mounter/42B093B66120045164A6781BD419867320D74D62DA078BB73979CD87C9AC14ECF4331C385F72EAF1F68C81C922D2EF3DE647BC0949DEE6557FBC06DAF7C13FEC/E9E8F8B5021B74DF4C10E6595BB4C16BB45CC55503B8B32085CE31C20A62812D4DB8264F758D5256DBA697139E56F2E8BEE3690EE33F252D17C044BB6C0446A2/tonVFp.dmg."
- * UserInfo={NSLocalizedDescription=Failed to mount
- * /private/var/run/mobile_image_mounter/42B093B66120045164A6781BD419867320D74D62DA078BB73979CD87C9AC14ECF4331C385F72EAF1F68C81C922D2EF3DE647BC0949DEE6557FBC06DAF7C13FEC/E9E8F8B5021B74DF4C10E6595BB4C16BB45CC55503B8B32085CE31C20A62812D4DB8264F758D5256DBA697139E56F2E8BEE3690EE33F252D17C044BB6C0446A2/tonVFp.dmg.,
- * NSUnderlyingError=0x12fe05ce0 {Error
- * Domain=com.apple.MobileStorage.ErrorDomain Code=-2 "Invalid value for
- * MountPath: Error Domain=com.apple.MobileStorage.ErrorDomain Code=-3 "A disk
- * image of type Developer/(null) is already mounted at /Developer."
- * UserInfo={NSLocalizedDescription=A disk image of type Developer/(null) is
- * already mounted at /Developer.}" UserInfo={NSLocalizedDescription=Invalid
- * value for MountPath: Error Domain=com.apple.MobileStorage.ErrorDomain Code=-3
- * "A disk image of type Developer/(null) is already mounted at /Developer."
- * UserInfo={NSLocalizedDescription=A disk image of type Developer/(null) is
- * already mounted at /Developer.}}}}*/
-
-extern bool mount_dev_image(const char *udid, const char *image_dir_path);
+// TODO:sometimes non authentic cables do not work with img mounting
 
 DevDiskImagesWidget::DevDiskImagesWidget(iDescriptorDevice *device,
                                          QWidget *parent)
-    : QWidget{parent}, m_networkManager(new QNetworkAccessManager(this)),
-      m_currentDevice(device)
+    : QWidget{parent}, m_currentDevice(device)
 {
     setupUi();
-    fetchImageList();
+
+    // Connect to manager signals
+    // TODO: can prevent race condition ?
+    connect(DevDiskManager::sharedInstance(), &DevDiskManager::imageListFetched,
+            this, &DevDiskImagesWidget::onImageListFetched);
+
     updateDeviceList();
     connect(AppContext::sharedInstance(), &AppContext::deviceAdded, this,
             &DevDiskImagesWidget::updateDeviceList);
@@ -65,44 +54,36 @@ void DevDiskImagesWidget::setupUi()
     auto *layout = new QVBoxLayout(this);
 
     auto *pathLayout = new QHBoxLayout();
-    pathLayout->addWidget(new QLabel(tr("Download Path:")));
+    pathLayout->addWidget(new QLabel("Download Path:"));
     m_downloadPathEdit = new QLineEdit();
     m_downloadPathEdit->setReadOnly(true);
     pathLayout->addWidget(m_downloadPathEdit);
-    auto *changeDirButton = new QPushButton(tr("Change..."));
+    auto *changeDirButton = new QPushButton("Change...");
     connect(changeDirButton, &QPushButton::clicked, this,
             &DevDiskImagesWidget::changeDownloadDirectory);
     pathLayout->addWidget(changeDirButton);
     layout->addLayout(pathLayout);
 
     auto *mountLayout = new QHBoxLayout();
-    mountLayout->addWidget(new QLabel(tr("Device:")));
+    mountLayout->addWidget(new QLabel("Device:"));
     m_deviceComboBox = new QComboBox(this);
     mountLayout->addWidget(m_deviceComboBox);
-    m_mountButton = new QPushButton(tr("Mount"), this);
+    m_mountButton = new QPushButton("Mount", this);
+    m_check_mountedButton = new QPushButton("Check Mounted", this);
     connect(m_mountButton, &QPushButton::clicked, this,
             &DevDiskImagesWidget::onMountButtonClicked);
+    connect(m_check_mountedButton, &QPushButton::clicked, this,
+            &DevDiskImagesWidget::checkMountedImage);
     mountLayout->addWidget(m_mountButton);
+    mountLayout->addWidget(m_check_mountedButton);
     layout->addLayout(mountLayout);
 
     m_stackedWidget = new QStackedWidget(this);
     layout->addWidget(m_stackedWidget);
 
-    m_initialStatusLabel = new QLabel("Fetching image list...");
-    m_initialStatusLabel->setAlignment(Qt::AlignCenter);
-    m_stackedWidget->addWidget(m_initialStatusLabel);
-
-    m_errorWidget = new QWidget(this);
-    QPushButton *retryButton = new QPushButton(tr("Retry"), m_errorWidget);
-    connect(retryButton, &QPushButton::clicked, this,
-            &DevDiskImagesWidget::fetchImageList);
-
-    auto *errorLayout = new QVBoxLayout(m_errorWidget);
-    m_statusLabel = new QLabel("");
-    errorLayout->addWidget(m_statusLabel);
-    errorLayout->addWidget(retryButton);
-    errorLayout->addStretch();
-    m_stackedWidget->addWidget(m_errorWidget);
+    m_statusLabel = new QLabel("Fetching image list...");
+    m_statusLabel->setAlignment(Qt::AlignCenter);
+    m_stackedWidget->addWidget(m_statusLabel);
 
     m_imageListWidget = new QListWidget(this);
     m_stackedWidget->addWidget(m_imageListWidget);
@@ -110,189 +91,94 @@ void DevDiskImagesWidget::setupUi()
     m_downloadPath =
         QDir(QCoreApplication::applicationDirPath()).filePath("devdiskimages");
     m_downloadPathEdit->setText(m_downloadPath);
+
+    displayImages();
 }
 
-void DevDiskImagesWidget::fetchImageList()
+void DevDiskImagesWidget::fetchImages()
 {
-    m_stackedWidget->setCurrentWidget(m_initialStatusLabel);
-
-    QUrl url("https://api.github.com/repos/mspvirajpatel/"
-             "Xcode_Developer_Disk_Images/git/trees/master?recursive=true");
-    QNetworkRequest request(url);
-    QNetworkReply *reply = m_networkManager->get(request);
-    connect(reply, &QNetworkReply::finished, this,
-            [this, reply]() { onImageListFetchFinished(reply); });
+    m_stackedWidget->setCurrentWidget(m_statusLabel);
+    m_statusLabel->setText("Fetching image list...");
+    // DevDiskManager::sharedInstance()->fetchImageList();
 }
 
-void DevDiskImagesWidget::onImageListFetchFinished(QNetworkReply *reply)
+void DevDiskImagesWidget::onImageListFetched(bool success,
+                                             const QString &errorMessage)
 {
-    if (reply->error() != QNetworkReply::NoError) {
-        m_errorWidget->setVisible(true);
-        m_statusLabel->setText(reply->errorString());
-        m_stackedWidget->setCurrentWidget(m_errorWidget);
-        reply->deleteLater();
+    if (!success) {
+        m_statusLabel->setText(
+            QString("Error fetching image list: %1").arg(errorMessage));
         return;
     }
 
-    QByteArray data = reply->readAll();
-    reply->deleteLater();
-
-    m_imageListJsonData = data;
-    parseAndDisplayImages(m_imageListJsonData);
+    displayImages();
     m_stackedWidget->setCurrentWidget(m_imageListWidget);
 }
 
 void DevDiskImagesWidget::onDeviceSelectionChanged(int index)
 {
     if (index < 0 ||
-        index >= AppContext::sharedInstance()->getAllDevices().size()) {
-        m_currentDevice = nullptr;
-    } else {
-        m_currentDevice = AppContext::sharedInstance()->getAllDevices()[index];
-    }
-    parseAndDisplayImages(m_imageListJsonData);
+        index >= AppContext::sharedInstance()->getAllDevices().size())
+        return;
+
+    m_currentDevice = AppContext::sharedInstance()->getAllDevices()[index];
+    displayImages();
 }
 
-void DevDiskImagesWidget::parseAndDisplayImages(const QByteArray &jsonData)
+void DevDiskImagesWidget::displayImages()
 {
     m_imageListWidget->clear();
-    m_availableImages.clear();
 
-    QJsonDocument doc = QJsonDocument::fromJson(jsonData);
-    if (!doc.isObject()) {
-        m_statusLabel->setText(tr("Invalid image list format."));
-        m_stackedWidget->setCurrentWidget(m_errorWidget);
-        return;
-    }
-
-    QMap<QString, QMap<QString, QString>>
-        imageFiles; // dir -> {filename -> path}
-
-    QJsonArray tree = doc.object()["tree"].toArray();
-    for (const QJsonValue &value : tree) {
-        QJsonObject obj = value.toObject();
-        QString path = obj["path"].toString();
-        if (path.endsWith(".dmg") || path.endsWith(".dmg.signature")) {
-            QFileInfo fileInfo(path);
-            QString dir = fileInfo.path();
-            QString filename = fileInfo.fileName();
-            if (!dir.isEmpty() && dir != ".")
-                imageFiles[dir][filename] = path;
-        }
-    }
-
-    // Get device iOS version for compatibility checking
-    QString deviceVersion;
+    // Get device version for compatibility checking
     int deviceMajorVersion = 0;
     int deviceMinorVersion = 0;
     bool hasConnectedDevice = false;
 
     if (m_currentDevice && m_currentDevice->device) {
-        // TODO : use the macro IDEVICE_DEVICE_VERSION
         unsigned int device_version =
             idevice_get_device_version(m_currentDevice->device);
         deviceMajorVersion = (device_version >> 16) & 0xFF;
         deviceMinorVersion = (device_version >> 8) & 0xFF;
-        deviceVersion =
-            QString("%1.%2").arg(deviceMajorVersion).arg(deviceMinorVersion);
         hasConnectedDevice = true;
     }
 
-    qDebug() << "Has connected device:" << hasConnectedDevice;
+    // Parse images using manager
+    GetImagesSortedFinalResult sortedResult =
+        DevDiskManager::sharedInstance()->parseImageList(
+            QByteArray(), m_downloadPath, deviceMajorVersion,
+            deviceMinorVersion, m_mounted_sig, m_mounted_sig_len);
 
-    // Separate compatible and other versions
-    QStringList compatibleVersions;
-    QStringList otherVersions;
-
-    for (auto it = imageFiles.constBegin(); it != imageFiles.constEnd(); ++it) {
-        if (it.value().contains("DeveloperDiskImage.dmg") &&
-            it.value().contains("DeveloperDiskImage.dmg.signature")) {
-            QFileInfo dirInfo(it.key());
-            QString version = dirInfo.fileName();
-            m_availableImages[version] = {
-                it.value()["DeveloperDiskImage.dmg"],
-                it.value()["DeveloperDiskImage.dmg.signature"]};
-
-            // Determine compatibility
-            bool isCompatible = false;
-            if (hasConnectedDevice) {
-                // Parse version string (e.g., "15.0", "16.1")
-                QStringList versionParts = version.split('.');
-                if (versionParts.size() >= 1) {
-                    bool ok;
-                    int imageMajorVersion = versionParts[0].toInt(&ok);
-                    if (ok) {
-                        // iOS 16+ uses iOS 16 images, earlier versions use
-                        // exact or lower version
-                        if (deviceMajorVersion >= 16) {
-                            isCompatible = (imageMajorVersion == 16);
-                        } else {
-                            isCompatible =
-                                (imageMajorVersion == deviceMajorVersion);
-                        }
-                    }
-                }
-            }
-
-            if (isCompatible) {
-                compatibleVersions.append(version);
-            } else {
-                otherVersions.append(version);
-            }
-        }
-    }
-
-    // Sort versions (compatible ones first, then others)
-    auto versionSort = [](const QString &a, const QString &b) {
-        QStringList aParts = a.split('.');
-        QStringList bParts = b.split('.');
-
-        for (int i = 0; i < qMax(aParts.size(), bParts.size()); ++i) {
-            int aNum = (i < aParts.size()) ? aParts[i].toInt() : 0;
-            int bNum = (i < bParts.size()) ? bParts[i].toInt() : 0;
-
-            if (aNum != bNum) {
-                return aNum > bNum; // Descending order (newest first)
-            }
-        }
-        return false;
-    };
-
-    std::sort(compatibleVersions.begin(), compatibleVersions.end(),
-              versionSort);
-    std::sort(otherVersions.begin(), otherVersions.end(), versionSort);
+    auto compatibleImages = sortedResult.compatibleImages;
+    auto otherImages = sortedResult.otherImages;
 
     // Create UI items - compatible versions first
-    auto createVersionItem = [&](const QString &version, bool isCompatible) {
+    auto createVersionItem = [&](const ImageInfo &info, bool isCompatible) {
         auto *itemWidget = new QWidget();
         auto *itemLayout = new QHBoxLayout(itemWidget);
 
-        auto *versionLabel = new QLabel(version);
+        auto *versionLabel = new QLabel(info.version);
         if (isCompatible) {
             versionLabel->setStyleSheet(
                 "QLabel { font-weight: bold; color: #2E7D32; }");
         }
         itemLayout->addWidget(versionLabel);
 
-        // Add compatibility label
+        // Add status labels
         if (hasConnectedDevice) {
             if (isCompatible) {
-                auto *compatLabel = new QLabel(tr("✓ Compatible"));
-                compatLabel->setStyleSheet(
-                    "QLabel { color: #2E7D32; font-weight: bold; }");
-                itemLayout->addWidget(compatLabel);
+                if (info.isMounted) {
+                    auto *mountedLabel = new QLabel("✓ Mounted");
+                    mountedLabel->setStyleSheet(
+                        "QLabel { color: #1565C0; font-weight: bold; }");
+                    itemLayout->addWidget(mountedLabel);
+                }
             } else {
-                auto *incompatLabel = new QLabel(tr("⚠ Not recommended"));
-                incompatLabel->setStyleSheet("QLabel { color: #F57C00; }");
+                auto *incompatLabel = new QLabel("⚠ Not compatible");
+                incompatLabel->setStyleSheet(
+                    "QLabel { color: #F57C00; margin-left: 10px; font-weight: "
+                    "bold; }");
                 itemLayout->addWidget(incompatLabel);
             }
-        }
-
-        QString versionPath = QDir(m_downloadPath).filePath(version);
-        bool exists = QDir(versionPath).exists();
-
-        if (exists) {
-            itemLayout->addWidget(new QLabel(tr("(already exists)")));
         }
 
         itemLayout->addStretch();
@@ -302,8 +188,8 @@ void DevDiskImagesWidget::parseAndDisplayImages(const QByteArray &jsonData)
         itemLayout->addWidget(progressBar);
 
         auto *downloadButton =
-            new QPushButton(exists ? tr("Re-download") : tr("Download"));
-        downloadButton->setProperty("version", version);
+            new QPushButton(info.isDownloaded ? "Re-download" : "Download");
+        downloadButton->setProperty("version", info.version);
         connect(downloadButton, &QPushButton::clicked, this,
                 &DevDiskImagesWidget::onDownloadButtonClicked);
         itemLayout->addWidget(downloadButton);
@@ -315,16 +201,16 @@ void DevDiskImagesWidget::parseAndDisplayImages(const QByteArray &jsonData)
     };
 
     // Add compatible versions first
-    for (const QString &version : compatibleVersions) {
-        createVersionItem(version, true);
+    for (const auto &info : compatibleImages) {
+        createVersionItem(info, true);
     }
 
     // Add separator if we have both compatible and other versions
-    if (!compatibleVersions.isEmpty() && !otherVersions.isEmpty()) {
+    if (!compatibleImages.isEmpty() && !otherImages.isEmpty()) {
         auto *separatorItem = new QListWidgetItem(m_imageListWidget);
         auto *separatorWidget = new QWidget();
         auto *separatorLayout = new QHBoxLayout(separatorWidget);
-        auto *separatorLabel = new QLabel(tr("Other versions"));
+        auto *separatorLabel = new QLabel("Other versions");
         separatorLabel->setStyleSheet(
             "QLabel { font-weight: bold; color: #757575; margin: 10px 0; }");
         separatorLayout->addWidget(separatorLabel);
@@ -334,8 +220,17 @@ void DevDiskImagesWidget::parseAndDisplayImages(const QByteArray &jsonData)
     }
 
     // Add other versions
-    for (const QString &version : otherVersions) {
-        createVersionItem(version, false);
+    for (const auto &info : otherImages) {
+        createVersionItem(info, false);
+    }
+
+    // Show device info if available
+    if (hasConnectedDevice) {
+        QString deviceVersion =
+            QString("%1.%2").arg(deviceMajorVersion).arg(deviceMinorVersion);
+        m_statusLabel->setText(
+            QString("Connected device: iOS %1 - Compatible images shown at top")
+                .arg(deviceVersion));
     }
 }
 
@@ -350,8 +245,9 @@ void DevDiskImagesWidget::onDownloadButtonClicked()
     QString versionPath = QDir(m_downloadPath).filePath(version);
     if (QDir(versionPath).exists()) {
         auto reply = QMessageBox::question(
-            this, tr("Confirm Overwrite"),
-            tr("Directory '%1' already exists. Do you want to overwrite it?")
+            this, "Confirm Overwrite",
+            QString(
+                "Directory '%1' already exists. Do you want to overwrite it?")
                 .arg(version),
             QMessageBox::Yes | QMessageBox::No);
         if (reply == QMessageBox::No) {
@@ -364,9 +260,6 @@ void DevDiskImagesWidget::onDownloadButtonClicked()
 
 void DevDiskImagesWidget::startDownload(const QString &version)
 {
-    if (!m_availableImages.contains(version))
-        return;
-
     // Find the button and progress bar for this version
     QPushButton *downloadButton = nullptr;
     QProgressBar *progressBar = nullptr;
@@ -391,8 +284,8 @@ void DevDiskImagesWidget::startDownload(const QString &version)
     QString targetDir = QDir(m_downloadPath).filePath(version);
     if (!QDir().mkpath(targetDir)) {
         QMessageBox::critical(
-            this, tr("Error"),
-            tr("Could not create directory: %1").arg(targetDir));
+            this, "Error",
+            QString("Could not create directory: %1").arg(targetDir));
         downloadButton->setEnabled(true);
         progressBar->setVisible(false);
         return;
@@ -403,24 +296,21 @@ void DevDiskImagesWidget::startDownload(const QString &version)
     downloadItem->progressBar = progressBar;
     downloadItem->downloadButton = downloadButton;
 
-    QString dmgPath = m_availableImages[version].first;
-    QString sigPath = m_availableImages[version].second;
+    auto replies = DevDiskManager::sharedInstance()->downloadImage(version);
+    downloadItem->dmgReply = replies.first;
+    downloadItem->sigReply = replies.second;
 
-    QUrl dmgUrl("https://raw.githubusercontent.com/mspvirajpatel/"
-                "Xcode_Developer_Disk_Images/master/" +
-                dmgPath);
-    QNetworkRequest dmgRequest(dmgUrl);
-    downloadItem->dmgReply = m_networkManager->get(dmgRequest);
+    if (!downloadItem->dmgReply || !downloadItem->sigReply) {
+        delete downloadItem;
+        downloadButton->setEnabled(true);
+        progressBar->setVisible(false);
+        return;
+    }
+
     connect(downloadItem->dmgReply, &QNetworkReply::downloadProgress, this,
             &DevDiskImagesWidget::onDownloadProgress);
     connect(downloadItem->dmgReply, &QNetworkReply::finished, this,
             &DevDiskImagesWidget::onFileDownloadFinished);
-
-    QUrl sigUrl("https://raw.githubusercontent.com/mspvirajpatel/"
-                "Xcode_Developer_Disk_Images/master/" +
-                sigPath);
-    QNetworkRequest sigRequest(sigUrl);
-    downloadItem->sigReply = m_networkManager->get(sigRequest);
     connect(downloadItem->sigReply, &QNetworkReply::downloadProgress, this,
             &DevDiskImagesWidget::onDownloadProgress);
     connect(downloadItem->sigReply, &QNetworkReply::finished, this,
@@ -458,6 +348,7 @@ void DevDiskImagesWidget::onDownloadProgress(qint64 bytesReceived,
     }
 }
 
+// TODO: file saving should be in manager
 void DevDiskImagesWidget::onFileDownloadFinished()
 {
     auto *reply = qobject_cast<QNetworkReply *>(sender());
@@ -468,8 +359,8 @@ void DevDiskImagesWidget::onFileDownloadFinished()
     m_activeDownloads.remove(reply);
 
     if (reply->error() != QNetworkReply::NoError) {
-        QMessageBox::critical(this, tr("Download Error"),
-                              tr("Failed to download %1: %2")
+        QMessageBox::critical(this, "Download Error",
+                              QString("Failed to download %1: %2")
                                   .arg(reply->url().path())
                                   .arg(reply->errorString()));
 
@@ -479,7 +370,7 @@ void DevDiskImagesWidget::onFileDownloadFinished()
             item->dmgReply->abort();
 
         item->downloadButton->setEnabled(true);
-        item->downloadButton->setText(tr("Retry"));
+        item->downloadButton->setText("Retry");
         item->progressBar->setVisible(false);
 
         if (m_activeDownloads.key(item) == nullptr) {
@@ -497,8 +388,9 @@ void DevDiskImagesWidget::onFileDownloadFinished()
 
     QFile file(targetPath);
     if (!file.open(QIODevice::WriteOnly)) {
-        QMessageBox::critical(this, tr("File Error"),
-                              tr("Could not save file: %1").arg(targetPath));
+        QMessageBox::critical(
+            this, "File Error",
+            QString("Could not save file: %1").arg(targetPath));
     } else {
         file.write(reply->readAll());
         file.close();
@@ -507,7 +399,7 @@ void DevDiskImagesWidget::onFileDownloadFinished()
     reply->deleteLater();
 
     if (m_activeDownloads.key(item) == nullptr) { // Both files downloaded
-        item->downloadButton->setText(tr("Downloaded"));
+        item->downloadButton->setText("Downloaded");
         item->downloadButton->setEnabled(false);
         item->progressBar->setValue(100);
         item->progressBar->setVisible(false);
@@ -518,18 +410,11 @@ void DevDiskImagesWidget::onFileDownloadFinished()
 void DevDiskImagesWidget::updateDeviceList()
 {
     auto devices = AppContext::sharedInstance()->getAllDevices();
-    qDebug() << "devdiskwidget devices:" << devices.size();
     QString currentUdid = "";
     if (m_deviceComboBox->count() > 0 &&
         m_deviceComboBox->currentIndex() >= 0) {
         currentUdid = m_deviceComboBox->currentData().toString();
     }
-
-    // Temporarily disconnect to avoid triggering onDeviceSelectionChanged
-    // multiple times
-    disconnect(m_deviceComboBox,
-               QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-               &DevDiskImagesWidget::onDeviceSelectionChanged);
 
     m_deviceComboBox->clear();
 
@@ -548,46 +433,22 @@ void DevDiskImagesWidget::updateDeviceList()
 
     if (newIndex != -1) {
         m_deviceComboBox->setCurrentIndex(newIndex);
-        m_currentDevice = devices.at(newIndex);
-    } else if (!devices.isEmpty()) {
-        // If no previous device was selected but devices are available, select
-        // the first one
-        m_deviceComboBox->setCurrentIndex(0);
-        m_currentDevice = devices.at(0);
-    } else {
-        m_currentDevice = nullptr;
     }
-
-    // Reconnect the signal
-    connect(m_deviceComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            &DevDiskImagesWidget::onDeviceSelectionChanged);
-
-    qDebug() << "devdiskwidget device:" << m_deviceComboBox->currentText();
-    qDebug() << "devdiskwidget Current device:"
-             << (m_currentDevice
-                     ? m_currentDevice->deviceInfo.deviceName.c_str()
-                     : "None");
-
-    // Refresh the UI with the updated device information
-    if (!m_imageListJsonData.isEmpty()) {
-        parseAndDisplayImages(m_imageListJsonData);
-    }
+    displayImages();
 }
 
 void DevDiskImagesWidget::onMountButtonClicked()
 {
     if (m_deviceComboBox->currentIndex() < 0) {
-        QMessageBox::warning(
-            this, tr("No Device"),
-            tr("Please select a device to mount the image on."));
+        QMessageBox::warning(this, "No Device",
+                             "Please select a device to mount the image on.");
         return;
     }
 
     auto *currentItem = m_imageListWidget->currentItem();
     if (!currentItem) {
-        QMessageBox::warning(this, tr("No Image Selected"),
-                             tr("Please select a disk image to mount."));
+        QMessageBox::warning(this, "No Image Selected",
+                             "Please select a disk image to mount.");
         return;
     }
 
@@ -605,50 +466,37 @@ void DevDiskImagesWidget::mountImage(const QString &version)
 {
     QString udid = m_deviceComboBox->currentData().toString();
     if (udid.isEmpty()) {
-        QMessageBox::warning(this, tr("No Device"),
-                             tr("Please select a device."));
+        QMessageBox::warning(this, "No Device", "Please select a device.");
         return;
     }
 
-    // TODO: add a refresh button
-    QString versionPath = QDir(m_downloadPath).filePath(version);
-    if (!QDir(versionPath).exists()) {
+    if (!DevDiskManager::sharedInstance()->isImageDownloaded(version,
+                                                             m_downloadPath)) {
         QMessageBox::warning(
-            this, tr("Image Not Found"),
-            tr("The selected disk image for version %1 is not downloaded. "
-               "Please download it first.")
+            this, "Image Not Found",
+            QString("The selected disk image for version %1 is not downloaded. "
+                    "Please download it first.")
                 .arg(version));
         return;
     }
 
-    QString dmgPath = QDir(versionPath).filePath("DeveloperDiskImage.dmg");
-    QString sigPath =
-        QDir(versionPath).filePath("DeveloperDiskImage.dmg.signature");
-
-    if (!QFile::exists(dmgPath) || !QFile::exists(sigPath)) {
-        QMessageBox::warning(
-            this, tr("Image Files Missing"),
-            tr("Image files are missing in %1. Please re-download.")
-                .arg(versionPath));
-        return;
-    }
-
     m_mountButton->setEnabled(false);
-    m_mountButton->setText(tr("Mounting..."));
+    m_mountButton->setText("Mounting...");
 
-    bool success = mount_dev_image(udid.toUtf8().constData(),
-                                   versionPath.toUtf8().constData());
+    bool success = DevDiskManager::sharedInstance()->mountImage(version, udid,
+                                                                m_downloadPath);
 
     m_mountButton->setEnabled(true);
-    m_mountButton->setText(tr("Mount"));
+    m_mountButton->setText("Mount");
 
     if (success) {
-        QMessageBox::information(this, tr("Success"),
-                                 tr("Image mounted successfully on %1.")
+        QMessageBox::information(this, "Success",
+                                 QString("Image mounted successfully on %1.")
                                      .arg(m_deviceComboBox->currentText()));
+        displayImages(); // Refresh to show mounted status
     } else {
-        QMessageBox::critical(this, tr("Mount Failed"),
-                              tr("Failed to mount image on %1.")
+        QMessageBox::critical(this, "Mount Failed",
+                              QString("Failed to mount image on %1.")
                                   .arg(m_deviceComboBox->currentText()));
     }
 }
@@ -656,14 +504,12 @@ void DevDiskImagesWidget::mountImage(const QString &version)
 void DevDiskImagesWidget::changeDownloadDirectory()
 {
     QString dir = QFileDialog::getExistingDirectory(
-        this, tr("Select Download Directory"), m_downloadPath,
+        this, "Select Download Directory", m_downloadPath,
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if (!dir.isEmpty() && dir != m_downloadPath) {
         m_downloadPath = dir;
         m_downloadPathEdit->setText(m_downloadPath);
-        if (!m_imageListJsonData.isEmpty()) {
-            parseAndDisplayImages(m_imageListJsonData);
-        }
+        displayImages();
     }
 }
 
@@ -671,9 +517,10 @@ void DevDiskImagesWidget::closeEvent(QCloseEvent *event)
 {
     if (!m_activeDownloads.isEmpty()) {
         auto reply = QMessageBox::question(
-            this, tr("Downloads in Progress"),
-            tr("There are %1 download(s) in progress. Do you really want to "
-               "close and cancel all downloads?")
+            this, "Downloads in Progress",
+            QString(
+                "There are %1 download(s) in progress. Do you really want to "
+                "close and cancel all downloads?")
                 .arg(m_activeDownloads.size()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
@@ -693,4 +540,73 @@ void DevDiskImagesWidget::closeEvent(QCloseEvent *event)
     }
 
     event->accept();
+}
+
+// Toolbox clicked: "Developer Disk Images"
+// terminate called after throwing an instance of 'std::logic_error'
+//   what():  basic_string: construction from null is not valid
+
+void DevDiskImagesWidget::checkMountedImage()
+{
+    if (m_deviceComboBox->currentIndex() < 0) {
+        QMessageBox::warning(
+            this, "No Device",
+            "Please select a device to check the mounted image.");
+        return;
+    }
+
+    GetMountedImageResult result =
+        DevDiskManager::sharedInstance()->getMountedImage(
+            m_currentDevice->udid.c_str());
+
+    qDebug() << "checkMountedImage result:" << result.success
+             << result.message.c_str() << QString::fromStdString(result.output);
+
+    if (result.success) {
+
+        m_mounted_sig = strdup(result.output.c_str());
+        m_mounted_sig_len = result.output.size();
+        displayImages(); // Refresh to show mounted status
+        return;
+    }
+
+    QMessageBox::information(this, "Something went wrong",
+                             result.message.c_str());
+    //     get_mounted_image(m_currentDevice->udid.c_str());
+
+    // plist_t sig_array_node =
+    //     plist_dict_get_item(result.output, "ImageSignature");
+
+    // if (result.success == false || sig_array_node == NULL) {
+    //     QMessageBox::information(
+    //         this, "Locked",
+    //         "The device is locked. Please unlock it and try again.");
+    //     return;
+    // }
+
+    // char *mounted_sig = nullptr;
+    // uint64_t mounted_sig_len = 0;
+
+    // if (sig_array_node && plist_get_node_type(sig_array_node) == PLIST_ARRAY
+    // &&
+    //     plist_array_get_size(sig_array_node) > 0) {
+    //     plist_t sig_data_node = plist_array_get_item(sig_array_node, 0);
+    //     if (sig_data_node && plist_get_node_type(sig_data_node) ==
+    //     PLIST_DATA) {
+    //         plist_get_data_val(sig_data_node, &mounted_sig,
+    //         &mounted_sig_len);
+    //     }
+    // }
+
+    // auto compatibleImages =
+    //     DevDiskManager::sharedInstance()->getCompatibleImages();
+    // for (const auto &info : compatibleImages) {
+    //     if (info.isMounted) {
+    //         displayImages(); // Refresh to show mounted status
+    //         return;
+    //     }
+    // }
+
+    // QMessageBox::information(this, "Not Mounted",
+    //                          "The device has no mounted images.");
 }
