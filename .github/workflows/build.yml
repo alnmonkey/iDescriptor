@@ -103,6 +103,10 @@ jobs:
           ./autogen.sh
           sudo make install
 
+      - name: Update linker cache
+        if: runner.os == 'Linux'
+        run: sudo ldconfig
+
       - name: Install macOS dependencies (brew)
         if: runner.os == 'macOS'
         run: |
