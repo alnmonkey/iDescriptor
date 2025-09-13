@@ -54,6 +54,7 @@ jobs:
             libswscale-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            libfuse2 \
 
       # required version is '>= 2.6.0'
       - name: Install libplist
@@ -111,8 +112,6 @@ jobs:
             libimobiledevice \
             libimobiledevice-glue \
             irecovery
-        # NOTE: tatsu and frida-core are not in Homebrew.
-        # You would need to build them from source here.
 
       - name: Install Windows dependencies (vcpkg)
         if: runner.os == 'Windows'
@@ -137,26 +136,36 @@ jobs:
       - name: Build with CMake
         run: cmake --build build --config Release --parallel
 
-      - name: Package Linux Artifact
+      - name: Prepare for AppImage
         if: runner.os == 'Linux'
         run: |
-          mkdir -p release
-          cp build/iDescriptor release/
+          cp icons/icon.png build/iDescriptor.png
 
-      - name: Package macOS Artifact
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p release
-          cp -r build/iDescriptor.app release/
+          # Create a .desktop file required for the AppImage
+          cat <<EOF > build/iDescriptor.desktop
+          [Desktop Entry]
+          Name=iDescriptor
+          Exec=iDescriptor
+          Icon=iDescriptor
+          Type=Application
+          Categories=Utility;
+          EOF
 
-      - name: Package Windows Artifact
-        if: runner.os == 'Windows'
+      - name: Install linuxdeployqt
+        if: runner.os == 'Linux'
         run: |
-          mkdir -p release
-          cp build/Release/iDescriptor.exe release/
+          wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
+          chmod a+x linuxdeployqt-continuous-x86_64.AppImage
+
+      - name: Build AppImage
+        if: runner.os == 'Linux'
+        run: |
+          # export VERSION=$(git rev-parse --short HEAD)
+          export VERSION=1.0.0
+          ./linuxdeployqt-continuous-x86_64.AppImage build/iDescriptor -appimage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: iDescriptor-${{ matrix.os }}
-          path: release/
+          name: iDescriptor-AppImage
+          path: iDescriptor-*.AppImage
