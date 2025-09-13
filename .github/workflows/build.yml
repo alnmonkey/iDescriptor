@@ -153,6 +153,10 @@ jobs:
         run: |
           cp icons/icon.png build/iDescriptor.png
 
+          # Copy the Go library to the lib directory where linuxdeployqt can find it
+          mkdir -p build/lib
+          cp build/src/lib/ipatool-go/libipatool-go.so build/lib/
+
           # Create a .desktop file required for the AppImage
           cat <<EOF > build/iDescriptor.desktop
           [Desktop Entry]
