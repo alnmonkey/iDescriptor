@@ -58,8 +58,15 @@ public:
     QStringList getAllFilePaths() const;
     QStringList getFilteredFilePaths() const;
 
+    static QPixmap loadImage(iDescriptorDevice *device, const QString &filePath,
+                             const QString &cachePath);
+    // Static helper methods
+    static QPixmap loadThumbnailFromDevice(iDescriptorDevice *device,
+                                           const QString &filePath,
+                                           const QSize &size,
+                                           const QString &cachePath);
 signals:
-    void thumbnailNeedsLoading(int index);
+    void thumbnailNeedsToBeLoaded(int index);
     void exportRequested(const QStringList &filePaths);
 
 private slots:
@@ -93,12 +100,6 @@ private:
 
     QDateTime extractDateTimeFromFile(const QString &filePath) const;
     PhotoInfo::FileType determineFileType(const QString &fileName) const;
-
-    // Static helper methods
-    static QPixmap loadThumbnailFromDevice(iDescriptorDevice *device,
-                                           const QString &filePath,
-                                           const QSize &size,
-                                           const QString &cachePath);
 
     static QPixmap generateVideoThumbnail(iDescriptorDevice *device,
                                           const QString &filePath,

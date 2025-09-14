@@ -30,7 +30,7 @@ PhotoModel::PhotoModel(iDescriptorDevice *device, QObject *parent)
     // Configure memory cache (50MB limit - much more reasonable)
     m_thumbnailCache.setMaxCost(50 * 1024 * 1024);
 
-    connect(this, &PhotoModel::thumbnailNeedsLoading, this,
+    connect(this, &PhotoModel::thumbnailNeedsToBeLoaded, this,
             &PhotoModel::requestThumbnail, Qt::QueuedConnection);
 
     // Populate the photo paths
@@ -153,7 +153,7 @@ QVariant PhotoModel::data(const QModelIndex &index, int role) const
         // Start async loading for both images and videos
         if (!m_loadingPaths.contains(info.filePath)) {
             qDebug() << "Starting load for:" << info.fileName;
-            emit const_cast<PhotoModel *>(this)->thumbnailNeedsLoading(
+            emit const_cast<PhotoModel *>(this)->thumbnailNeedsToBeLoaded(
                 index.row());
         }
 
@@ -358,6 +358,43 @@ QPixmap PhotoModel::loadThumbnailFromDevice(iDescriptorDevice *device,
     }
 
     return thumbnail;
+}
+
+QPixmap PhotoModel::loadImage(iDescriptorDevice *device,
+                              const QString &filePath, const QString &cachePath)
+{
+    // Check disk cache first
+    if (QFile::exists(cachePath)) {
+        QPixmap cached(cachePath);
+        if (!cached.isNull()) {
+            qDebug() << "Disk cache HIT for:" << QFileInfo(filePath).fileName();
+            return cached;
+        }
+    }
+
+    // Load from device using your AFC function
+    QByteArray imageData = read_afc_file_to_byte_array(
+        device->afcClient, filePath.toUtf8().constData());
+
+    if (imageData.isEmpty()) {
+        qDebug() << "Could not read from device:" << filePath;
+        return QPixmap(); // Return empty pixmap on error
+    }
+
+    // Load pixmap from data
+    QPixmap original;
+    if (!original.loadFromData(imageData)) {
+        qDebug() << "Could not decode image data for:" << filePath;
+        return QPixmap();
+    }
+
+    // Save to disk cache
+    QDir().mkpath(QFileInfo(cachePath).absolutePath());
+    if (original.save(cachePath, "JPG", 85)) {
+        qDebug() << "Saved to disk cache:" << QFileInfo(filePath).fileName();
+    }
+
+    return original;
 }
 
 void PhotoModel::populatePhotoPaths()

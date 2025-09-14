@@ -52,7 +52,6 @@ private:
                             const char *local_path);
     int import_file_to_device(afc_client_t afc, const char *device_path,
                               const char *local_path);
-    bool ensureConnection();
 };
 
 #endif // FILEEXPLORERWIDGET_H

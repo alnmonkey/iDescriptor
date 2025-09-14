@@ -309,7 +309,7 @@ struct GetMountedImageResult {
 
 QPair<bool, plist_t> _get_mounted_image(const char *udid);
 
-bool restart(idevice_t device);
+bool restart(std::string udid);
 
 // TODO:move
 struct ImageInfo {
@@ -371,3 +371,9 @@ bool is_product_type_newer(const std::string &productType,
  */
 bool is_product_type_older(const std::string &productType,
                            const std::string &otherProductType);
+
+bool query_mobile_gestalt(iDescriptorDevice *id_device, const QStringList &keys,
+                          uint32_t &xml_size, char *&xml_data);
+;
+
+std::string safeGetXML(const char *key, pugi::xml_node dict);

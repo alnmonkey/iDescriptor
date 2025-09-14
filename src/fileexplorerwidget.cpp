@@ -1,5 +1,6 @@
 #include "fileexplorerwidget.h"
 #include "iDescriptor.h"
+#include "mediapreviewdialog.h"
 #include <QDebug>
 #include <QDesktopServices>
 #include <QFileDialog>
@@ -13,76 +14,10 @@
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/libimobiledevice.h>
 
-bool FileExplorerWidget::ensureConnection()
-{
-
-    // Validate all required connections
-    if (!device->device) {
-        qDebug() << "Failed to connect to device";
-        QMessageBox::warning(this, "Error", "Device connection lost");
-        return false;
-    }
-
-    if (device->afcClient) {
-        qDebug() << "AFC client is defined";
-    }
-    char **dirs = NULL;
-
-    afc_error_t err = afc_read_directory(device->afcClient, "/", &dirs);
-    if (err != AFC_E_SUCCESS) {
-        qDebug() << "Failed to read directory";
-        qDebug() << "AFC error code: " << err;
-        QMessageBox::warning(this, "Error", "Need to reinitialize AFC service");
-        return false;
-    }
-    return true;
-
-    // lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
-
-    // if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
-    //                                device->device, &client, APP_LABEL))) {
-    //     return false; // Failed to create lockdown client
-    //     // result.error = ldret;
-    //     qDebug() << "In fileexplorer Failed to create lockdown client:  "
-    //              << ldret;
-    //     // idevice_free(result.device);
-    //     // return result;
-    // }
-    // // if (!lockdownService) {
-    // // qDebug() << "Failed to connect to lockdown service";
-    // // QMessageBox::warning(this, "Error", "Lockdown service unavailable");
-
-    // // Try to reinitialize the AFC service
-    // if (lockdownd_start_service(client, "com.apple.afc", &lockdownService) !=
-    //     LOCKDOWN_E_SUCCESS) {
-    //     qDebug() << "Failed to restart AFC service";
-    //     QMessageBox::warning(this, "Error", "Could not restart AFC service");
-    //     return false;
-    // }
-
-    // if (afc_client_new(device->device, lockdownService, &afcClient) !=
-    //     AFC_E_SUCCESS) {
-    //     qDebug() << "Failed to create new AFC client";
-    //     lockdownd_service_descriptor_free(lockdownService);
-    //     QMessageBox::warning(this, "Error", "Could not create AFC client");
-    //     return false;
-    // }
-
-    // qDebug() << "Successfully reinitialized AFC service";
-    // // }
-    // return true;
-}
-
 FileExplorerWidget::FileExplorerWidget(iDescriptorDevice *device,
                                        QWidget *parent)
     : QWidget(parent), device(device)
 {
-    // Debug: log devices vector
-    if (!ensureConnection()) {
-        qDebug() << "Failed to ensure connection in FileExplorerWidget";
-        return;
-    }
-
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
     // --- New: Export/Import buttons layout ---
@@ -158,6 +93,10 @@ void FileExplorerWidget::onItemDoubleClicked(QListWidgetItem *item)
         history.push(nextPath);
         loadPath(nextPath);
     } else {
+        auto *previewDialog = new MediaPreviewDialog(device, nextPath, this);
+        previewDialog->setAttribute(Qt::WA_DeleteOnClose);
+        previewDialog->show();
+        // TODO: we need this ?
         emit fileSelected(nextPath);
     }
 }
