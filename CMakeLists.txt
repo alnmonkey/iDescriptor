@@ -7,8 +7,22 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include_directories(/usr/local/include)
-set(ENV{PKG_CONFIG_PATH} "/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+# Platform-specific paths for libraries built from source
+if(WIN32)
+    set(CUSTOM_LIB_PATH "C:/msys64/mingw64/lib")
+    set(CUSTOM_INCLUDE_PATH "C:/msys64/mingw64/include")
+    set(CUSTOM_PKGCONFIG_PATH "C:/msys64/mingw64/lib/pkgconfig")
+    # Use Windows path separator for environment variables
+    set(ENV{PKG_CONFIG_PATH} "${CUSTOM_PKGCONFIG_PATH};$ENV{PKG_CONFIG_PATH}")
+else()
+    set(CUSTOM_LIB_PATH "/usr/local/lib")
+    set(CUSTOM_INCLUDE_PATH "/usr/local/include")
+    set(CUSTOM_PKGCONFIG_PATH "/usr/local/lib/pkgconfig")
+    # Use Unix path separator for environment variables
+    set(ENV{PKG_CONFIG_PATH} "${CUSTOM_PKGCONFIG_PATH}:$ENV{PKG_CONFIG_PATH}")
+endif()
+
+include_directories(${CUSTOM_INCLUDE_PATH})
 
 find_package(PkgConfig REQUIRED)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Svg SvgWidgets Multimedia Network)
@@ -18,14 +32,14 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Svg SvgWidgets Mu
 # Force NO_DEFAULT_PATH to only search in /usr/local/lib
 find_library(IMOBILEDEVICE_LIBRARY 
     NAMES imobiledevice-1.0
-    PATHS /usr/local/lib
+    PATHS ${CUSTOM_LIB_PATH}
     NO_DEFAULT_PATH
     REQUIRED
 )
 
 find_library(IMOBILEDEVICE_GLUE_LIBRARY 
     NAMES imobiledevice-glue-1.0
-    PATHS /usr/local/lib
+    PATHS ${CUSTOM_LIB_PATH}
     NO_DEFAULT_PATH
     REQUIRED
 )
@@ -39,7 +53,7 @@ find_library(IMOBILEDEVICE_GLUE_LIBRARY
 
 find_library(TATSU_LIBRARY 
     NAMES tatsu
-    PATHS /usr/local/lib
+    PATHS ${CUSTOM_LIB_PATH}
     NO_DEFAULT_PATH
     REQUIRED
 )
@@ -49,7 +63,7 @@ pkg_check_modules(QRENCODE REQUIRED IMPORTED_TARGET libqrencode)
 
 find_library(IRECOVERY_LIBRARY 
     NAMES irecovery-1.0
-    PATHS /usr/local/lib
+    PATHS ${CUSTOM_LIB_PATH}
     NO_DEFAULT_PATH
     REQUIRED
 )
@@ -62,17 +76,23 @@ find_library(IRECOVERY_LIBRARY
 #     REQUIRED
 # )
 
-find_library(SSL_LIBRARY 
-    NAMES ssl
-    PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu
-    REQUIRED
-)
+if(WIN32)
+    # On MSYS2, these are found in the standard mingw64 prefix
+    find_library(SSL_LIBRARY NAMES ssl REQUIRED)
+    find_library(CRYPTO_LIBRARY NAMES crypto REQUIRED)
+else()
+    find_library(SSL_LIBRARY 
+        NAMES ssl
+        PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu
+        REQUIRED
+    )
 
-find_library(CRYPTO_LIBRARY 
-    NAMES crypto
-    PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu
-    REQUIRED
-)
+    find_library(CRYPTO_LIBRARY 
+        NAMES crypto
+        PATHS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu
+        REQUIRED
+    )
+endif()
 
 # Remove frida support for now
 # find_library(FRIDA_LIBRARY 
