@@ -129,8 +129,10 @@ jobs:
             echo "Building $repo..."
             
             git clone --depth=1 --recursive "https://github.com/libimobiledevice/$repo"
+            pushd "$repo"
             ./autogen.sh CC=gcc CXX=g++ --enable-debug --without-cython
             make -j install
+            popd
             echo "Built $repo successfully."
           done
 
