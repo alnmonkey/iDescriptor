@@ -1,6 +1,7 @@
 #ifndef QUERYMOBILEGESTALTWIDGET_H
 #define QUERYMOBILEGESTALTWIDGET_H
 
+#include "iDescriptor.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QGroupBox>
@@ -21,7 +22,8 @@ class QueryMobileGestaltWidget : public QWidget
     Q_OBJECT
 
 public:
-    QueryMobileGestaltWidget(QWidget *parent = nullptr);
+    QueryMobileGestaltWidget(iDescriptorDevice *device,
+                             QWidget *parent = nullptr);
 
 private slots:
     void onQueryButtonClicked();
@@ -46,6 +48,7 @@ private:
     QPushButton *queryButton;
     QTextEdit *outputTextEdit;
     QLabel *statusLabel;
+    iDescriptorDevice *m_device;
 
     // Data
     QStringList mobileGestaltKeys;

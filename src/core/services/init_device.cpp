@@ -4,21 +4,35 @@
 #include <libimobiledevice/diagnostics_relay.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
-#include <pugixml.hpp>
 
-std::string safeGet(const char *key, pugi::xml_node dict)
+std::string safeGetXML(const char *key, pugi::xml_node dict)
 {
     for (pugi::xml_node child = dict.first_child(); child;
          child = child.next_sibling()) {
         if (strcmp(child.name(), "key") == 0 &&
             strcmp(child.text().as_string(), key) == 0) {
             pugi::xml_node value = child.next_sibling();
-            if (value)
-                return value.text().as_string();
+            if (value) {
+                // Handle different XML element types
+                if (strcmp(value.name(), "true") == 0) {
+                    return "true";
+                } else if (strcmp(value.name(), "false") == 0) {
+                    return "false";
+                } else if (strcmp(value.name(), "integer") == 0) {
+                    return value.text().as_string();
+                } else if (strcmp(value.name(), "string") == 0) {
+                    return value.text().as_string();
+                } else if (strcmp(value.name(), "real") == 0) {
+                    return value.text().as_string();
+                } else {
+                    // For any other type, try to get the text content
+                    return value.text().as_string();
+                }
+            }
         }
     }
     return "";
-};
+}
 
 // TODO: return tyype
 DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
@@ -220,10 +234,10 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
 
         plist_t diagnostics = nullptr;
         std::string productType =
-            safeGet("ProductType", infoXml.child("plist").child("dict"));
+            safeGetXML("ProductType", infoXml.child("plist").child("dict"));
 
         bool is_iphone =
-            safeGet("DeviceClass", infoXml.child("plist").child("dict")) ==
+            safeGetXML("DeviceClass", infoXml.child("plist").child("dict")) ==
             "iPhone";
         if (is_iphone) {
 

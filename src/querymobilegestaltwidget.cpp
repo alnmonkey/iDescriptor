@@ -3,9 +3,11 @@
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <sstream>
 
-QueryMobileGestaltWidget::QueryMobileGestaltWidget(QWidget *parent)
-    : QWidget(parent)
+QueryMobileGestaltWidget::QueryMobileGestaltWidget(iDescriptorDevice *device,
+                                                   QWidget *parent)
+    : QWidget(parent), m_device(device)
 {
     setupUI();
     populateKeys();
@@ -1137,28 +1139,36 @@ void QueryMobileGestaltWidget::displayResults(
 QMap<QString, QVariant>
 QueryMobileGestaltWidget::queryMobileGestalt(const QStringList &keys)
 {
+    char *xml = nullptr;
+    uint32_t xmlLength = 0;
+    bool res = query_mobile_gestalt(m_device, keys, xmlLength, xml);
+    if (!res) {
+        qDebug() << "MobileGestalt query failed.";
+        return {};
+    }
     // This is a mock implementation
     // Replace this with your actual query function that takes a plist dict
+    pugi::xml_document infoXml;
+    pugi::xml_parse_result result = infoXml.load_string(xml);
+    if (xml)
+        free(xml);
 
+    if (!result) {
+        qDebug() << "Failed to parse XML:" << result.description();
+        return {};
+    }
+    pugi::xml_node dictNode =
+        infoXml.child("plist").child("dict").child("key").next_sibling("dict");
+    if (!dictNode) {
+        qDebug() << "No MobileGestalt <dict> node found in XML.";
+        return {};
+    }
     QMap<QString, QVariant> results;
-
-    // Example mock data
-    QMap<QString, QVariant> mockData = {
-        {"DeviceName", "iPhone"},       {"ProductType", "iPhone14,2"},
-        {"ProductVersion", "17.1.1"},   {"64-bit", true},
-        {"DeviceSupportsCamera", true}, {"DeviceSupportsWiFi", true},
-        {"DeviceClass", "iPhone"},      {"SerialNumber", "MOCK123456"},
-        {"ModelNumber", "MLPG3"},       {"RegionCode", "US"},
-        {"BuildVersion", "21B101"}};
-
-    // Return only the requested keys
     for (const QString &key : keys) {
-        if (mockData.contains(key)) {
-            results[key] = mockData[key];
-        } else {
-            results[key] = "Not available";
+        std::string value = safeGetXML(key.toStdString().c_str(), dictNode);
+        if (!value.empty()) {
+            results.insert(key, QString::fromStdString(value));
         }
     }
-
     return results;
 }
