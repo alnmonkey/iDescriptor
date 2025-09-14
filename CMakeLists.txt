@@ -8,7 +8,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(/usr/local/include)
-include_directories(/usr/include/python3.13)
 set(ENV{PKG_CONFIG_PATH} "/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 
 find_package(PkgConfig REQUIRED)
@@ -125,8 +124,8 @@ file(GLOB PROJECT_SOURCES
 add_subdirectory(src/core/airplay)
 add_subdirectory(src/lib/ipatool-go)
 
-if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS DBus)
 find_package(Qt6 REQUIRED COMPONENTS Quick)
@@ -138,28 +137,10 @@ find_package(Qt6 REQUIRED COMPONENTS Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS MultimediaWidgets)
 
 
-    qt_add_executable(iDescriptor
-        MANUAL_FINALIZATION
-        ${PROJECT_SOURCES}
-        src/core/helpers/warn.cpp
-    )
-    # Define target properties for Android with Qt 6 as:
-    # set_property(TARGET iDescriptor APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
-    # ${CMAKE_CURRENT_SOURCE_DIR}/android)
-    # For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
-else()
-    if(ANDROID)
-        add_library(iDescriptor SHARED
-            ${PROJECT_SOURCES}
-        )
-        # Define properties for Android with Qt 5 after find_package() calls as:
-        # set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
-    else()
-        add_executable(iDescriptor
-            ${PROJECT_SOURCES}
-        )
-    endif()
-endif()
+qt_add_executable(iDescriptor
+    MANUAL_FINALIZATION
+    ${PROJECT_SOURCES}
+)
 
 
 target_link_libraries(iDescriptor PRIVATE 
@@ -212,7 +193,7 @@ set_target_properties(iDescriptor PROPERTIES
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
     # Control library search order - system libs first, then /usr/local/lib
-    INSTALL_RPATH "/usr/local/lib:/usr/lib/x86_64-linux-gnu:/usr/lib"
+    INSTALL_RPATH "/usr/local/lib:/usr/lib/x86_64-linux-gnu:/usr/lib:$ORIGIN"
     # INSTALL_RPATH "/usr/local/lib:/usr/lib/"
     BUILD_WITH_INSTALL_RPATH TRUE
 )
