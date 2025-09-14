@@ -56,7 +56,7 @@ jobs:
             mingw-w64-x86_64-libzip
             p7zip
 
-      - name: Download and Install Bonjour SDK (Windows)
+      - name: Download and Extract Bonjour SDK (Windows)
         if: runner.os == 'Windows'
         run: |
           # Download the SDK installer
@@ -79,16 +79,29 @@ jobs:
           # Extract the .exe to get the .msi files
           7z x bonjour-sdk.exe -oBonjourInstaller
 
-          # Install the Bonjour Runtime first, silently (/qn)
-          echo "Installing Bonjour Runtime..."
-          msiexec /i "$(pwd)/BonjourInstaller/Bonjour64.msi" /qn
+      - name: Install Bonjour Runtime (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          # The SDK requires the normal version of Bonjour to be installed first
+          $currentPath = Get-Location
+          $msiFilePath = Join-Path -Path $currentPath -ChildPath "BonjourInstaller\Bonjour64.msi"
+          $msiexecArguments = "/i `"$msiFilePath`" /qn"
+          Write-Host "Installing Bonjour Runtime..."
+          Start-Process msiexec -ArgumentList $msiexecArguments -NoNewWindow -Wait
 
-          # Install the Bonjour SDK, silently (/qn)
-          echo "Installing Bonjour SDK..."
-          msiexec /i "$(pwd)/BonjourInstaller/BonjourSDK64.msi" /qn
+      - name: Install Bonjour SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $currentPath = Get-Location
+          $msiFilePath = Join-Path -Path $currentPath -ChildPath "BonjourInstaller\BonjourSDK64.msi"
+          $msiexecArguments = "/i `"$msiFilePath`" /qn"
+          Write-Host "Installing Bonjour SDK..."
+          Start-Process msiexec -ArgumentList $msiexecArguments -NoNewWindow -Wait
 
           # Set the environment variable for CMake to find the SDK
-          echo "BONJOUR_SDK_HOME=C:/Program Files/Bonjour SDK" >> $GITHUB_ENV
+          "BONJOUR_SDK_HOME=C:/Program Files/Bonjour SDK" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install Qt (Linux)
         if: runner.os == 'Linux'
