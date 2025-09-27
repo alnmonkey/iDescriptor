@@ -166,6 +166,7 @@ void DiskUsageWidget::fetchData()
         uint64_t totalAppsSpace = 0;
         instproxy_client_t instproxy = nullptr;
         lockdownd_client_t lockdownClient = nullptr;
+        lockdownd_service_descriptor_t lockdowndService = nullptr;
 
         if (lockdownd_client_new_with_handshake(m_device->device,
                                                 &lockdownClient, APP_LABEL) !=
@@ -173,24 +174,27 @@ void DiskUsageWidget::fetchData()
             result["error"] = "Could not connect to lockdown service.";
             return result;
         }
-        lockdownd_service_descriptor_t lockdowndService = nullptr;
+
         if (lockdownd_start_service(lockdownClient,
                                     "com.apple.mobile.installation_proxy",
                                     &lockdowndService) != LOCKDOWN_E_SUCCESS) {
-        }
-
-        if (instproxy_client_new(m_device->device, lockdowndService,
-                                 &instproxy) != INSTPROXY_E_SUCCESS) {
-            lockdownd_service_descriptor_free(lockdowndService);
+            result["error"] = "Could not start installation proxy service.";
+            lockdownd_client_free(lockdownClient);
+            return result;
         }
 
         if (instproxy_client_new(m_device->device, lockdowndService,
                                  &instproxy) != INSTPROXY_E_SUCCESS) {
             result["error"] = "Could not connect to installation proxy.";
+            lockdownd_service_descriptor_free(lockdowndService);
+            lockdownd_client_free(lockdownClient);
             return result;
         }
 
+        // The service descriptor is no longer needed after the client is
+        // created
         lockdownd_service_descriptor_free(lockdowndService);
+        lockdowndService = nullptr;
 
         plist_t client_opts = instproxy_client_options_new();
         plist_dict_set_item(client_opts, "ApplicationType",
@@ -252,6 +256,7 @@ void DiskUsageWidget::fetchData()
         }
         result["mediaUsage"] = QVariant::fromValue(mediaSpace);
 
+        lockdownd_client_free(lockdownClient);
         return result;
     });
     watcher->setFuture(future);
