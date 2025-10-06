@@ -1,5 +1,6 @@
 #include "installedappswidget.h"
 #include "afcexplorerwidget.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "qprocessindicator.h"
 #include <QAction>
@@ -19,14 +20,13 @@
 #include <libimobiledevice/lockdown.h>
 #include <plist/plist.h>
 
-// AppTabWidget Implementation
 AppTabWidget::AppTabWidget(const QString &appName, const QString &bundleId,
                            const QString &version, QWidget *parent)
     : QGroupBox(parent), m_appName(appName), m_bundleId(bundleId),
       m_version(version), m_selected(false), m_hovered(false)
 {
     setFixedHeight(60);
-    setMinimumWidth(250);
+    setMinimumWidth(100);
     setCursor(Qt::PointingHandCursor);
 
     setupUI();
@@ -67,22 +67,19 @@ void AppTabWidget::setSelected(bool selected)
 
 void AppTabWidget::setupUI()
 {
-    // Create main layout
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
     mainLayout->setContentsMargins(10, 8, 10, 8);
     mainLayout->setSpacing(10);
-
+    // m_defaultBg = this->palette().color(QPalette::Window);
     // Icon label
     m_iconLabel = new QLabel();
     m_iconLabel->setFixedSize(32, 32);
     m_iconLabel->setScaledContents(true);
 
-    // Load placeholder icon
     QPixmap placeholderIcon = QApplication::style()
                                   ->standardIcon(QStyle::SP_ComputerIcon)
                                   .pixmap(32, 32);
     m_iconLabel->setPixmap(placeholderIcon);
-
     mainLayout->addWidget(m_iconLabel);
 
     // Text container
@@ -92,24 +89,21 @@ void AppTabWidget::setupUI()
 
     // App name label
     m_nameLabel = new QLabel();
-    m_nameLabel->setFont(QFont(m_nameLabel->font().family(),
-                               m_nameLabel->font().pointSize(), QFont::Medium));
+    QFont nameFont = m_nameLabel->font();
+    nameFont.setWeight(QFont::Medium);
+    m_nameLabel->setFont(nameFont);
 
     QString displayText = m_appName;
     if (displayText.length() > 20) {
         displayText = displayText.left(17) + "...";
     }
     m_nameLabel->setText(displayText);
-
     textLayout->addWidget(m_nameLabel);
 
     // Version label
     if (!m_version.isEmpty()) {
         m_versionLabel = new QLabel(m_version);
-        QFont versionFont = m_versionLabel->font();
-        versionFont.setPointSize(versionFont.pointSize() - 1);
-        m_versionLabel->setFont(versionFont);
-        // m_versionLabel->setStyleSheet("color: #666666;");
+        m_versionLabel->setStyleSheet("font-size: 11px;");
         textLayout->addWidget(m_versionLabel);
     } else {
         m_versionLabel = nullptr;
@@ -118,8 +112,7 @@ void AppTabWidget::setupUI()
     mainLayout->addLayout(textLayout);
     mainLayout->addStretch();
 
-    // Set initial styles
-    // updateStyles();
+    updateStyles();
 }
 
 void AppTabWidget::mousePressEvent(QMouseEvent *event)
@@ -132,48 +125,31 @@ void AppTabWidget::enterEvent(QEnterEvent *event)
 {
     Q_UNUSED(event)
     m_hovered = true;
-    // updateStyles();
+    updateStyles();
 }
 
 void AppTabWidget::leaveEvent(QEvent *event)
 {
     Q_UNUSED(event)
     m_hovered = false;
-    // updateStyles();
+    updateStyles();
 }
 
 void AppTabWidget::updateStyles()
 {
-    QString backgroundColor;
-    QString nameColor = "#000000";
-    QString versionColor = "#666666";
     QString borderStyle;
-
-    if (m_selected) {
-        backgroundColor = "#007AFF";
-        nameColor = "#ffffff";
-        versionColor = "#ffffff";
-        borderStyle = "border: 2px solid #007AFF; border-radius: 6px;";
-    } else if (m_hovered) {
-        backgroundColor = "#f0f0f0";
-        borderStyle = "border: 1px solid #e0e0e0; border-radius: 6px;";
-    } else {
-        backgroundColor = "transparent";
-        borderStyle = "border: 1px solid transparent; border-radius: 6px;";
-    }
-
-    // Update widget background
-    // setStyleSheet(QString("AppTabWidget { background-color: %1; %2 }")
-    //                   .arg(backgroundColor, borderStyle));
-
-    // Update name label color
-    // m_nameLabel->setStyleSheet(QString("color: %1;").arg(nameColor));
-
-    // Update version label color if it exists
-    // if (m_versionLabel) {
-    //     m_versionLabel->setStyleSheet(QString("color:
-    //     %1;").arg(versionColor));
-    // }
+    // TODO: for some reason setting a style overrides every other style instead
+    // of adding or overriding
+    //  if (m_selected) {
+    //      setStyleSheet("border: 2px solid #007AFF;");
+    //  }
+    //      borderStyle = "border: 2px solid #007AFF;";
+    //  } else if (m_hovered) {
+    //      borderStyle = "border: 1px solid" + highlightColor.name() + ";";
+    //  } else {
+    //      borderStyle = "";
+    //  }
+    //  setStyleSheet(borderStyle);
 }
 
 InstalledAppsWidget::InstalledAppsWidget(iDescriptorDevice *device,
@@ -198,158 +174,107 @@ void InstalledAppsWidget::setupUI()
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
-    // Create main splitter
-    m_splitter = new QSplitter(Qt::Horizontal, this);
-    m_splitter->setChildrenCollapsible(false);
-    m_mainLayout->addWidget(m_splitter);
+    // Create stacked widget for different states
+    m_stackedWidget = new QStackedWidget(this);
+    m_mainLayout->addWidget(m_stackedWidget);
 
-    // Left side - Custom tab area with scroll
-    QWidget *tabWidget = new QWidget();
-    tabWidget->setMinimumWidth(300);
-    tabWidget->setMaximumWidth(500);
+    // Create loading widget
+    createLoadingWidget();
 
-    QVBoxLayout *tabWidgetLayout = new QVBoxLayout(tabWidget);
-    tabWidgetLayout->setContentsMargins(0, 0, 0, 0);
-    tabWidgetLayout->setSpacing(0);
+    // Create error widget
+    createErrorWidget();
 
-    // Search box at the top
-    QWidget *searchContainer = new QWidget();
-    searchContainer->setFixedHeight(50);
-    QHBoxLayout *searchLayout = new QHBoxLayout(searchContainer);
-    searchLayout->setContentsMargins(0, 0, 0, 0);
+    // Create content widget
+    createContentWidget();
 
-    m_searchEdit = new QLineEdit();
-    m_searchEdit->setPlaceholderText("Search apps...");
-    m_searchEdit->setStyleSheet("QLineEdit { "
-                                "    border: 2px solid #e0e0e0; "
-                                "    border-radius: 6px; "
-                                "    padding: 4px 8px; "
-                                "    font-size: 14px; "
-                                "} "
-                                "QLineEdit:focus { "
-                                "    border: 2px solid #007AFF; "
-                                "    outline: none; "
-                                "} ");
-
-    // Add search icon
-    // QAction *searchAction = m_searchEdit->addAction(
-    //     this->style()->standardIcon(QStyle::SP_FileDialogContentsView),
-    //     QLineEdit::LeadingPosition);
-    m_searchEdit->setToolTip("Search");
-
-    searchLayout->addWidget(m_searchEdit);
-
-    // Add checkbox for file sharing filter
-    m_fileSharingCheckBox = new QCheckBox("Show Only File Sharing Enabled");
-    m_fileSharingCheckBox->setChecked(true); // Default enabled
-    m_fileSharingCheckBox->setStyleSheet("QCheckBox { "
-                                         "    font-size: 10px; "
-                                         "    margin-left: 5px; "
-                                         "}");
-    searchLayout->addWidget(m_fileSharingCheckBox);
-
-    tabWidgetLayout->addWidget(searchContainer);
-
-    // Add a separator line
-    // QFrame *separator = new QFrame();
-    // separator->setFrameShape(QFrame::HLine);
-    // separator->setFrameShadow(QFrame::Sunken);
-    // separator->setStyleSheet("QFrame { color: #e0e0e0; }");
-    // tabFrameLayout->addWidget(separator);
-
-    m_tabScrollArea = new QScrollArea();
-    m_tabScrollArea->setWidgetResizable(true);
-    m_tabScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_tabScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_tabScrollArea->setStyleSheet("QScrollArea { border: none;  }");
-
-    m_tabContainer = new QWidget();
-    // m_tabContainer->setStyleSheet("");
-    m_tabLayout = new QVBoxLayout(m_tabContainer);
-    m_tabLayout->setContentsMargins(0, 0, 10, 0);
-    m_tabLayout->setSpacing(10);
-    m_tabLayout->addStretch(); // Push tabs to top
-
-    m_tabScrollArea->setWidget(m_tabContainer);
-    tabWidgetLayout->addWidget(m_tabScrollArea);
-
-    // Add tab widget to splitter
-    m_splitter->addWidget(tabWidget);
-
-    // Right side - Content area
-    m_contentWidget = new QWidget();
-    // m_contentWidget->setStyleSheet("border: 1px solid #ccc;");
-
-    QVBoxLayout *contentLayout = new QVBoxLayout(m_contentWidget);
-    contentLayout->setContentsMargins(0, 0, 0, 0);
-    contentLayout->setSpacing(0);
-
-    m_contentLabel = new QLabel("Select an app to view details");
-    m_contentLabel->setAlignment(Qt::AlignCenter);
-    // m_contentLabel->setStyleSheet("font-size: 16px; color: #666;");
-    contentLayout->addWidget(m_contentLabel);
-
-    // Container explorer area
-    // QLabel *containerTitle = new QLabel("App Container:");
-    // containerTitle->setStyleSheet(
-    //     "font-size: 14px; font-weight: bold; color: #333;");
-    // containerTitle->setVisible(false);
-    // contentLayout->addWidget(containerTitle);
-
-    m_containerScrollArea = new QScrollArea();
-    m_containerScrollArea->setWidgetResizable(true);
-    m_containerScrollArea->setMinimumHeight(200);
-    // m_containerScrollArea->setStyleSheet(
-    //     "QScrollArea { border: 1px solid #ddd; border-radius: 4px; }");
-    m_containerScrollArea->setVisible(false);
-
-    m_containerWidget = new QWidget();
-    m_containerLayout = new QVBoxLayout(m_containerWidget);
-    m_containerLayout->setContentsMargins(0, 0, 0, 0);
-    m_containerLayout->setSpacing(0);
-
-    m_containerScrollArea->setWidget(m_containerWidget);
-    contentLayout->addWidget(m_containerScrollArea);
-
-    // Add content widget to splitter
-    m_splitter->addWidget(m_contentWidget);
-
-    // Set initial splitter sizes (30% for tabs, 70% for content)
-    m_splitter->setSizes({300, 700});
-
-    // // Progress bar for loading
-    // m_progressBar = new QProgressBar();
-    // m_progressBar->setRange(0, 0); // Indeterminate progress
-    // m_progressBar->setVisible(false);
-    // contentLayout->addWidget(m_progressBar);
-
-    // Connect search functionality
-    connect(m_searchEdit, &QLineEdit::textChanged, this,
-            &InstalledAppsWidget::filterApps);
-
-    // Connect file sharing filter
-    connect(m_fileSharingCheckBox, &QCheckBox::toggled, this,
-            &InstalledAppsWidget::onFileSharingFilterChanged);
-
+    // Start in loading state
     showLoadingState();
 }
 
 void InstalledAppsWidget::showLoadingState()
 {
-    m_contentLabel->setText("Loading installed apps...");
-    // m_progressBar->setVisible(true);
-
-    // Clear existing tabs
-    qDeleteAll(m_appTabs);
-    m_appTabs.clear();
-    m_selectedTab = nullptr;
+    m_stackedWidget->setCurrentWidget(m_loadingWidget);
 }
 
 void InstalledAppsWidget::showErrorState(const QString &error)
 {
-    m_contentLabel->setText(QString("Error loading apps: %1").arg(error));
-    // m_progressBar->setVisible(false);
+    m_errorLabel->setText(QString("Error loading apps: %1").arg(error));
+    m_stackedWidget->setCurrentWidget(m_errorWidget);
 }
+
+void InstalledAppsWidget::createLoadingWidget()
+{
+    m_loadingWidget = new QWidget();
+    QVBoxLayout *loadingLayout = new QVBoxLayout(m_loadingWidget);
+    loadingLayout->setAlignment(Qt::AlignCenter);
+
+    QProcessIndicator *spinner = new QProcessIndicator();
+    spinner->setType(QProcessIndicator::line_rotate);
+    spinner->setFixedSize(48, 48);
+    spinner->start();
+    loadingLayout->addWidget(spinner, 0, Qt::AlignCenter);
+
+    QLabel *loadingLabel = new QLabel("Loading installed apps...");
+    loadingLabel->setAlignment(Qt::AlignCenter);
+    loadingLabel->setStyleSheet(
+        "font-size: 14px; color: #666; margin-top: 10px;");
+    loadingLayout->addWidget(loadingLabel);
+
+    m_stackedWidget->addWidget(m_loadingWidget);
+}
+
+void InstalledAppsWidget::createErrorWidget()
+{
+    m_errorWidget = new QWidget();
+    QVBoxLayout *errorLayout = new QVBoxLayout(m_errorWidget);
+    errorLayout->setAlignment(Qt::AlignCenter);
+
+    m_errorLabel = new QLabel();
+    m_errorLabel->setAlignment(Qt::AlignCenter);
+    m_errorLabel->setStyleSheet(
+        "font-size: 14px; color: #d32f2f; margin: 20px;");
+    m_errorLabel->setWordWrap(true);
+    errorLayout->addWidget(m_errorLabel);
+
+    QPushButton *retryButton = new QPushButton("Retry");
+    retryButton->setFixedSize(100, 30);
+    connect(retryButton, &QPushButton::clicked, this,
+            &InstalledAppsWidget::fetchInstalledApps);
+    errorLayout->addWidget(retryButton, 0, Qt::AlignCenter);
+
+    m_stackedWidget->addWidget(m_errorWidget);
+}
+
+void InstalledAppsWidget::createContentWidget()
+{
+    m_contentWidget = new QWidget();
+    QHBoxLayout *contentLayout = new QHBoxLayout(m_contentWidget);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(0);
+
+    // Create main splitter
+    m_splitter = new ModernSplitter(Qt::Horizontal, m_contentWidget);
+    m_splitter->setChildrenCollapsible(false);
+    contentLayout->addWidget(m_splitter);
+
+    // Left side - App list
+    createLeftPanel();
+
+    // Right side - Content area
+    createRightPanel();
+
+    // Set initial splitter sizes (400px for tabs, rest for content)
+    m_splitter->setSizes({400, 600});
+
+    // Connect signals
+    connect(m_searchEdit, &QLineEdit::textChanged, this,
+            &InstalledAppsWidget::filterApps);
+    connect(m_fileSharingCheckBox, &QCheckBox::toggled, this,
+            &InstalledAppsWidget::onFileSharingFilterChanged);
+
+    m_stackedWidget->addWidget(m_contentWidget);
+}
+
 // todo: move to services
 void InstalledAppsWidget::fetchInstalledApps()
 {
@@ -361,6 +286,10 @@ void InstalledAppsWidget::fetchInstalledApps()
     QFuture<QVariantMap> future = QtConcurrent::run([this]() -> QVariantMap {
         QVariantMap result;
         QVariantList apps;
+
+        // result["success"] = true;
+        // result["apps"] = apps;
+        // return result;
 
         instproxy_client_t instproxy = nullptr;
         lockdownd_client_t lockdownClient = nullptr;
@@ -528,7 +457,6 @@ void InstalledAppsWidget::fetchInstalledApps()
 void InstalledAppsWidget::onAppsDataReady()
 {
     QVariantMap result = m_watcher->result();
-    // m_progressBar->setVisible(false);
 
     if (!result.value("success", false).toBool()) {
         showErrorState(result.value("error", "Unknown error").toString());
@@ -537,9 +465,12 @@ void InstalledAppsWidget::onAppsDataReady()
 
     QVariantList apps = result.value("apps").toList();
     if (apps.isEmpty()) {
-        m_contentLabel->setText("No apps found");
+        showErrorState("No apps found");
         return;
     }
+
+    // Switch to content view once data is loaded
+    m_stackedWidget->setCurrentWidget(m_contentWidget);
 
     // Sort apps by display name
     std::sort(apps.begin(), apps.end(),
@@ -586,8 +517,8 @@ void InstalledAppsWidget::onAppsDataReady()
         createAppTab(tabName, bundleId, version);
     }
 
-    m_contentLabel->setText(
-        QString("Found %1 installed apps").arg(apps.count()));
+    // m_contentLabel->setText(
+    //     QString("Found %1 installed apps").arg(apps.count()));
 
     // Select first tab if available
     if (!m_appTabs.isEmpty()) {
@@ -604,7 +535,6 @@ void InstalledAppsWidget::createAppTab(const QString &appName,
     connect(tabWidget, &AppTabWidget::clicked, this,
             &InstalledAppsWidget::onAppTabClicked);
 
-    // TODO: is this needed ?
     // Remove the stretch before adding the new tab
     m_tabLayout->removeItem(m_tabLayout->itemAt(m_tabLayout->count() - 1));
 
@@ -633,26 +563,7 @@ void InstalledAppsWidget::selectAppTab(AppTabWidget *tab)
     m_selectedTab = tab;
     tab->setSelected(true);
 
-    // Update content
     QString bundleId = tab->getBundleId();
-    QString version = tab->getVersion();
-    QString appName = tab->getAppName();
-
-    // Remove the (System) suffix for display
-    QString displayName = appName;
-    displayName.remove(" (System)");
-
-    QString content = QString("<h2>%1</h2>"
-                              "<p><b>Bundle ID:</b> %2</p>"
-                              "<p><b>Version:</b> %3</p>"
-                              "<hr>")
-                          .arg(displayName, bundleId,
-                               version.isEmpty() ? "Unknown" : version);
-
-    m_contentLabel->setText(content);
-    m_contentLabel->setTextFormat(Qt::RichText);
-    m_contentLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-    m_contentLabel->setWordWrap(true);
 
     // Load app container data
     loadAppContainer(bundleId);
@@ -695,21 +606,19 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
         delete item;
     }
 
+    // Create a centered loading widget
+    QWidget *loadingWidget = new QWidget();
+    QVBoxLayout *loadingLayout = new QVBoxLayout(loadingWidget);
+    loadingLayout->setAlignment(Qt::AlignCenter);
+
     QProcessIndicator *l = new QProcessIndicator();
+    l->setType(QProcessIndicator::line_rotate);
     l->setFixedSize(32, 32);
     l->start();
-    m_containerLayout->addWidget(l);
-    m_containerScrollArea->setVisible(true);
+    loadingLayout->addWidget(l, 0, Qt::AlignCenter);
 
-    // // Find container title and make it visible
-    // QVBoxLayout *contentLayout =
-    //     qobject_cast<QVBoxLayout *>(m_contentWidget->layout());
-    // if (contentLayout && contentLayout->count() > 1) {
-    //     QLayoutItem *titleItem = contentLayout->itemAt(1);
-    //     if (titleItem && titleItem->widget()) {
-    //         titleItem->widget()->setVisible(true);
-    //     }
-    // }
+    m_containerLayout->addWidget(loadingWidget);
+    m_containerScrollArea->setVisible(true);
 
     QFuture<QVariantMap> future = QtConcurrent::run([this, bundleId]()
                                                         -> QVariantMap {
@@ -865,9 +774,9 @@ void InstalledAppsWidget::onContainerDataReady()
     }
 
     if (!result.value("success", false).toBool()) {
+        qDebug() << "Error loading app container:"
+                 << result.value("error").toString();
         QLabel *errorLabel = new QLabel("No data available for this app");
-        // errorLabel->setStyleSheet(
-        //     "color: #999; font-style: italic; text-align: center;");
         errorLabel->setAlignment(Qt::AlignCenter);
         m_containerLayout->addWidget(errorLabel);
         return;
@@ -876,29 +785,19 @@ void InstalledAppsWidget::onContainerDataReady()
     // Get the AFC clients from the result
     afc_client_t afcClient = reinterpret_cast<afc_client_t>(
         result.value("afcClient").value<void *>());
-    house_arrest_client_t houseArrestClient =
-        reinterpret_cast<house_arrest_client_t>(
-            result.value("houseArrestClient").value<void *>());
 
     if (!afcClient) {
         QLabel *errorLabel =
             new QLabel("Failed to get AFC client for app container");
-        // errorLabel->setStyleSheet("color: #999; font-style: italic;");
         m_containerLayout->addWidget(errorLabel);
         return;
     }
 
     // Create AfcExplorerWidget with the house arrest AFC client
-    AfcExplorerWidget *explorer = new AfcExplorerWidget(
-        afcClient,
-        [houseArrestClient]() {
-            // Cleanup callback when client becomes invalid
-            if (houseArrestClient) {
-                house_arrest_client_free(houseArrestClient);
-            }
-        },
-        m_device, this);
-
+    // todo:afcClient never gets freed
+    AfcExplorerWidget *explorer =
+        new AfcExplorerWidget(afcClient, []() {}, m_device, this);
+    explorer->setStyleSheet("border :none;");
     m_containerLayout->addWidget(explorer);
 }
 
@@ -907,4 +806,87 @@ void InstalledAppsWidget::onFileSharingFilterChanged(bool enabled)
     Q_UNUSED(enabled)
     // Refresh the apps list when filter changes
     fetchInstalledApps();
+}
+
+void InstalledAppsWidget::createLeftPanel()
+{
+    QWidget *tabWidget = new QWidget();
+    tabWidget->setMinimumWidth(100);
+    tabWidget->setMaximumWidth(500);
+
+    QVBoxLayout *tabWidgetLayout = new QVBoxLayout(tabWidget);
+    tabWidgetLayout->setContentsMargins(0, 0, 0, 0);
+    tabWidgetLayout->setSpacing(0);
+
+    // Search container
+    QWidget *searchContainer = new QWidget();
+    searchContainer->setFixedHeight(60);
+    QHBoxLayout *searchLayout = new QHBoxLayout(searchContainer);
+    searchLayout->setContentsMargins(5, 0, 5, 5);
+
+    // Search box
+    m_searchEdit = new QLineEdit();
+    m_searchEdit->setPlaceholderText("Search apps...");
+    m_searchEdit->setStyleSheet("QLineEdit { "
+                                "    border: 2px solid #e0e0e0; "
+                                "    border-radius: 6px; "
+                                "    padding: 8px 12px; "
+                                "    font-size: 14px; "
+                                "} "
+                                "QLineEdit:focus { "
+                                "    border: 2px solid #007AFF; "
+                                "    outline: none; "
+                                "}");
+    searchLayout->addWidget(m_searchEdit);
+
+    // File sharing filter checkbox
+    m_fileSharingCheckBox = new QCheckBox("Show Only File Sharing Enabled");
+    m_fileSharingCheckBox->setChecked(true);
+    m_fileSharingCheckBox->setStyleSheet("QCheckBox { font-size: 10px; }");
+    searchLayout->addWidget(m_fileSharingCheckBox);
+
+    tabWidgetLayout->addWidget(searchContainer);
+
+    // App list scroll area
+    m_tabScrollArea = new QScrollArea();
+    m_tabScrollArea->setWidgetResizable(true);
+    m_tabScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_tabScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_tabScrollArea->setStyleSheet("QScrollArea { border: none; }");
+
+    m_tabContainer = new QWidget();
+    m_tabLayout = new QVBoxLayout(m_tabContainer);
+    m_tabLayout->setContentsMargins(0, 0, 10, 0);
+    m_tabLayout->setSpacing(10);
+    m_tabLayout->addStretch();
+
+    m_tabScrollArea->setWidget(m_tabContainer);
+    tabWidgetLayout->addWidget(m_tabScrollArea);
+
+    m_splitter->addWidget(tabWidget);
+}
+
+void InstalledAppsWidget::createRightPanel()
+{
+    QWidget *rightContentWidget = new QWidget();
+
+    QVBoxLayout *contentLayout = new QVBoxLayout(rightContentWidget);
+    contentLayout->setContentsMargins(0, 0, 0, 5);
+    contentLayout->setSpacing(0);
+
+    // Container explorer area
+    m_containerScrollArea = new QScrollArea();
+    m_containerScrollArea->setWidgetResizable(true);
+    m_containerScrollArea->setMinimumHeight(200);
+    m_containerScrollArea->setVisible(false);
+
+    m_containerWidget = new QWidget();
+    m_containerLayout = new QVBoxLayout(m_containerWidget);
+    m_containerLayout->setContentsMargins(0, 0, 0, 0);
+    m_containerLayout->setSpacing(0);
+
+    m_containerScrollArea->setWidget(m_containerWidget);
+    contentLayout->addWidget(m_containerScrollArea);
+
+    m_splitter->addWidget(rightContentWidget);
 }

@@ -16,16 +16,10 @@ public:
     explicit AppContext(QObject *parent = nullptr);
     void handleDBusSignal(const QDBusMessage &msg);
     bool noDevicesConnected() const;
-    std::string addDevice(iDescriptorDevice *device);
-
-    std::string addRecoveryDevice(RecoveryDeviceInfo *deviceInfo);
-    // std::string addRecoveryDevice(const RecoveryDeviceInfo& deviceInfo);
-    void removeRecoveryDevice(const QString &udid);
 
     // Returns whether there are any devices connected (regular or recovery)
     QList<RecoveryDeviceInfo *> getAllRecoveryDevices();
     ~AppContext();
-    void instanceRemoveDevice(QString _udid);
     int getConnectedDeviceCount() const;
 
 private:
@@ -46,6 +40,8 @@ public slots:
     void removeDevice(QString udid);
     void addDevice(QString udid, idevice_connection_type connType,
                    AddType addType);
+    void addRecoveryDevice(RecoveryDeviceInfo *deviceInfo);
+    void removeRecoveryDevice(QString ecid);
 };
 
 #endif // APPCONTEXT_H

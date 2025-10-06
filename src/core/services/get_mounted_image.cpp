@@ -29,10 +29,9 @@
 #include <printf.h>
 #endif
 
-QPair<bool, plist_t> _get_mounted_image(const char *udid)
+plist_t _get_mounted_image(const char *udid)
 {
     mobile_image_mounter_client_t mim = NULL;
-    int res = -1;
     lockdownd_client_t lckd = NULL;
     lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
     afc_client_t afc = NULL;
@@ -48,14 +47,12 @@ QPair<bool, plist_t> _get_mounted_image(const char *udid)
 
                                                       IDEVICE_LOOKUP_USBMUX)) {
         qDebug() << "ERROR: Could not create idevice!";
-        res = -1;
         goto leave;
     }
 
     if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
                                    device, &lckd, TOOL_NAME))) {
         qDebug() << "ERROR: Could not connect to lockdownd service!";
-        res = -1;
         goto leave;
     }
 
@@ -75,30 +72,14 @@ QPair<bool, plist_t> _get_mounted_image(const char *udid)
 
     if (!service || service->port == 0) {
         qDebug() << "ERROR: Could not start mobile_image_mounter service!";
-        res = -1;
         goto leave;
     }
 
-    // if locked
-    //     {
-    //   "Error": "DeviceLocked"
-    // }
+    // will sometimes return MOBILE_IMAGE_MOUNTER_E_SUCCESS even if the device
+    // is locked - mostly on older devices
     err = mobile_image_mounter_lookup_image(mim, imagetype, &result);
-    if (err == MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
-        res = 0;
-    } else {
-        res = -1;
-        printf("Error: lookup_image returned %d\n", err);
-    }
 
 leave:
-    // if (f) {
-    //     fclose(f);
-    // }
-    // TODO:need to free result
-    // if (result) {
-    //     plist_free(result);
-    // }
     if (mim) {
         mobile_image_mounter_free(mim);
     }
@@ -112,7 +93,7 @@ leave:
         idevice_free(device);
     }
 
-    return {res == 0, result};
+    return result;
 }
 
 // int main(){return 0;}

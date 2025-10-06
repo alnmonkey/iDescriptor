@@ -381,18 +381,10 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
         virtualLocation->show();
     } break;
     case iDescriptorTool::Restart: {
-        // TODO:WIP
-        std::string udid = m_currentDevice->udid;
-        AppContext::sharedInstance()->instanceRemoveDevice(
-            QString::fromStdString(udid));
-        // QMetaObject::invokeMethod(AppContext::sharedInstance(),
-        // "removeDevice",
-        //                           Qt::QueuedConnection,
-        //                           Q_ARG(QString, QString(udid.c_str())));
-        if (!(restart(udid)))
+        if (!(restart(m_currentDevice->udid)))
             warn("Failed to restart device");
         else {
-            warn("Device services restarted successfully", "Success");
+            warn("Device will restart once unplugged", "Success");
             qDebug() << "Restarting device";
         }
     } break;

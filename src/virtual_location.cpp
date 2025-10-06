@@ -6,9 +6,11 @@
 #include <QDoubleValidator>
 #include <QGeoCoordinate>
 #include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -24,6 +26,7 @@
 VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
     : QWidget{parent}, m_device(device)
 {
+    setWindowTitle("Virtual Location - iDescriptor");
     // Create the main layout
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
     mainLayout->setContentsMargins(10, 10, 10, 10);
@@ -32,8 +35,6 @@ VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
     // Create left panel for controls
     QWidget *rightPanel = new QWidget();
     rightPanel->setFixedWidth(250);
-    rightPanel->setStyleSheet(
-        "QWidget { background-color: #f0f0f0; border-radius: 5px; }");
 
     QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(15, 15, 15, 15);
@@ -41,54 +42,33 @@ VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
 
     // Title
     QLabel *titleLabel = new QLabel("Virtual Location Settings");
-    titleLabel->setStyleSheet(
-        "font-size: 14px; font-weight: bold; color: #333;");
+    titleLabel->setStyleSheet("margin-bottom: 10px;");
     rightLayout->addWidget(titleLabel);
 
-    // Coordinates section
-    QLabel *coordsLabel = new QLabel("Coordinates:");
-    coordsLabel->setStyleSheet("font-weight: bold; color: #555;");
-    rightLayout->addWidget(coordsLabel);
+    QGroupBox *coordGroup = new QGroupBox("Coordinates");
+    rightLayout->addWidget(coordGroup);
+
+    QVBoxLayout *coordLayout = new QVBoxLayout(coordGroup);
 
     // Latitude input
     QLabel *latLabel = new QLabel("Latitude:");
-    latLabel->setStyleSheet("color: #666;");
-    rightLayout->addWidget(latLabel);
+    coordLayout->addWidget(latLabel);
 
     m_latitudeEdit = new QLineEdit();
     m_latitudeEdit->setPlaceholderText("e.g., 59.9139");
     m_latitudeEdit->setText("59.9139");
     m_latitudeEdit->setValidator(new QDoubleValidator(-90.0, 90.0, 6, this));
-    m_latitudeEdit->setStyleSheet(
-        "padding: 5px; border: 1px solid #ccc; border-radius: 3px;");
-    rightLayout->addWidget(m_latitudeEdit);
+    coordLayout->addWidget(m_latitudeEdit);
 
     // Longitude input
     QLabel *lonLabel = new QLabel("Longitude:");
-    lonLabel->setStyleSheet("color: #666;");
-    rightLayout->addWidget(lonLabel);
+    coordLayout->addWidget(lonLabel);
 
     m_longitudeEdit = new QLineEdit();
     m_longitudeEdit->setPlaceholderText("e.g., 10.7522");
     m_longitudeEdit->setText("10.7522");
     m_longitudeEdit->setValidator(new QDoubleValidator(-180.0, 180.0, 6, this));
-    m_longitudeEdit->setStyleSheet(
-        "padding: 5px; border: 1px solid #ccc; border-radius: 3px;");
-    rightLayout->addWidget(m_longitudeEdit);
-
-    // Altitude input
-    QLabel *altLabel = new QLabel("Altitude (meters):");
-    altLabel->setStyleSheet("color: #666;");
-    rightLayout->addWidget(altLabel);
-
-    m_altitudeEdit = new QLineEdit();
-    m_altitudeEdit->setPlaceholderText("e.g., 100.0");
-    m_altitudeEdit->setText("100.0");
-    m_altitudeEdit->setValidator(
-        new QDoubleValidator(-500.0, 10000.0, 2, this));
-    m_altitudeEdit->setStyleSheet(
-        "padding: 5px; border: 1px solid #ccc; border-radius: 3px;");
-    rightLayout->addWidget(m_altitudeEdit);
+    coordLayout->addWidget(m_longitudeEdit);
 
     // Add some spacing
     rightLayout->addItem(
@@ -96,20 +76,7 @@ VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
 
     // Apply button
     m_applyButton = new QPushButton("Apply Settings");
-    m_applyButton->setStyleSheet("QPushButton {"
-                                 "    background-color: #4CAF50;"
-                                 "    color: white;"
-                                 "    border: none;"
-                                 "    padding: 10px;"
-                                 "    border-radius: 5px;"
-                                 "    font-weight: bold;"
-                                 "}"
-                                 "QPushButton:hover {"
-                                 "    background-color: #45a049;"
-                                 "}"
-                                 "QPushButton:pressed {"
-                                 "    background-color: #3d8b40;"
-                                 "}");
+    m_applyButton->setDefault(true);
     rightLayout->addWidget(m_applyButton);
 
     // Add stretch to push everything to the top
@@ -135,8 +102,6 @@ VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
     connect(m_latitudeEdit, &QLineEdit::textChanged, this,
             &VirtualLocation::onInputChanged);
     connect(m_longitudeEdit, &QLineEdit::textChanged, this,
-            &VirtualLocation::onInputChanged);
-    connect(m_altitudeEdit, &QLineEdit::textChanged, this,
             &VirtualLocation::onInputChanged);
     connect(m_applyButton, &QPushButton::clicked, this,
             &VirtualLocation::onApplyClicked);
@@ -298,23 +263,34 @@ void VirtualLocation::updateInputsFromMap(double latitude, double longitude)
 
 void VirtualLocation::onApplyClicked()
 {
-    bool devImgSuccess =
-        DevDiskManager::sharedInstance()->mountCompatibleImage(m_device);
-    if (!devImgSuccess) {
-        warn("Failed to mount developer image on device. Cannot set location.");
-        qDebug() << "Failed to mount developer image on device. Cannot set "
-                    "location.";
+    GetMountedImageResult result =
+        DevDiskManager::sharedInstance()->getMountedImage(
+            m_device->udid.c_str());
+
+    if (!result.success) {
+        QMessageBox::warning(this, "Failure", result.message.c_str());
         return;
     }
 
-    bool latOk, lonOk, altOk;
+    if (result.success || result.sig.empty()) {
+        bool devImgSuccess =
+            DevDiskManager::sharedInstance()->mountCompatibleImage(m_device);
+        if (!devImgSuccess) {
+            QMessageBox::warning(this, "Failure",
+                                 "Failed to mount developer image on device. "
+                                 "Try with a different cable.");
+            qDebug() << "Failed to mount developer image on device. Cannot set "
+                        "location.";
+            return;
+        }
+    }
+
+    bool latOk, lonOk;
     double latitude = m_latitudeEdit->text().toDouble(&latOk);
     double longitude = m_longitudeEdit->text().toDouble(&lonOk);
-    double altitude = m_altitudeEdit->text().toDouble(&altOk);
 
-    if (latOk && lonOk && altOk) {
-        // Emit signal or perform action with the coordinates
-        emit locationChanged(latitude, longitude, altitude);
+    if (latOk && lonOk) {
+        emit locationChanged(latitude, longitude);
 
         // Update map one final time
         updateMapFromInputs();
@@ -336,8 +312,11 @@ void VirtualLocation::onApplyClicked()
             warn("Failed to set location on device");
             qDebug() << "Failed to set location on device";
         } else {
+            // todo: thread safe?
+            QMessageBox::information(this, "Success",
+                                     "Location applied successfully!");
             qDebug() << "Applied location settings:" << latitude << ","
-                     << longitude << "," << altitude;
+                     << longitude;
         }
     } else {
         qDebug() << "Invalid coordinate values";

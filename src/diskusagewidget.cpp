@@ -36,11 +36,36 @@ void DiskUsageWidget::setupUI()
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_mainLayout->addWidget(m_titleLabel);
 
-    // Status label (for loading/error states)
-    m_statusLabel = new QLabel(this);
+    // Stacked widget for different states
+    m_stackedWidget = new QStackedWidget(this);
+    m_mainLayout->addWidget(m_stackedWidget);
+
+    // Loading/Error page
+    m_loadingErrorPage = new QWidget();
+    m_loadingErrorLayout = new QVBoxLayout(m_loadingErrorPage);
+    m_loadingErrorLayout->setContentsMargins(0, 0, 0, 0);
+    m_loadingErrorLayout->setSpacing(5);
+
+    m_processIndicator = new QProcessIndicator(m_loadingErrorPage);
+    m_processIndicator->setFixedSize(24, 24);
+    m_processIndicator->start();
+
+    m_statusLabel = new QLabel(m_loadingErrorPage);
     m_statusLabel->setAlignment(Qt::AlignCenter);
     m_statusLabel->setText("Loading disk usage...");
-    m_mainLayout->addWidget(m_statusLabel);
+
+    m_loadingErrorLayout->addStretch();
+    m_loadingErrorLayout->addWidget(m_processIndicator, 0, Qt::AlignCenter);
+    m_loadingErrorLayout->addWidget(m_statusLabel);
+    m_loadingErrorLayout->addStretch();
+
+    m_stackedWidget->addWidget(m_loadingErrorPage);
+
+    // Data page
+    m_dataPage = new QWidget();
+    m_dataLayout = new QVBoxLayout(m_dataPage);
+    m_dataLayout->setContentsMargins(0, 0, 0, 0);
+    m_dataLayout->setSpacing(0);
 
     // Disk usage bar container
     m_diskBarContainer = new QWidget(this);
@@ -89,8 +114,7 @@ void DiskUsageWidget::setupUI()
     m_diskBarLayout->addWidget(m_othersBar);
     m_diskBarLayout->addWidget(m_freeBar);
 
-    m_diskBarContainer->hide(); // Initially hidden
-    m_mainLayout->addWidget(m_diskBarContainer);
+    m_dataLayout->addWidget(m_diskBarContainer);
 
     // Legend layout
     m_legendLayout = new QHBoxLayout();
@@ -98,11 +122,11 @@ void DiskUsageWidget::setupUI()
     m_legendLayout->setContentsMargins(0, 0, 0, 0);
 
     // Legend labels
-    m_systemLabel = new QLabel("System", this);
-    m_appsLabel = new QLabel("Apps", this);
-    m_mediaLabel = new QLabel("Media", this);
-    m_othersLabel = new QLabel("Others", this);
-    m_freeLabel = new QLabel("Free", this);
+    m_systemLabel = new QLabel("System", m_dataPage);
+    m_appsLabel = new QLabel("Apps", m_dataPage);
+    m_mediaLabel = new QLabel("Media", m_dataPage);
+    m_othersLabel = new QLabel("Others", m_dataPage);
+    m_freeLabel = new QLabel("Free", m_dataPage);
 
     // Style legend labels with colored backgrounds
     QString labelStyle =
@@ -120,14 +144,12 @@ void DiskUsageWidget::setupUI()
     m_legendLayout->addWidget(m_freeLabel);
     m_legendLayout->addStretch();
 
-    // Hide legend initially
-    m_systemLabel->hide();
-    m_appsLabel->hide();
-    m_mediaLabel->hide();
-    m_othersLabel->hide();
-    m_freeLabel->hide();
+    m_dataLayout->addLayout(m_legendLayout);
 
-    m_mainLayout->addLayout(m_legendLayout);
+    m_stackedWidget->addWidget(m_dataPage);
+
+    // Initially show loading page
+    m_stackedWidget->setCurrentWidget(m_loadingErrorPage);
 }
 
 QSize DiskUsageWidget::sizeHint() const { return QSize(400, 80); }
@@ -135,49 +157,28 @@ QSize DiskUsageWidget::sizeHint() const { return QSize(400, 80); }
 void DiskUsageWidget::updateUI()
 {
     if (m_state == Loading) {
+        m_processIndicator->start();
         m_statusLabel->setText("Loading disk usage...");
-        m_statusLabel->show();
-        m_diskBarContainer->hide();
-        m_systemLabel->hide();
-        m_appsLabel->hide();
-        m_mediaLabel->hide();
-        m_othersLabel->hide();
-        m_freeLabel->hide();
+        m_stackedWidget->setCurrentWidget(m_loadingErrorPage);
         return;
     }
 
     if (m_state == Error) {
+        m_processIndicator->stop();
         m_statusLabel->setText("Error: " + m_errorMessage);
-        m_statusLabel->show();
-        m_diskBarContainer->hide();
-        m_systemLabel->hide();
-        m_appsLabel->hide();
-        m_mediaLabel->hide();
-        m_othersLabel->hide();
-        m_freeLabel->hide();
+        m_stackedWidget->setCurrentWidget(m_loadingErrorPage);
         return;
     }
 
     if (m_totalCapacity == 0) {
+        m_processIndicator->stop();
         m_statusLabel->setText("No disk information available.");
-        m_statusLabel->show();
-        m_diskBarContainer->hide();
-        m_systemLabel->hide();
-        m_appsLabel->hide();
-        m_mediaLabel->hide();
-        m_othersLabel->hide();
-        m_freeLabel->hide();
+        m_stackedWidget->setCurrentWidget(m_loadingErrorPage);
         return;
     }
 
-    // Hide status label and show disk bar and legend
-    m_statusLabel->hide();
-    m_diskBarContainer->show();
-    m_systemLabel->show();
-    m_appsLabel->show();
-    m_mediaLabel->show();
-    m_othersLabel->show();
-    m_freeLabel->show();
+    // Show data page
+    m_stackedWidget->setCurrentWidget(m_dataPage);
 
     // Calculate proportions for each segment
     int totalWidth = m_diskBarContainer->width();
@@ -271,7 +272,35 @@ void DiskUsageWidget::updateUI()
                               (double)m_othersUsage / m_totalCapacity);
     m_freeBar->setUsageInfo("Free", formatSize(m_freeSpace), "#BDC3C7",
                             (double)m_freeSpace / m_totalCapacity);
+#else
+    m_systemBar->setToolTip(
+        QString("System: %1 (%2%)")
+            .arg(formatSize(m_systemUsage))
+            .arg(QString::number((double)m_systemUsage / m_totalCapacity * 100,
+                                 'f', 1)));
+    m_appsBar->setToolTip(
+        QString("Apps: %1 (%2%)")
+            .arg(formatSize(m_appsUsage))
+            .arg(QString::number((double)m_appsUsage / m_totalCapacity * 100,
+                                 'f', 1)));
+    m_mediaBar->setToolTip(
+        QString("Media: %1 (%2%)")
+            .arg(formatSize(m_mediaUsage))
+            .arg(QString::number((double)m_mediaUsage / m_totalCapacity * 100,
+                                 'f', 1)));
+    m_othersBar->setToolTip(
+        QString("Others: %1 (%2%)")
+            .arg(formatSize(m_othersUsage))
+            .arg(QString::number((double)m_othersUsage / m_totalCapacity * 100,
+                                 'f', 1)));
+    m_freeBar->setToolTip(
+        QString("Free: %1 (%2%)")
+            .arg(formatSize(m_freeSpace))
+            .arg(QString::number((double)m_freeSpace / m_totalCapacity * 100,
+                                 'f', 1)));
+
 #endif
+
     // Hide segments with zero usage
     // m_systemBar->setVisible(m_systemUsage > 0);
     // m_appsBar->setVisible(m_appsUsage > 0);

@@ -13,9 +13,8 @@
 
 LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Login to App Store");
+    setWindowTitle("Login to App Store - iDescriptor");
     setModal(true);
-    // setFixedSize(400, 250);
     setFixedWidth(400);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -24,7 +23,7 @@ LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent)
 
     // Email
     QLabel *emailLabel = new QLabel("Email:");
-    emailLabel->setStyleSheet("font-size: 14px; color: #555;");
+    emailLabel->setStyleSheet("font-size: 14px");
     layout->addWidget(emailLabel);
 
     m_emailEdit = new QLineEdit();
@@ -35,7 +34,7 @@ LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent)
 
     // Password
     QLabel *passwordLabel = new QLabel("Password:");
-    passwordLabel->setStyleSheet("font-size: 14px; color: #555;");
+    passwordLabel->setStyleSheet("font-size: 14px");
     layout->addWidget(passwordLabel);
 
     m_passwordEdit = new QLineEdit();
@@ -48,8 +47,8 @@ LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent)
     // Description
     QLabel *descriptionLabel =
         new QLabel("Don't worry, your credentials won't be "
-                   "stored, shared anywhere. This App is open-source.");
-    descriptionLabel->setStyleSheet("font-size: 10px; font-weight: bold;");
+                   "stored or shared anywhere. This App is open-source.");
+    descriptionLabel->setStyleSheet("font-size: 10px; font-weight: thin;");
     descriptionLabel->setAlignment(Qt::AlignLeft);
     descriptionLabel->setWordWrap(true); // Add this line
     layout->addWidget(descriptionLabel);

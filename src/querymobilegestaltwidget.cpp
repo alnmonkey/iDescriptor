@@ -15,26 +15,24 @@ QueryMobileGestaltWidget::QueryMobileGestaltWidget(iDescriptorDevice *device,
 
 void QueryMobileGestaltWidget::setupUI()
 {
-    setWindowTitle("MobileGestalt Query Tool");
+    setWindowTitle("Query MobileGestalt - iDescriptor");
     setMinimumSize(800, 600);
 
     // Main layout
     mainLayout = new QVBoxLayout(this);
 
     // Title
-    QLabel *titleLabel = new QLabel("MobileGestalt Query Interface");
-    titleLabel->setStyleSheet(
-        "font-size: 18px; font-weight: bold; margin: 10px;");
-    titleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(titleLabel);
+    QLabel *desc = new QLabel("This tool lets you query MobileGestalt keys , "
+                              "which provide various device information.");
+    desc->setStyleSheet("margin:5px;");
+    mainLayout->addWidget(desc);
 
     // Selection group
     selectionGroup = new QGroupBox("Select MobileGestalt Keys");
-    selectionGroup->setStyleSheet(
-        "QGroupBox { font-weight: bold; margin-top: 10px; }");
     mainLayout->addWidget(selectionGroup);
 
     QVBoxLayout *groupLayout = new QVBoxLayout(selectionGroup);
+    groupLayout->setContentsMargins(0, 0, 0, 0);
 
     // Select/Clear buttons
     buttonLayout = new QHBoxLayout();
@@ -45,6 +43,7 @@ void QueryMobileGestaltWidget::setupUI()
     buttonLayout->addWidget(selectAllButton);
     buttonLayout->addWidget(clearAllButton);
     buttonLayout->addStretch();
+    buttonLayout->setContentsMargins(5, 5, 5, 5);
     groupLayout->addLayout(buttonLayout);
 
     // Scroll area for checkboxes
@@ -63,23 +62,8 @@ void QueryMobileGestaltWidget::setupUI()
 
     // Query button
     queryButton = new QPushButton("Query MobileGestalt");
-    queryButton->setStyleSheet("QPushButton {"
-                               "    background-color: #4CAF50;"
-                               "    color: white;"
-                               "    border: none;"
-                               "    padding: 12px 24px;"
-                               "    font-size: 16px;"
-                               "    font-weight: bold;"
-                               "    border-radius: 6px;"
-                               "    margin: 10px;"
-                               "}"
-                               "QPushButton:hover {"
-                               "    background-color: #45a049;"
-                               "}"
-                               "QPushButton:pressed {"
-                               "    background-color: #3d8b40;"
-                               "}");
-    queryButton->setMaximumWidth(200);
+    queryButton->setProperty("primary", true);
+    queryButton->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     mainLayout->addWidget(queryButton, 0, Qt::AlignCenter);
 
     // Status label
@@ -87,23 +71,17 @@ void QueryMobileGestaltWidget::setupUI()
     statusLabel->setStyleSheet("color: #666; font-style: italic; margin: 5px;");
     mainLayout->addWidget(statusLabel);
 
-    // Output text area
-    QLabel *outputLabel = new QLabel("Query Results:");
-    outputLabel->setStyleSheet("font-weight: bold; margin-top: 10px;");
-    mainLayout->addWidget(outputLabel);
-
+    QGroupBox *outputGroup = new QGroupBox("Query Results");
     outputTextEdit = new QTextEdit();
     outputTextEdit->setReadOnly(true);
-    outputTextEdit->setPlaceholderText("Query results will appear here...");
-    outputTextEdit->setStyleSheet(
-        "QTextEdit {"
-        "    border: 2px solid #ddd;"
-        "    border-radius: 5px;"
-        "    padding: 10px;"
-        "    font-family: 'Consolas', 'Monaco', monospace;"
-        "    background-color: #f9f9f9;"
-        "}");
-    mainLayout->addWidget(outputTextEdit);
+    outputTextEdit->setPlaceholderText("results will appear here...");
+    outputTextEdit->setStyleSheet("QTextEdit {"
+                                  "border : none;"
+                                  "}");
+    outputGroup->setLayout(new QVBoxLayout());
+    outputGroup->layout()->setContentsMargins(0, 0, 0, 0);
+    outputGroup->layout()->addWidget(outputTextEdit);
+    mainLayout->addWidget(outputGroup);
 
     // Connect signals
     connect(queryButton, &QPushButton::clicked, this,
@@ -1091,8 +1069,6 @@ void QueryMobileGestaltWidget::onQueryButtonClicked()
         QString("Querying %1 key(s)...").arg(selectedKeys.size()));
     statusLabel->setStyleSheet("color: #4CAF50; font-style: italic;");
 
-    // Call your actual query function here
-    // For demonstration, using a mock function
     QMap<QString, QVariant> results = queryMobileGestalt(selectedKeys);
 
     displayResults(results);
@@ -1135,7 +1111,6 @@ void QueryMobileGestaltWidget::displayResults(
     outputTextEdit->setPlainText(output);
 }
 
-// Mock query function - replace this with your actual implementation
 QMap<QString, QVariant>
 QueryMobileGestaltWidget::queryMobileGestalt(const QStringList &keys)
 {
@@ -1146,8 +1121,6 @@ QueryMobileGestaltWidget::queryMobileGestalt(const QStringList &keys)
         qDebug() << "MobileGestalt query failed.";
         return {};
     }
-    // This is a mock implementation
-    // Replace this with your actual query function that takes a plist dict
     pugi::xml_document infoXml;
     pugi::xml_parse_result result = infoXml.load_string(xml);
     if (xml)

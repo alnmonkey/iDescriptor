@@ -54,10 +54,6 @@ void AppsWidget::setupUI()
     QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
     headerLayout->setContentsMargins(20, 10, 20, 10);
 
-    QLabel *titleLabel = new QLabel("App Store");
-    titleLabel->setStyleSheet(
-        "font-size: 24px; font-weight: bold; color: #333;");
-
     // Create status label first
     m_statusLabel = new QLabel("Not signed in");
     m_statusLabel->setStyleSheet("margin-right: 20px;");
@@ -97,9 +93,6 @@ void AppsWidget::setupUI()
     connect(searchAction, &QAction::triggered, this,
             &AppsWidget::performSearch);
 
-    headerLayout->addWidget(titleLabel);
-
-    headerLayout->addStretch();
     headerLayout->addWidget(m_searchEdit);
     headerLayout->addStretch();
     headerLayout->addWidget(m_statusLabel);

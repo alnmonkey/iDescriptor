@@ -1,8 +1,10 @@
 #include "fileexplorerwidget.h"
 #include "afcexplorerwidget.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "mediapreviewdialog.h"
 #include "settingsmanager.h"
+#include <QApplication>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QFileDialog>
@@ -12,9 +14,12 @@
 #include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPalette>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QSplitterHandle>
 #include <QTreeWidget>
 #include <QVariant>
 #include <libimobiledevice/afc.h>
@@ -24,11 +29,12 @@ FileExplorerWidget::FileExplorerWidget(iDescriptorDevice *device,
                                        QWidget *parent)
     : QWidget(parent), device(device), usingAFC2(false)
 {
+    m_mainSplitter = new ModernSplitter(Qt::Horizontal, this);
 
-    m_mainSplitter = new QSplitter(Qt::Horizontal, this);
     // Main layout
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
     mainLayout->addWidget(m_mainSplitter);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
 
     setupSidebar();
 
@@ -47,7 +53,7 @@ void FileExplorerWidget::setupSidebar()
     m_sidebarTree = new QTreeWidget();
     m_sidebarTree->setHeaderLabel("Files");
     m_sidebarTree->setMinimumWidth(50);
-    m_sidebarTree->setMaximumWidth(200);
+    m_sidebarTree->setMaximumWidth(250);
 
     // AFC Default section
     m_afcDefaultItem = new QTreeWidgetItem(m_sidebarTree);

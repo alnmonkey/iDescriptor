@@ -3,6 +3,7 @@
 
 #include "iDescriptor.h"
 #include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
@@ -27,7 +28,7 @@ private:
     void analyzeCableInfo();
     void updateUI();
     void createInfoRow(QGridLayout *layout, int row, const QString &label,
-                       const QString &value, const QString &style = "");
+                       const QString &value);
 
     // Cable information structure
     struct CableInfo {
@@ -45,13 +46,14 @@ private:
         QString triStarClass;
         QStringList supportedTransports;
         QStringList activeTransports;
+        bool isFakeInfo = false;
     };
 
     // UI components
     QVBoxLayout *m_mainLayout;
     QLabel *m_statusLabel;
-    QLabel *m_iconLabel;
-    QWidget *m_infoWidget;
+    QLabel *m_descriptionLabel;
+    QGroupBox *m_infoWidget;
     QGridLayout *m_infoLayout;
 
     // Data

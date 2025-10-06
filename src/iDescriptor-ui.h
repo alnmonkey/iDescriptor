@@ -1,7 +1,12 @@
 #pragma once
+#include <QApplication>
 #include <QGraphicsView>
 #include <QMainWindow>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QSplitter>
+#include <QSplitterHandle>
+#include <QStyleOption>
 #include <QWidget>
 
 #ifdef Q_OS_MAC
@@ -73,4 +78,56 @@ enum class iDescriptorTool {
     UnmountDevImage,
     Unknown,
     iFuse
+};
+
+class ModernSplitterHandle : public QSplitterHandle
+{
+public:
+    ModernSplitterHandle(Qt::Orientation orientation, QSplitter *parent)
+        : QSplitterHandle(orientation, parent)
+    {
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event)
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        QColor buttonColor = QApplication::palette().color(QPalette::Text);
+        buttonColor.setAlpha(60);
+
+        int margin = 10;
+        int availableWidth = width() - (2 * margin);
+        int centerX = margin + availableWidth / 2;
+        int centerY = height() / 2;
+
+        int buttonWidth = 6;
+        int buttonHeight = 50;
+
+        QRect buttonRect(centerX - buttonWidth / 2, centerY - buttonHeight / 2,
+                         buttonWidth, buttonHeight);
+
+        painter.setBrush(QBrush(buttonColor));
+        painter.setPen(Qt::NoPen);
+        painter.drawRoundedRect(buttonRect, buttonWidth / 2, buttonWidth / 2);
+    }
+};
+
+class ModernSplitter : public QSplitter
+{
+public:
+    ModernSplitter(Qt::Orientation orientation, QWidget *parent = nullptr)
+        : QSplitter(orientation, parent)
+    {
+        setHandleWidth(10);
+    }
+
+protected:
+    QSplitterHandle *createHandle() override
+    {
+        return new ModernSplitterHandle(orientation(), this);
+    }
 };

@@ -17,7 +17,7 @@ public:
                              QWidget *parent = nullptr);
 
 signals:
-    void locationChanged(double latitude, double longitude, double altitude);
+    void locationChanged(double latitude, double longitude);
 
 public slots:
     void updateInputsFromMap(double latitude, double longitude);
@@ -33,7 +33,6 @@ private:
     QQuickWidget *m_quickWidget;
     QLineEdit *m_latitudeEdit;
     QLineEdit *m_longitudeEdit;
-    QLineEdit *m_altitudeEdit;
     QPushButton *m_applyButton;
     QTimer m_updateTimer;
     bool m_updatingFromInput = false;

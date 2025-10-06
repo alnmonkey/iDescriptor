@@ -74,15 +74,7 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
             qDebug() << "Failed to initialize device with UDID: " << udid;
             // return onDeviceInitFailed(udid, initResult.error);
             if (initResult.error == LOCKDOWN_E_PASSWORD_PROTECTED) {
-                // warn("Device with UDID " + udid +
-                //          " is password protected. Please unlock the device
-                //          and " "try again.",
-                //      "Warning");
-                // TODO: also handle pairing devices
-                // the reason why we don't handle pairing devices here is
-                // because it's less likely that it will be an error typeof
-                // LOCKDOWN_E_PASSWORD_PROTECTED if the device is paired type
-                if (addType == AddType::Regular) { //  TODO:IMPLEMENT
+                if (addType == AddType::Regular) {
                     // FIXME: if a device never gets paired, it will stay in
                     // this
                     m_pendingDevices.append(udid);
@@ -128,33 +120,6 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
         // processing device information");
     }
 }
-// TODO:WIP
-void AppContext::instanceRemoveDevice(QString _udid)
-{
-    const std::string uuid = _udid.toStdString();
-    if (!m_devices.contains(uuid)) {
-        qDebug() << "Device with UUID " + _udid +
-                        " not found. Please report this issue.",
-            "Error";
-        return;
-    }
-
-    qDebug() << "Removing device with UUID:" << QString::fromStdString(uuid);
-
-    // cleanDevice(device);
-    iDescriptorDevice *device = m_devices[uuid];
-    m_devices.remove(uuid);
-
-    emit deviceRemoved(uuid);
-    // TODO: Cleanup now should be done wherever there are initialized
-    //  lockdownd_client_free(device->lockdownClient);
-    if (device->afcClient)
-        afc_client_free(device->afcClient);
-    idevice_free(device->device);
-    // lockdownd_service_descriptor_free(device->lockdownService);
-    delete device;
-    // return true;
-}
 
 int AppContext::getConnectedDeviceCount() const
 {
@@ -167,36 +132,28 @@ void AppContext::removeDevice(QString _udid)
     const std::string uuid = _udid.toStdString();
     if (!m_devices.contains(uuid)) {
         qDebug() << "Device with UUID " + _udid +
-                        " not found. Please report this issue.",
-            "Error";
+                        " not found. Please report this issue.";
         return;
     }
 
     qDebug() << "Removing device with UUID:" << QString::fromStdString(uuid);
 
-    // cleanDevice(device);
     iDescriptorDevice *device = m_devices[uuid];
     m_devices.remove(uuid);
 
     emit deviceRemoved(uuid);
-    // TODO: Cleanup now should be done wherever there are initialized
-    //  lockdownd_client_free(device->lockdownClient);
     if (device->afcClient)
         afc_client_free(device->afcClient);
     idevice_free(device->device);
-    // lockdownd_service_descriptor_free(device->lockdownService);
     delete device;
-    // return true;
 }
 
-void AppContext::removeRecoveryDevice(const QString &ecid)
+void AppContext::removeRecoveryDevice(QString ecid)
 {
     std::string std_ecid = ecid.toStdString();
     if (!m_recoveryDevices.contains(std_ecid)) {
-        // warning popup
-        warn("Device with ECID " + ecid +
-                 " not found. Please report this issue.",
-             "Error");
+        qDebug() << "Device with ECID " + ecid +
+                        " not found. Please report this issue.";
         return;
     }
 
@@ -206,9 +163,8 @@ void AppContext::removeRecoveryDevice(const QString &ecid)
     RecoveryDeviceInfo *deviceInfo = m_recoveryDevices[std_ecid];
     m_recoveryDevices.remove(std_ecid);
 
-    delete deviceInfo;
-
     emit recoveryDeviceRemoved(ecid);
+    delete deviceInfo;
 }
 
 iDescriptorDevice *AppContext::getDevice(const std::string &uuid)
@@ -233,7 +189,7 @@ bool AppContext::noDevicesConnected() const
             m_pendingDevices.isEmpty());
 }
 
-std::string AppContext::addRecoveryDevice(RecoveryDeviceInfo *deviceInfo)
+void AppContext::addRecoveryDevice(RecoveryDeviceInfo *deviceInfo)
 {
     // Generate a unique ID for the recovery device
     // std::string uuid =
@@ -243,11 +199,23 @@ std::string AppContext::addRecoveryDevice(RecoveryDeviceInfo *deviceInfo)
     // uint64_t to std::string
     m_recoveryDevices[std::to_string(deviceInfo->ecid)] = deviceInfo;
 
-    // emit recoveryDeviceAdded(uuid);
-    return std::to_string(deviceInfo->ecid);
+    emit recoveryDeviceAdded(deviceInfo);
 }
 
 AppContext::~AppContext()
 {
-    // Cleanup if needed
+    for (auto device : m_devices) {
+        emit deviceRemoved(device->udid);
+        if (device->afcClient)
+            afc_client_free(device->afcClient);
+        idevice_free(device->device);
+        delete device;
+    }
+
+    // TODO
+    for (auto recoveryDevice : m_recoveryDevices) {
+        // emit
+        // recoveryDeviceRemoved(QString::fromStdString(recoveryDevice->ecid));
+        // delete recoveryDevice;
+    }
 }

@@ -1,6 +1,8 @@
 #include "cableinfowidget.h"
+#include "appcontext.h"
 #include <QApplication>
 #include <QDebug>
+#include <QGroupBox>
 #include <QScrollArea>
 #include <QTimer>
 
@@ -9,14 +11,18 @@ CableInfoWidget::CableInfoWidget(iDescriptorDevice *device, QWidget *parent)
 {
     setupUI();
     initCableInfo();
-
-    // Auto-refresh cable info after UI is set up
-    // QTimer::singleShot(100, this, &CableInfoWidget::refreshCableInfo);
+    connect(AppContext::sharedInstance(), &AppContext::deviceRemoved, this,
+            [this](const std::string &udid) {
+                if (m_device->udid == udid) {
+                    this->close();
+                    this->deleteLater();
+                }
+            });
 }
 
 void CableInfoWidget::setupUI()
 {
-    setWindowTitle("Cable Information");
+    setWindowTitle("Cable Information - iDescriptor");
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setSpacing(20);
     m_mainLayout->setContentsMargins(20, 20, 20, 20);
@@ -24,70 +30,50 @@ void CableInfoWidget::setupUI()
     // Header section
     QHBoxLayout *headerLayout = new QHBoxLayout();
 
-    m_iconLabel = new QLabel();
-    m_iconLabel->setFixedSize(48, 48);
-    m_iconLabel->setScaledContents(true);
-    m_iconLabel->setAlignment(Qt::AlignCenter);
-
     m_statusLabel = new QLabel("Analyzing cable...");
     m_statusLabel->setStyleSheet("QLabel { "
                                  "font-size: 18px; "
-                                 "font-weight: bold; "
-                                 "color: #333; "
                                  "}");
+    m_descriptionLabel =
+        new QLabel("Please wait while we analyze the connected cable.");
+    m_descriptionLabel->setStyleSheet("font-size: 9px;");
 
-    headerLayout->addWidget(m_iconLabel);
-    headerLayout->addWidget(m_statusLabel, 1);
+    headerLayout->addWidget(m_statusLabel);
 
     m_mainLayout->addLayout(headerLayout);
 
-    // Scroll area to make the info section scrollable
-    QScrollArea *scrollArea = new QScrollArea();
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet("QScrollArea { "
-                              "background-color: #f8f9fa; "
-                              "border: 1px solid #dee2e6; "
-                              "border-radius: 8px; "
-                              "}");
+    m_infoWidget = new QGroupBox("Cable Information");
 
-    // Info widget that goes inside the scroll area
-    m_infoWidget = new QWidget();
-    m_infoWidget->setStyleSheet("QWidget { "
-                                "background: transparent; "
-                                "padding: 16px; "
-                                "color: #333; "
-                                "}");
     m_infoLayout = new QGridLayout(m_infoWidget);
     m_infoLayout->setSpacing(12);
     m_infoLayout->setColumnStretch(1, 1);
 
-    scrollArea->setWidget(m_infoWidget);
-
-    m_mainLayout->addWidget(scrollArea);
+    m_mainLayout->addWidget(m_descriptionLabel);
+    m_mainLayout->addWidget(m_infoWidget);
     m_mainLayout->addStretch();
 }
 
 void CableInfoWidget::initCableInfo()
 {
     if (!m_device || !m_device->device) {
-        m_statusLabel->setText("❌ Device not available");
+        m_statusLabel->setText("Something went wrong (no device ?)");
         m_statusLabel->setStyleSheet(
             "QLabel { color: #dc3545; font-size: 18px; font-weight: bold; }");
         return;
     }
 
     m_statusLabel->setText("Analyzing cable...");
-    m_statusLabel->setStyleSheet(
-        "QLabel { color: #6c757d; font-size: 18px; font-weight: bold; }");
-
     // Get cable info
     get_cable_info(m_device->device, m_response);
-
+    char *xml_string = nullptr;
+    uint32_t xml_length = 0;
+    plist_to_xml(m_response, &xml_string, &xml_length);
+    qDebug() << "Cable info plist:\n"
+             << QString::fromUtf8(xml_string, xml_length);
     analyzeCableInfo();
     updateUI();
 }
-
+// FIXME: genuine check is not perfect, still need more research
 void CableInfoWidget::analyzeCableInfo()
 {
     qDebug() << "Analyzing cable info...";
@@ -118,18 +104,33 @@ void CableInfoWidget::analyzeCableInfo()
     m_cableInfo.interfaceModuleSerial = QString::fromStdString(
         ioreg["IOAccessoryInterfaceModuleSerialNumber"].getString());
 
-    // Determine if genuine based on manufacturer and presence of detailed info
-    m_cableInfo.isGenuine =
-        (m_cableInfo.manufacturer.contains("Apple", Qt::CaseInsensitive) &&
-         !m_cableInfo.modelNumber.isEmpty() &&
-         !m_cableInfo.accessoryName.isEmpty());
-
     // Check if Type-C (based on accessory name or TriStar class)
     m_cableInfo.triStarClass =
         QString::fromStdString(ioreg["TriStarICClass"].getString());
     m_cableInfo.isTypeC =
         (m_cableInfo.accessoryName.contains("USB-C", Qt::CaseInsensitive) ||
          m_cableInfo.triStarClass.contains("1612")); // CBTL1612 is Type-C
+
+    // Determine if genuine based on manufacturer and presence of detailed info
+    bool preGenuineCheck =
+        (m_cableInfo.manufacturer.contains("Apple", Qt::CaseInsensitive) &&
+         !m_cableInfo.modelNumber.isEmpty() &&
+         !m_cableInfo.accessoryName.isEmpty());
+
+    // Further checks for Type-C cables
+    // if report says it's Type-C, it must match the actual connection type
+    if (m_cableInfo.isTypeC) {
+        bool actuallyTypeC =
+            m_device->deviceInfo.batteryInfo.usbConnectionType ==
+            BatteryInfo::ConnectionType::USB_TYPEC;
+        if (!actuallyTypeC) {
+            // most likely a fake cable with faked info
+            m_cableInfo.isFakeInfo = true;
+        }
+        m_cableInfo.isGenuine = actuallyTypeC && preGenuineCheck;
+    } else {
+        m_cableInfo.isGenuine = preGenuineCheck;
+    }
 
     // Power information
     m_cableInfo.currentLimit = ioreg["IOAccessoryUSBCurrentLimit"].getUInt();
@@ -181,46 +182,31 @@ void CableInfoWidget::updateUI()
         delete item;
     }
 
-    // if (!m_cableInfo.isConnected) {
-    //     m_statusLabel->setText("❌ No cable detected");
-    //     m_statusLabel->setStyleSheet(
-    //         "QLabel { color: #dc3545; font-size: 18px; font-weight: bold;
-    //         }");
-    //     m_iconLabel->setText("🔌");
-    //     m_iconLabel->setStyleSheet("QLabel { font-size: 32px; }");
-
-    //     QLabel *noDataLabel = new QLabel("No cable information available");
-    //     noDataLabel->setStyleSheet(
-    //         "QLabel { color: #6c757d; font-size: 14px; text-align: center;
-    //         }");
-    //     m_infoLayout->addWidget(noDataLabel, 0, 0, 1, 2, Qt::AlignCenter);
-    //     return;
-    // }
-
     // Update status and icon based on cable type
     QString statusText;
     QString statusStyle;
-    QString iconText;
-    // todo: sometimes they fake the manufacturer even if it's not genuine
-    // compare m_cableInfo.isTypeC to the actual values we get from ioreg
+
+    m_descriptionLabel->setText("Please note that this check may not be "
+                                "absolute guarantee of authenticity.");
     if (m_cableInfo.isGenuine) {
-        statusText = QString("Genuine %1")
+        statusText = QString("✅ Genuine %1")
                          .arg(m_cableInfo.isTypeC ? "USB-C to Lightning Cable"
                                                   : "Lightning Cable");
         statusStyle =
             "QLabel { color: #28a745; font-size: 18px; font-weight: bold; }";
-        iconText = m_cableInfo.isTypeC ? "Type-C" : "Lightning";
     } else {
         statusText = "⚠️ Third-party Cable";
         statusStyle =
-            "QLabel { color: #ffc107; font-size: 18px; font-weight: bold; }";
-        iconText = "❓";
+            "QLabel { color: #dc3545; font-size: 18px; font-weight: bold; }";
+
+        if (m_cableInfo.isFakeInfo) {
+            m_descriptionLabel->setText("The cable reports false information. "
+                                        "It is most likely a fake cable.");
+        }
     }
 
     m_statusLabel->setText(statusText);
     m_statusLabel->setStyleSheet(statusStyle);
-    m_iconLabel->setText(iconText);
-    m_iconLabel->setStyleSheet("QLabel { font-size: 32px; }");
 
     int row = 0;
 
@@ -286,24 +272,11 @@ void CableInfoWidget::updateUI()
 }
 
 void CableInfoWidget::createInfoRow(QGridLayout *layout, int row,
-                                    const QString &label, const QString &value,
-                                    const QString &style)
+                                    const QString &label, const QString &value)
 {
-    qDebug() << "Creating info row:" << label << value;
     QLabel *labelWidget = new QLabel(label);
-    labelWidget->setStyleSheet("QLabel { "
-                               "font-weight: bold; "
-                               "color: #495057; "
-                               "font-size: 13px; "
-                               "}");
 
     QLabel *valueWidget = new QLabel(value);
-    QString valueStyle = style.isEmpty() ? "QLabel { "
-                                           "color: #212529; "
-                                           "font-size: 13px; "
-                                           "}"
-                                         : style;
-    valueWidget->setStyleSheet(valueStyle);
     valueWidget->setWordWrap(true);
 
     layout->addWidget(labelWidget, row, 0, Qt::AlignTop);

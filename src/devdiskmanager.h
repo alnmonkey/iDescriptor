@@ -8,6 +8,7 @@
 #include <QNetworkRequest>
 #include <QObject>
 #include <QStringList>
+#include <libimobiledevice/mobile_image_mounter.h>
 
 class DevDiskManager : public QObject
 {
@@ -33,7 +34,8 @@ public:
 
     // Mount operations
 
-    bool mountImage(const QString &version, const QString &udid);
+    mobile_image_mounter_error_t mountImage(const QString &version,
+                                            const QString &udid);
     bool unmountImage();
 
     // Signature comparison

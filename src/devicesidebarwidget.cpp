@@ -2,24 +2,17 @@
 #include "iDescriptor-ui.h"
 #include "loadingspinnerwidget.h"
 #include <QDebug>
-#include <QEasingCurve>
 
 // DeviceSidebarItem Implementation
 DeviceSidebarItem::DeviceSidebarItem(const QString &deviceName,
                                      const std::string &uuid, QWidget *parent)
     : QFrame(parent), m_deviceName(deviceName), m_uuid(uuid), m_selected(false),
-      m_collapsed(true)
+      m_collapsed(false)
 {
     setupUI();
     setFrameStyle(QFrame::StyledPanel);
     setLineWidth(1);
     updateToggleButton();
-
-    // Initialize animation
-    m_collapseAnimation =
-        new QPropertyAnimation(m_optionsWidget, "maximumHeight", this);
-    m_collapseAnimation->setDuration(200);
-    m_collapseAnimation->setEasingCurve(QEasingCurve::InOutQuad);
 }
 
 void DeviceSidebarItem::setupUI()
@@ -122,9 +115,10 @@ void DeviceSidebarItem::setupUI()
 
     m_mainLayout->addWidget(m_optionsWidget);
 
-    // Initially hide options
-    m_optionsWidget->setMaximumHeight(0);
-    m_optionsWidget->hide();
+    // Initialize UI state to match m_collapsed value
+    // This ensures consistency regardless of initial m_collapsed value
+    updateToggleButton();
+    toggleCollapse();
 
     setStyleSheet("DeviceSidebarItem { border: "
                   "1px solid #e0e0e0; border-radius: 5px; }");
@@ -153,7 +147,7 @@ void DeviceSidebarItem::setCollapsed(bool collapsed)
 
     m_collapsed = collapsed;
     updateToggleButton();
-    animateCollapse();
+    toggleCollapse();
 }
 
 void DeviceSidebarItem::updateToggleButton()
@@ -165,40 +159,15 @@ void DeviceSidebarItem::updateToggleButton()
     }
 }
 
-void DeviceSidebarItem::animateCollapse()
+void DeviceSidebarItem::toggleCollapse()
 {
-    m_collapseAnimation->stop();
-
     if (m_collapsed) {
-        // Collapsing
-        m_collapseAnimation->setStartValue(m_optionsWidget->height());
-        m_collapseAnimation->setEndValue(0);
-
-        connect(m_collapseAnimation, &QPropertyAnimation::finished, this,
-                [this]() {
-                    m_optionsWidget->hide();
-                    disconnect(m_collapseAnimation,
-                               &QPropertyAnimation::finished, this, nullptr);
-                });
+        m_optionsWidget->hide();
+        m_optionsWidget->setMaximumHeight(0);
     } else {
-        // Expanding
         m_optionsWidget->show();
         m_optionsWidget->setMaximumHeight(QWIDGETSIZE_MAX);
-        int targetHeight = m_optionsWidget->sizeHint().height();
-        m_optionsWidget->setMaximumHeight(0);
-
-        m_collapseAnimation->setStartValue(0);
-        m_collapseAnimation->setEndValue(targetHeight);
-
-        connect(m_collapseAnimation, &QPropertyAnimation::finished, this,
-                [this]() {
-                    m_optionsWidget->setMaximumHeight(QWIDGETSIZE_MAX);
-                    disconnect(m_collapseAnimation,
-                               &QPropertyAnimation::finished, this, nullptr);
-                });
     }
-
-    m_collapseAnimation->start();
 }
 
 void DeviceSidebarItem::onToggleCollapse() { setCollapsed(!m_collapsed); }

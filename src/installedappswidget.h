@@ -19,6 +19,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -78,6 +79,11 @@ private slots:
 
 private:
     void setupUI();
+    void createLoadingWidget();
+    void createErrorWidget();
+    void createContentWidget();
+    void createLeftPanel();
+    void createRightPanel();
     void fetchInstalledApps();
     void createAppTab(const QString &appName, const QString &bundleId,
                       const QString &version);
@@ -86,16 +92,20 @@ private:
     void selectAppTab(AppTabWidget *tab);
     void filterApps(const QString &searchText);
     void loadAppContainer(const QString &bundleId);
+    void createHouseArrestAfcClient();
 
     iDescriptorDevice *m_device;
     QHBoxLayout *m_mainLayout;
+    QStackedWidget *m_stackedWidget;
+    QWidget *m_loadingWidget;
+    QWidget *m_errorWidget;
+    QWidget *m_contentWidget;
+    QLabel *m_errorLabel;
     QLineEdit *m_searchEdit;
     QCheckBox *m_fileSharingCheckBox;
     QScrollArea *m_tabScrollArea;
     QWidget *m_tabContainer;
     QVBoxLayout *m_tabLayout;
-    QWidget *m_contentWidget;
-    QLabel *m_contentLabel;
     QProgressBar *m_progressBar;
     QScrollArea *m_containerScrollArea;
     QWidget *m_containerWidget;

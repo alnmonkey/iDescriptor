@@ -33,7 +33,6 @@ private slots:
     void onBreadcrumbClicked();
     void onFileListContextMenu(const QPoint &pos);
     void onExportClicked();
-    void onExportDeleteClicked();
     void onImportClicked();
     void onSidebarItemClicked(QTreeWidgetItem *item, int column);
     void onAddToFavoritesClicked();
@@ -43,7 +42,6 @@ private:
     QWidget *m_explorer;
     QPushButton *m_backBtn;
     QPushButton *m_exportBtn;
-    QPushButton *m_exportDeleteBtn;
     QPushButton *m_importBtn;
     QPushButton *m_addToFavoritesBtn;
     QListWidget *m_fileList;

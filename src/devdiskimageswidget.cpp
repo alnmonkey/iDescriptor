@@ -2,6 +2,7 @@
 #include "appcontext.h"
 #include "devdiskmanager.h"
 #include "iDescriptor.h"
+#include "qprocessindicator.h"
 #include "settingsmanager.h"
 #include <QCloseEvent>
 #include <QComboBox>
@@ -26,18 +27,14 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVBoxLayout>
+#include <libimobiledevice/mobile_image_mounter.h>
 #include <string>
-
-// TODO:sometimes non authentic cables do not work with img mounting
 
 DevDiskImagesWidget::DevDiskImagesWidget(iDescriptorDevice *device,
                                          QWidget *parent)
     : QWidget{parent}, m_currentDevice(device)
 {
     setupUi();
-
-    // Connect to manager signals
-    // TODO: can prevent race condition ?
     connect(DevDiskManager::sharedInstance(), &DevDiskManager::imageListFetched,
             this, &DevDiskImagesWidget::onImageListFetched);
 
@@ -49,6 +46,12 @@ DevDiskImagesWidget::DevDiskImagesWidget(iDescriptorDevice *device,
     connect(m_deviceComboBox,
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &DevDiskImagesWidget::onDeviceSelectionChanged);
+
+    connect(m_imageListWidget, &QListWidget::itemClicked, this,
+            [this](QListWidgetItem *item) {
+                m_mountButton->setEnabled(item != nullptr);
+            });
+    // connect
 }
 
 void DevDiskImagesWidget::setupUi()
@@ -62,6 +65,7 @@ void DevDiskImagesWidget::setupUi()
     m_deviceComboBox = new QComboBox(this);
     mountLayout->addWidget(m_deviceComboBox);
     m_mountButton = new QPushButton("Mount", this);
+    m_mountButton->setEnabled(false);
     m_check_mountedButton = new QPushButton("Check Mounted", this);
     connect(m_mountButton, &QPushButton::clicked, this,
             &DevDiskImagesWidget::onMountButtonClicked);
@@ -76,52 +80,45 @@ void DevDiskImagesWidget::setupUi()
     // main path/info row (no shadow)
     auto *pathWidget = new QWidget();
     pathWidget->setLayout(pathLayout);
-    pathLayout->addWidget(
-        new QLabel("You can change the download path from settings :"));
+    QLabel *tipLabel =
+        new QLabel("You can change the download path from settings :");
+    tipLabel->setStyleSheet("font-size: 9px;");
+    pathLayout->addWidget(tipLabel);
     QPushButton *openSettingsButton = new QPushButton("Open Settings");
+    openSettingsButton->setSizePolicy(QSizePolicy::Preferred,
+                                      QSizePolicy::Preferred);
     pathLayout->addWidget(openSettingsButton);
+    pathLayout->addStretch();
     connect(openSettingsButton, &QPushButton::clicked, this, [this]() {
         SettingsManager::sharedInstance()->showSettingsDialog();
     });
     pathLayout->setContentsMargins(10, 10, 10, 10);
     layout->addWidget(pathWidget);
 
-    // thin centered bottom line + shadow (shadow only applied to this line)
-    QWidget *lineContainer = new QWidget();
-    QHBoxLayout *lineLayout = new QHBoxLayout(lineContainer);
-    lineLayout->setContentsMargins(0, 0, 0, 0); // adjust centering / width
-    lineLayout->setSpacing(0);
-
-    QWidget *innerLine = new QWidget();
-    innerLine->setFixedHeight(2); // thickness of the visible border
-    innerLine->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    innerLine->setStyleSheet("background-color: #363d32;");
-    innerLine->setLayout(new QHBoxLayout());
-    innerLine->layout()->setContentsMargins(0, 0, 0, 0);
-    innerLine->layout()->setSpacing(0);
-
-    // apply shadow only to the thin line so shadow appears only under bottom
-    QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(30);
-    shadow->setColor(QColor(0, 0, 0, 30));
-    shadow->setOffset(0, 6);
-    innerLine->setGraphicsEffect(shadow);
-
-    // If you want the line to be shorter than full width, give it a max width:
-    // innerLine->setMaximumWidth( int(width * 0.8) ); // or manage in
-    // resizeEvent
-
-    lineLayout->addStretch();
-    lineLayout->addWidget(innerLine);
-    lineLayout->addStretch();
-    layout->addWidget(lineContainer);
-
     m_stackedWidget = new QStackedWidget(this);
     layout->addWidget(m_stackedWidget);
 
+    // Create loading page with process indicator
+    auto *loadingPage = new QWidget();
+    auto *loadingLayout = new QVBoxLayout(loadingPage);
+    loadingLayout->addStretch();
+
+    auto *indicatorLayout = new QHBoxLayout();
+    indicatorLayout->addStretch();
+    m_processIndicator = new QProcessIndicator(loadingPage);
+    m_processIndicator->setFixedSize(40, 40);
+    m_processIndicator->setType(QProcessIndicator::line_rotate);
+    indicatorLayout->addWidget(m_processIndicator);
+    indicatorLayout->addStretch();
+    loadingLayout->addLayout(indicatorLayout);
+
     m_statusLabel = new QLabel("Fetching image list...");
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    m_stackedWidget->addWidget(m_statusLabel);
+    m_statusLabel->setStyleSheet("QLabel { color: #666; margin-top: 10px; }");
+    loadingLayout->addWidget(m_statusLabel);
+    loadingLayout->addStretch();
+
+    m_stackedWidget->addWidget(loadingPage);
 
     m_imageListWidget = new QListWidget(this);
     m_imageListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -131,15 +128,19 @@ void DevDiskImagesWidget::setupUi()
 
     m_stackedWidget->addWidget(m_imageListWidget);
 
-    displayImages();
     if (DevDiskManager::sharedInstance()->isImageListReady()) {
+        displayImages();
         m_stackedWidget->setCurrentWidget(m_imageListWidget);
+    } else {
+        m_processIndicator->start();
+        m_stackedWidget->setCurrentIndex(0); // Show loading page
     }
 }
 
 void DevDiskImagesWidget::fetchImages()
 {
-    m_stackedWidget->setCurrentWidget(m_statusLabel);
+    m_processIndicator->start();
+    m_stackedWidget->setCurrentIndex(0); // Show loading page
     m_statusLabel->setText("Fetching image list...");
     // DevDiskManager::sharedInstance()->fetchImageList();
 }
@@ -147,14 +148,17 @@ void DevDiskImagesWidget::fetchImages()
 void DevDiskImagesWidget::onImageListFetched(bool success,
                                              const QString &errorMessage)
 {
+    m_processIndicator->stop();
 
-    qDebug() << "Image list fetched successfully";
     if (!success) {
+        qDebug() << "Error fetching image list:" << errorMessage;
         m_statusLabel->setText(
             QString("Error fetching image list: %1").arg(errorMessage));
+        // Keep showing the loading page with error message
         return;
     }
 
+    qDebug() << "Image list fetched successfully";
     displayImages();
     m_stackedWidget->setCurrentWidget(m_imageListWidget);
 }
@@ -165,7 +169,11 @@ void DevDiskImagesWidget::onDeviceSelectionChanged(int index)
         index >= AppContext::sharedInstance()->getAllDevices().size())
         return;
 
-    m_currentDevice = AppContext::sharedInstance()->getAllDevices()[index];
+    auto device = AppContext::sharedInstance()->getAllDevices()[index];
+    if (device == nullptr)
+        return;
+
+    m_currentDevice = device;
     displayImages();
 }
 
@@ -191,7 +199,7 @@ void DevDiskImagesWidget::displayImages()
     // Parse images using manager
     GetImagesSortedFinalResult sortedResult =
         DevDiskManager::sharedInstance()->parseImageList(
-            deviceMajorVersion, deviceMinorVersion, m_mounted_sig,
+            deviceMajorVersion, deviceMinorVersion, m_mounted_sig.c_str(),
             m_mounted_sig_len);
 
     auto compatibleImages = sortedResult.compatibleImages;
@@ -465,6 +473,16 @@ void DevDiskImagesWidget::onFileDownloadFinished()
 void DevDiskImagesWidget::updateDeviceList()
 {
     auto devices = AppContext::sharedInstance()->getAllDevices();
+
+    if (devices.isEmpty()) {
+        m_currentDevice = nullptr;
+        m_check_mountedButton->setEnabled(false);
+        m_deviceComboBox->setEnabled(false);
+    } else {
+        m_deviceComboBox->setEnabled(true);
+        m_check_mountedButton->setEnabled(true);
+    }
+
     QString currentUdid = "";
     if (m_deviceComboBox->count() > 0 &&
         m_deviceComboBox->currentIndex() >= 0) {
@@ -477,9 +495,9 @@ void DevDiskImagesWidget::updateDeviceList()
     for (int i = 0; i < devices.size(); ++i) {
         auto *device = devices.at(i);
         m_deviceComboBox->addItem(
-            QString("%1 (%2)")
+            QString("%1 / (%2)")
                 .arg(QString::fromStdString(device->deviceInfo.deviceName))
-                .arg(QString::fromStdString(device->udid)),
+                .arg(QString::fromStdString(device->deviceInfo.productType)),
             QString::fromStdString(device->udid));
         if (QString().fromStdString((device->udid)) == currentUdid) {
             newIndex = i;
@@ -494,6 +512,7 @@ void DevDiskImagesWidget::updateDeviceList()
 
 void DevDiskImagesWidget::onMountButtonClicked()
 {
+    qDebug() << "Current index:" << m_deviceComboBox->currentIndex();
     if (m_deviceComboBox->currentIndex() < 0) {
         QMessageBox::warning(this, "No Device",
                              "Please select a device to mount the image on.");
@@ -514,12 +533,13 @@ void DevDiskImagesWidget::onMountButtonClicked()
 
     QString version = button->property("version").toString();
 
-    mountImage(version);
+    this->mountImage(version);
 }
 
 void DevDiskImagesWidget::mountImage(const QString &version)
 {
     QString udid = m_deviceComboBox->currentData().toString();
+    m_deviceComboBox->setEnabled(false);
     if (udid.isEmpty()) {
         QMessageBox::warning(this, "No Device", "Please select a device.");
         return;
@@ -538,20 +558,60 @@ void DevDiskImagesWidget::mountImage(const QString &version)
     m_mountButton->setEnabled(false);
     m_mountButton->setText("Mounting...");
 
-    bool success = DevDiskManager::sharedInstance()->mountImage(version, udid);
+    mobile_image_mounter_error_t err =
+        DevDiskManager::sharedInstance()->mountImage(version, udid);
 
-    m_mountButton->setEnabled(true);
-    m_mountButton->setText("Mount");
+    auto updateUI = [&]() {
+        m_mountButton->setEnabled(true);
+        m_mountButton->setText("Mount");
+        m_deviceComboBox->setEnabled(true);
+    };
 
-    if (success) {
+    switch (err) {
+    case MOBILE_IMAGE_MOUNTER_E_INVALID_ARG:
+        QMessageBox::critical(this, "Mount Failed",
+                              "Invalid argument provided for mounting.");
+        updateUI();
+        return;
+    case MOBILE_IMAGE_MOUNTER_E_DEVICE_LOCKED:
+        QMessageBox::critical(this, "Mount Failed",
+                              "The device is locked. Please unlock it and try "
+                              "again.");
+        updateUI();
+        return;
+    case MOBILE_IMAGE_MOUNTER_E_SUCCESS:
         QMessageBox::information(this, "Success",
                                  QString("Image mounted successfully on %1.")
                                      .arg(m_deviceComboBox->currentText()));
         displayImages(); // Refresh to show mounted status
-    } else {
-        QMessageBox::critical(this, "Mount Failed",
-                              QString("Failed to mount image on %1.")
-                                  .arg(m_deviceComboBox->currentText()));
+        updateUI();
+        break;
+    default:
+        GetMountedImageResult result =
+            DevDiskManager::sharedInstance()->getMountedImage(
+                udid.toStdString().c_str());
+        /*
+         *   FIXME:  there is no error enum like
+         * MOBILE_IMAGE_MOUNTER_E_ALREADY_MOUNTED  so we work around here
+         */
+        qDebug() << "Mount result:" << result.success << result.message.c_str()
+                 << QString::fromStdString(result.sig);
+        if (result.success && !result.sig.empty()) {
+            m_mounted_sig = result.sig;
+            m_mounted_sig_len = result.sig.size();
+            updateUI();
+            displayImages();
+            QMessageBox::information(this, "Already Mounted",
+                                     "There is already a developer disk image "
+                                     "mounted on the device.");
+            return;
+        }
+
+        QMessageBox::critical(
+            this, "Mount Failed",
+            QString("Failed to mount image on %1. Try with a genuine cable.")
+                .arg(m_deviceComboBox->currentText()));
+        updateUI();
     }
 }
 
@@ -590,10 +650,11 @@ void DevDiskImagesWidget::closeEvent(QCloseEvent *event)
 
 void DevDiskImagesWidget::checkMountedImage()
 {
+    // just in case
+    if (!m_currentDevice || !m_currentDevice->device) {
+        return;
+    }
     if (m_deviceComboBox->currentIndex() < 0) {
-        QMessageBox::warning(
-            this, "No Device",
-            "Please select a device to check the mounted image.");
         return;
     }
 
@@ -602,53 +663,22 @@ void DevDiskImagesWidget::checkMountedImage()
             m_currentDevice->udid.c_str());
 
     qDebug() << "checkMountedImage result:" << result.success
-             << result.message.c_str() << QString::fromStdString(result.output);
+             << result.message.c_str() << QString::fromStdString(result.sig);
 
-    if (result.success) {
-
-        m_mounted_sig = strdup(result.output.c_str());
-        m_mounted_sig_len = result.output.size();
+    if (result.success && !result.sig.empty()) {
+        m_mounted_sig = result.sig;
+        m_mounted_sig_len = result.sig.size();
         displayImages(); // Refresh to show mounted status
+        QMessageBox::information(
+            this, "Check Mounted Image",
+            "There is already a developer disk image mounted on the device.");
         return;
     }
 
-    QMessageBox::information(this, "Something went wrong",
-                             result.message.c_str());
-    //     get_mounted_image(m_currentDevice->udid.c_str());
+    QString errorMsg = QString::fromStdString(result.message);
+    if (errorMsg.isEmpty()) {
+        errorMsg = "Unknown error occurred while checking mounted image";
+    }
 
-    // plist_t sig_array_node =
-    //     plist_dict_get_item(result.output, "ImageSignature");
-
-    // if (result.success == false || sig_array_node == NULL) {
-    //     QMessageBox::information(
-    //         this, "Locked",
-    //         "The device is locked. Please unlock it and try again.");
-    //     return;
-    // }
-
-    // char *mounted_sig = nullptr;
-    // uint64_t mounted_sig_len = 0;
-
-    // if (sig_array_node && plist_get_node_type(sig_array_node) == PLIST_ARRAY
-    // &&
-    //     plist_array_get_size(sig_array_node) > 0) {
-    //     plist_t sig_data_node = plist_array_get_item(sig_array_node, 0);
-    //     if (sig_data_node && plist_get_node_type(sig_data_node) ==
-    //     PLIST_DATA) {
-    //         plist_get_data_val(sig_data_node, &mounted_sig,
-    //         &mounted_sig_len);
-    //     }
-    // }
-
-    // auto compatibleImages =
-    //     DevDiskManager::sharedInstance()->getCompatibleImages();
-    // for (const auto &info : compatibleImages) {
-    //     if (info.isMounted) {
-    //         displayImages(); // Refresh to show mounted status
-    //         return;
-    //     }
-    // }
-
-    // QMessageBox::information(this, "Not Mounted",
-    //                          "The device has no mounted images.");
+    QMessageBox::warning(this, "Check Mounted Image Failed", errorMsg);
 }

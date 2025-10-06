@@ -33,7 +33,9 @@ AfcExplorerWidget::AfcExplorerWidget(afc_client_t afcClient,
 
     // Main layout
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
     setLayout(mainLayout);
+
     mainLayout->addWidget(m_explorer);
 
     // Initialize
@@ -170,7 +172,6 @@ void AfcExplorerWidget::updateBreadcrumb(const QString &path)
 void AfcExplorerWidget::loadPath(const QString &path)
 {
     m_fileList->clear();
-    // pathLabel->setText(path); // removed
 
     updateBreadcrumb(path);
 
@@ -261,16 +262,6 @@ void AfcExplorerWidget::onExportClicked()
     for (QListWidgetItem *item : filesToExport) {
         exportSelectedFile(item, dir);
     }
-}
-
-void AfcExplorerWidget::onExportDeleteClicked()
-{
-    // Placeholder for future implementation
-    QList<QListWidgetItem *> selectedItems = m_fileList->selectedItems();
-    if (selectedItems.isEmpty())
-        return;
-    // TODO: Implement export & delete logic
-    return;
 }
 
 void AfcExplorerWidget::exportSelectedFile(QListWidgetItem *item,
@@ -438,17 +429,18 @@ void AfcExplorerWidget::setupFileExplorer()
 {
     m_explorer = new QWidget();
     QVBoxLayout *explorerLayout = new QVBoxLayout(m_explorer);
+    explorerLayout->setContentsMargins(0, 0, 0, 0);
+    m_explorer->setStyleSheet("border : none;");
 
     // Export/Import buttons layout
     QHBoxLayout *exportLayout = new QHBoxLayout();
     m_exportBtn = new QPushButton("Export");
-    m_exportDeleteBtn = new QPushButton("Export & Delete");
     m_importBtn = new QPushButton("Import");
     m_addToFavoritesBtn = new QPushButton("Add to Favorites");
     exportLayout->addWidget(m_exportBtn);
-    exportLayout->addWidget(m_exportDeleteBtn);
     exportLayout->addWidget(m_importBtn);
     exportLayout->addWidget(m_addToFavoritesBtn);
+    exportLayout->setContentsMargins(0, 0, 0, 0);
     exportLayout->addStretch();
     explorerLayout->addLayout(exportLayout);
 
@@ -473,8 +465,6 @@ void AfcExplorerWidget::setupFileExplorer()
             &AfcExplorerWidget::onItemDoubleClicked);
     connect(m_exportBtn, &QPushButton::clicked, this,
             &AfcExplorerWidget::onExportClicked);
-    connect(m_exportDeleteBtn, &QPushButton::clicked, this,
-            &AfcExplorerWidget::onExportDeleteClicked);
     connect(m_importBtn, &QPushButton::clicked, this,
             &AfcExplorerWidget::onImportClicked);
     connect(m_addToFavoritesBtn, &QPushButton::clicked, this,

@@ -2,10 +2,12 @@
 #define DISKUSAGEWIDGET_H
 #include "diskusagebar.h"
 #include "iDescriptor.h"
+#include "qprocessindicator.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <cstdint>
@@ -35,7 +37,17 @@ private:
     // UI widgets
     QVBoxLayout *m_mainLayout;
     QLabel *m_titleLabel;
+    QStackedWidget *m_stackedWidget;
+
+    // Loading/Error page
+    QWidget *m_loadingErrorPage;
+    QVBoxLayout *m_loadingErrorLayout;
+    QProcessIndicator *m_processIndicator;
     QLabel *m_statusLabel;
+
+    // Data page
+    QWidget *m_dataPage;
+    QVBoxLayout *m_dataLayout;
     QWidget *m_diskBarContainer;
     QHBoxLayout *m_diskBarLayout;
 #ifdef Q_OS_MAC

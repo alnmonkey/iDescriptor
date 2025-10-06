@@ -30,7 +30,7 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
 {
     // Main layout with horizontal orientation
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setContentsMargins(0, 0, 10, 0);
     mainLayout->setSpacing(1);
     m_graphicsScene = new QGraphicsScene(this); // no parent
     QGraphicsPixmapItem *pixmapItem =
@@ -60,6 +60,7 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     // Header
     QGroupBox *headerWidget = new QGroupBox();
     QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
+    headerLayout->setContentsMargins(5, 5, 5, 5);
     headerLayout->setSpacing(15);
 
     QLabel *devProductType =
@@ -75,7 +76,7 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
                                      QSizePolicy::Preferred);
     diskCapacityLabel->setAttribute(Qt::WA_StyledBackground, true);
     diskCapacityLabel->setStyleSheet("background-color: rgba(0, 255, 30, 0.5);"
-                                     "padding: 4px;"
+                                     "padding: 2px;"
                                      "border-radius: 13px;");
 
     m_chargingStatusLabel =

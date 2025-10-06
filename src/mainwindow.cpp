@@ -5,48 +5,28 @@
 #include "ifusediskunmountbutton.h"
 #include "ifusemanager.h"
 #include "settingswidget.h"
-#include <QDialog>
-#include <QGraphicsScene>
-#include <QGraphicsSvgItem>
-#include <QMessageBox>
-#include <QSvgRenderer>
-#include <QTimer>
-#include <QtSvg>
-
-#include <libimobiledevice/libimobiledevice.h>
-#include <stdio.h>
-#include <unistd.h>
 
 #include "appswidget.h"
 #include "devicemanagerwidget.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
+#include "jailbrokenwidget.h"
 #include "libirecovery.h"
 #include "toolboxwidget.h"
 #include <QHBoxLayout>
-#include <QLabel>
-#include <QListWidget>
-#include <QPushButton>
-#include <QScrollArea>
 #include <QStack>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <unistd.h>
 
 #include "appcontext.h"
-#include "deviceinfowidget.h"
-#include "devicemenuwidget.h"
-#include "fileexplorerwidget.h"
-#include "jailbrokenwidget.h"
-#include "recoverydeviceinfowidget.h"
 #include "settingsmanager.h"
 #include <QApplication>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <libusb-1.0/libusb.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 void handleCallback(const idevice_event_t *event, void *userData)
 {
@@ -105,15 +85,15 @@ void handleCallbackRecovery(const irecv_device_event_t *event, void *userData)
     case IRECV_DEVICE_ADD:
         qDebug() << "Recovery device added: ";
         // TODO: handle recovery device addition
-        //  QMetaObject::invokeMethod(ctx->mainWindow, "onRecoveryDeviceAdded",
-        //                            Qt::QueuedConnection,
-        //                            Q_ARG(QObject *, new
-        //                            RecoveryDeviceInfo(event)));
+        QMetaObject::invokeMethod(
+            AppContext::sharedInstance(), "addRecoveryDevice",
+            Qt::QueuedConnection,
+            Q_ARG(RecoveryDeviceInfo *, new RecoveryDeviceInfo(event)));
         break;
     case IRECV_DEVICE_REMOVE:
         qDebug() << "Recovery device removed: ";
         QMetaObject::invokeMethod(
-            AppContext::sharedInstance(), "onRecoveryDeviceRemoved",
+            AppContext::sharedInstance(), "removeRecoveryDevice",
             Qt::QueuedConnection,
             Q_ARG(QString, QString::number(event->device_info->ecid)));
         break;
@@ -133,7 +113,9 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    // setStyleSheet("background-color: white; color: black;");
+
+    setWindowIcon(QIcon(":/icons/icon.png"));
+
     // Create custom tab widget
     m_customTabWidget = new CustomTabWidget(this);
     m_customTabWidget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea,
@@ -250,10 +232,9 @@ void MainWindow::createMenus()
     QMenu *actionsMenu = menuBar()->addMenu("&Actions");
 
     QAction *aboutAct = new QAction("&About iDescriptor", this);
-    connect(aboutAct, &QAction::triggered, this, [=]() {
-        QMessageBox::about(this, "About iDescriptor",
-                           "<b>iDescriptor</b><br>"
-                           "A modern device management tool.");
+    connect(aboutAct, &QAction::triggered, this, [this]() {
+        QMessageBox::about(this, "iDescriptor",
+                           "A free and open-source idevice management tool.");
     });
     actionsMenu->addAction(aboutAct);
 #endif
@@ -276,75 +257,6 @@ void MainWindow::updateNoDevicesConnected()
     m_mainStackedWidget->setCurrentIndex(1); // Show device list page
 }
 
-void MainWindow::onRecoveryDeviceAdded(QObject *recoveryDeviceInfoObj)
-{
-    if (!recoveryDeviceInfoObj)
-        // TODO: handle
-        return;
-    try {
-        m_mainStackedWidget->setCurrentIndex(1);
-        RecoveryDeviceInfo *device =
-            qobject_cast<RecoveryDeviceInfo *>(recoveryDeviceInfoObj);
-        if (!device) {
-            qDebug() << "Invalid recovery device info object";
-            return;
-        }
-        // IDescriptorInitDeviceResultRecovery initResult=
-        // init_idescriptor_recovery_device(deviceInfo);
-
-        // IDescriptorInitDeviceResult initResult =
-        // init_idescriptor_device(udid.toStdString().c_str());
-
-        qDebug() << "Recovery device initialized: " << device->ecid;
-
-        std::string added_ecid =
-            AppContext::sharedInstance()->addRecoveryDevice(device);
-
-        // Create device info widget
-        RecoveryDeviceInfoWidget *recoveryDeviceInfoWidget =
-            new RecoveryDeviceInfoWidget(device);
-        QPixmap recoveryIcon(16, 16);
-        recoveryIcon.fill(Qt::transparent);
-        QPainter painter(&recoveryIcon);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setBrush(QColor(255, 59, 48)); // Red for recovery mode
-        painter.drawRoundedRect(2, 2, 12, 12, 2, 2);
-
-        // int mostRecentDevice =
-        // customTabWidget->addTabWithIcon(recoveryDeviceInfoWidget,
-        // recoveryIcon, "Recovery Mode");
-
-        // m_device_menu_widgets[added_ecid] = recoveryDeviceInfoWidget;
-        // Get device icon and product type for tab
-        // QString tabTitle =
-        // QString::fromStdString(device->product.toStdString());
-        QString tabTitle = QString::fromStdString("recovery mode device");
-
-        // Add tab with custom icon
-        // int mostRecentDevice =
-        //     m_deviceManager->addDevice(recoveryDeviceInfoWidget, tabTitle);
-        // m_deviceManager->setCurrentDevice(mostRecentDevice);
-    } catch (const std::exception &e) {
-        qDebug() << "Exception in onDeviceAdded: " << e.what();
-        QMessageBox::critical(
-            this, "Error",
-            "An error occurred while processing device information");
-    }
-}
-
-void MainWindow::onRecoveryDeviceRemoved(QObject *deviceInfoObj)
-{
-    auto *info = qobject_cast<RecoveryDeviceInfo *>(deviceInfoObj);
-    if (!info)
-        return;
-
-    qDebug() << "Recovery device removed: " << info->ecid;
-
-    // TODO: Implement proper device removal in DeviceManagerWidget
-    // For now, we'll just log the removal
-    qDebug() << "Recovery device cleanup not yet implemented";
-}
-
 MainWindow::~MainWindow()
 {
     idevice_event_unsubscribe();
@@ -356,75 +268,5 @@ MainWindow::~MainWindow()
     // }
     // idescriptor_devices.clear();
     delete ui;
-    sleep(1); // Give some time for cleanup to finish
-}
-
-void MainWindow::onDeviceInitFailed(QString udid, lockdownd_error_t err)
-{
-    QString errorTitle = "Device Connection Error";
-    QString errorMessage;
-
-    switch (err) {
-    case LOCKDOWN_E_PASSWORD_PROTECTED:
-        errorMessage =
-            QString(
-                "Could not validate device %1 because a passcode is set.\n\n"
-                "Please enter the passcode on your device and try again.")
-                .arg(udid);
-        qDebug() << "ERROR: Could not validate with device" << udid
-                 << "because a passcode is set. Please enter the passcode on "
-                    "the device and retry.";
-        break;
-    case LOCKDOWN_E_INVALID_CONF:
-    case LOCKDOWN_E_INVALID_HOST_ID:
-        errorMessage = QString("Device %1 is not paired with this computer.\n\n"
-                               "Please check your device settings.")
-                           .arg(udid);
-        qDebug() << "ERROR: Device" << udid << "is not paired with this host";
-        break;
-    case LOCKDOWN_E_PAIRING_DIALOG_RESPONSE_PENDING:
-        errorMessage =
-            QString(
-                "Trust dialog is waiting for your response.\n\n"
-                "Please accept the trust dialog on the screen of device %1,\n"
-                "then attempt to pair again.")
-                .arg(udid);
-        qDebug()
-            << "ERROR: Please accept the trust dialog on the screen of device"
-            << udid << ", then attempt to pair again.";
-        break;
-    case LOCKDOWN_E_USER_DENIED_PAIRING:
-        errorMessage = QString("Pairing rejected.\n\n"
-                               "You denied the trust dialog on device %1.")
-                           .arg(udid);
-        qDebug() << "ERROR: Device" << udid
-                 << "said that the user denied the trust dialog.";
-        break;
-    case LOCKDOWN_E_PAIRING_FAILED:
-        errorMessage = QString("Pairing with device %1 failed.\n\n"
-                               "Please try again or restart your device.")
-                           .arg(udid);
-        qDebug() << "ERROR: Pairing with device" << udid << "failed.";
-        break;
-    case LOCKDOWN_E_GET_PROHIBITED:
-    case LOCKDOWN_E_PAIRING_PROHIBITED_OVER_THIS_CONNECTION:
-        errorMessage = "Pairing is not possible over this connection.\n\n"
-                       "Please try using a USB connection.";
-        qDebug() << "ERROR: Pairing is not possible over this connection.";
-        break;
-    default:
-        errorMessage = QString("Unknown error occurred with device %1.\n\n"
-                               "Error code: %2")
-                           .arg(udid)
-                           .arg(err);
-        qDebug() << "ERROR: Device" << udid << "returned unhandled error code"
-                 << err;
-        break;
-    }
-    QMessageBox errorDialog(this);
-    errorDialog.setWindowTitle(errorTitle);
-    errorDialog.setText(errorMessage);
-    errorDialog.setIcon(QMessageBox::Warning);
-    errorDialog.setStandardButtons(QMessageBox::Ok);
-    errorDialog.exec();
+    sleep(2); // Give some time for cleanup to finish
 }

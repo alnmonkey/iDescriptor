@@ -17,17 +17,8 @@ class DeviceManagerWidget : public QWidget
 public:
     explicit DeviceManagerWidget(QWidget *parent = nullptr);
 
-    void addDevice(iDescriptorDevice *device);
-    // TODO:udid or uuid ?
-    void addPendingDevice(const QString &udid, bool locked);
-    void addPairedDevice(iDescriptorDevice *device);
-
-    void removeDevice(const std::string &uuid);
     void setCurrentDevice(const std::string &uuid);
     std::string getCurrentDevice() const;
-
-    // Get the device widget at a specific index
-    QWidget *getDeviceWidget(int deviceIndex) const;
 
     // Navigation methods
     void setDeviceNavigation(int deviceIndex, const QString &section);
@@ -45,6 +36,12 @@ private slots:
 private:
     void setupUI();
 
+    void addDevice(iDescriptorDevice *device);
+    void removeDevice(const std::string &uuid);
+    void addRecoveryDevice(RecoveryDeviceInfo *device);
+    // TODO:udid or uuid ?
+    void addPendingDevice(const QString &udid, bool locked);
+    void addPairedDevice(iDescriptorDevice *device);
     QHBoxLayout *m_mainLayout;
     DeviceSidebarWidget *m_sidebar;
     QStackedWidget *m_stackedWidget;

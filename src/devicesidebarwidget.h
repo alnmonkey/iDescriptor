@@ -6,8 +6,6 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QParallelAnimationGroup>
-#include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
@@ -39,7 +37,7 @@ private slots:
 private:
     void setupUI();
     void updateToggleButton();
-    void animateCollapse();
+    void toggleCollapse();
 
     std::string m_uuid;
     QString m_deviceName;
@@ -57,8 +55,6 @@ private:
     QPushButton *m_galleryButton;
     QPushButton *m_filesButton;
     QButtonGroup *m_navigationGroup;
-
-    QPropertyAnimation *m_collapseAnimation;
 };
 
 #ifndef DEVICEPENDINGSIDEBARITEM_H

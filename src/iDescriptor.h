@@ -4,6 +4,7 @@
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
+#include <libimobiledevice/mobile_image_mounter.h>
 #include <libimobiledevice/screenshotr.h>
 #include <libirecovery.h>
 #include <pugixml.hpp>
@@ -319,6 +320,7 @@ public:
             free(value);
         return result;
     }
+    plist_t getNode() const { return current_node; }
 };
 
 afc_error_t safe_afc_read_directory(afc_client_t afcClient, idevice_t device,
@@ -359,15 +361,16 @@ bool shutdown(idevice_t device);
 
 TakeScreenshotResult take_screenshot(screenshotr_client_t shotr);
 
-bool mount_dev_image(const char *udid, const char *image_dir_path);
+mobile_image_mounter_error_t mount_dev_image(const char *udid,
+                                             const char *image_dir_path);
 
 struct GetMountedImageResult {
     bool success;
-    std::string output;
+    std::string sig;
     std::string message;
 };
 
-QPair<bool, plist_t> _get_mounted_image(const char *udid);
+plist_t _get_mounted_image(const char *udid);
 
 bool restart(std::string udid);
 

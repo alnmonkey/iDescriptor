@@ -49,43 +49,28 @@
 #include <printf.h>
 #endif
 
-static int list_mode = 0;
-static int use_network = 0;
-static int xml_mode = 0;
-static const char *udid = NULL;
-static const char *imagetype = NULL;
-
-static const char PKG_PATH[] = "PublicStaging";
-static const char PATH_PREFIX[] = "/private/var/mobile/Media";
-
 typedef enum {
     DISK_IMAGE_UPLOAD_TYPE_AFC,
     DISK_IMAGE_UPLOAD_TYPE_UPLOAD_IMAGE
 } disk_image_upload_type_t;
 
-enum cmd_mode {
-    CMD_NONE = 0,
-    CMD_MOUNT,
-    CMD_UNMOUNT,
-    CMD_LIST,
-    CMD_DEVMODESTATUS
-};
+static const char *imagetype = NULL;
 
-// int cmd = CMD_NONE;
+static const char PKG_PATH[] = "PublicStaging";
+static const char PATH_PREFIX[] = "/private/var/mobile/Media";
 
 #ifndef SOURCE_DIR
 #define SOURCE_DIR "."
 #endif
+
 static ssize_t mim_upload_cb(void *buf, size_t size, void *userdata)
 {
     return fread(buf, 1, size, (FILE *)userdata);
 }
-// TODO: cleanup
-// TODO: may not work on a broken ,faulty or fake usb cable
-// TypeC cables work better
-// TODO : sometimes ERROR: Device is locked, can't mount. Unlock device and try
-// again.
-bool mount_dev_image(const char *udid, const char *image_dir_path)
+// extend the mobile_image_mounter_error_t type and return sucess if there is
+// already a disk image
+mobile_image_mounter_error_t mount_dev_image(const char *udid,
+                                             const char *image_dir_path)
 {
     mobile_image_mounter_client_t mim = NULL;
     int res = -1;
@@ -111,9 +96,7 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
     size_t sig_length = 0;
 
     if (IDEVICE_E_SUCCESS !=
-        idevice_new_with_options(&device, udid,
-                                 (use_network) ? IDEVICE_LOOKUP_NETWORK
-                                               : IDEVICE_LOOKUP_USBMUX)) {
+        idevice_new_with_options(&device, udid, IDEVICE_LOOKUP_USBMUX)) {
         qDebug() << "ERROR: Could not create idevice!";
         res = -1;
         goto leave;
@@ -550,7 +533,6 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         res = -1;
         goto leave;
     }
-    qDebug() << "done.";
 
     qDebug() << "Mounting...";
     err = mobile_image_mounter_mount_image_with_options(
@@ -565,11 +547,18 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                     if (!strcmp(status, "Complete")) {
                         qDebug() << "Done.";
                         res = 0;
+                    } else {
+                        err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
                     }
                     free(status);
+                } else {
+                    err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
                 }
+            } else {
+                err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
             }
             if (res != 0) { // If not complete, log the error
+                err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
                 node = plist_dict_get_item(result, "Error");
                 if (node) {
                     char *error = NULL;
@@ -580,8 +569,17 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                     }
                     node = plist_dict_get_item(result, "DetailedError");
                     if (node) {
-                        qDebug() << "DetailedError:"
-                                 << plist_get_string_ptr(node, NULL);
+                        const char *str = plist_get_string_ptr(node, NULL);
+                        auto sd_str = std::string(str);
+                        if (sd_str.find("already mounted at /Developer") !=
+                            std::string::npos) {
+                            // FIXME: need an error code for this
+                            qDebug() << "Image is already mounted";
+                            // res = 0;
+                            // err = MOBILE_IMAGE_MOUNTER_E_SUCCESS;
+                        } else {
+                            qDebug() << "DetailedError:" << str;
+                        }
                     }
                 }
             }
@@ -628,7 +626,5 @@ leave:
         free(mountname);
     }
 
-    return res == 0;
+    return err;
 }
-
-// int main(){return 0;}

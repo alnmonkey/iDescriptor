@@ -2,6 +2,7 @@
 #define DEVDISKIMAGESWIDGET_H
 
 #include "iDescriptor.h"
+#include "qprocessindicator.h"
 #include <QComboBox>
 #include <QLabel>
 #include <QListWidget>
@@ -13,6 +14,7 @@
 #include <QStackedWidget>
 #include <QStringList>
 #include <QWidget>
+#include <string>
 
 class DevDiskImagesWidget : public QWidget
 {
@@ -52,7 +54,7 @@ private:
         qint64 sigReceived = 0;
     };
 
-    char *m_mounted_sig = NULL;
+    std::string m_mounted_sig = "";
     uint64_t m_mounted_sig_len = 0;
 
     QStackedWidget *m_stackedWidget;
@@ -63,6 +65,7 @@ private:
     QComboBox *m_deviceComboBox;
     QPushButton *m_mountButton;
     QPushButton *m_check_mountedButton;
+    QProcessIndicator *m_processIndicator;
 
     iDescriptorDevice *m_currentDevice;
     QStringList m_compatibleVersions;
