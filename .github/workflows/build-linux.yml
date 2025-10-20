@@ -237,7 +237,7 @@ jobs:
           ./linuxdeployqt-continuous-x86_64.AppImage AppDir/usr/share/applications/iDescriptor.desktop \
             -appimage \
             -no-strip \
-            -qmldir=../qml \
+            -qmldir=./qml \
             -exclude-libs=libGL,libGLX,libEGL,libOpenGL,libdrm,libva,libvdpau,libxcb,libxcb-glx,libxcb-dri2,libxcb-dri3,libX11,libXext,libXrandr,libXrender,libXfixes,libXau,libXdmcp
 
       - name: Upload Artifact (Linux)
