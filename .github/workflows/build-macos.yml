@@ -30,12 +30,13 @@ jobs:
           modules: "qtmultimedia qtlocation qtpositioning qtserialport"
 
       - name: Update pkgconfig path
-        shell: bash
         run: |
-          ls "${Qt6_DIR}/bin/" | grep qmake
+          # show qmake to verify Qt6_DIR is correct
+          ls "${Qt6_DIR}/bin/" | grep qmake || true
 
-          echo "${Qt6_DIR}/lib/pkgconfig" >> $GITHUB_ENV
-          echo "${Qt6_DIR}/lib/cmake" >> $GITHUB_ENV
+          # write KEY=VALUE lines to GITHUB_ENV (required format)
+          echo "PKG_CONFIG_PATH=${Qt6_DIR}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${Qt6_DIR}/lib/cmake:${CMAKE_PREFIX_PATH:-}" >> "$GITHUB_ENV"
 
       - name: Set up Go
         uses: actions/setup-go@v6
