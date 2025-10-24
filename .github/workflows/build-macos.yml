@@ -31,7 +31,10 @@ jobs:
 
       - name: Update pkgconfig path
         run: |
-          ls "${QT_ROOT_DIR}/bin/"
+          echo "Qt Root: ${QT_ROOT_DIR}"
+
+          echo "${QT_ROOT_DIR}/lib/pkgconfig" >> $GITHUB_ENV
+          echo "${QT_ROOT_DIR}/lib/cmake" >> $GITHUB_ENV
 
       - name: Set up Go
         uses: actions/setup-go@v6
