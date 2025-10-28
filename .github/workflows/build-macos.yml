@@ -54,7 +54,14 @@ jobs:
             curl \
             openssl \
             libzip \
-            libheif
+            libheif \
+            libssh \
+            gstreamer \
+            gst-plugins-base \
+            gst-plugins-good \
+            gst-plugins-bad \
+            gst-plugins-ugly \
+            gst-libav
 
       - name: Compile additional dependencies
         run: |
@@ -109,8 +116,6 @@ jobs:
             srcdir="${name}-${ver}"
             pushd "$srcdir"
 
-            # Point configure to the Homebrew-installed OpenSSL
-            export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig"
             ./configure
 
             make -j"$(sysctl -n hw.ncpu)" && sudo make install
