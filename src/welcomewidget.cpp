@@ -9,13 +9,17 @@
 #include <QPalette>
 #include <QUrl>
 
+#ifdef WIN32
+#include "platform/windows/diagnose_widget.h"
+#endif
+
 WelcomeWidget::WelcomeWidget(QWidget *parent) : QWidget(parent) { setupUI(); }
 
 void WelcomeWidget::setupUI()
 {
     // Main layout with proper spacing and margins
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setContentsMargins(5, 5, 5, 5);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
     // Add top stretch
@@ -85,11 +89,13 @@ void WelcomeWidget::setupUI()
 
     m_mainLayout->addWidget(m_githubLabel);
 
-    // Add bottom stretch
-    m_mainLayout->addStretch(1);
+    // no additional deps needed on macOS
+#ifndef __APPLE__
+    DiagnoseWidget *diagnoseWidget = new DiagnoseWidget();
+    m_mainLayout->addWidget(diagnoseWidget);
+#endif
 
-    // Set minimum size
-    // setMinimumSize(600, 500);
+    m_mainLayout->addStretch(1);
 }
 
 ZLabel *WelcomeWidget::createStyledLabel(const QString &text, int fontSize,

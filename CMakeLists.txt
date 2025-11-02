@@ -387,3 +387,15 @@ if(WIN32)
 endif()
 
 include(CPack)
+
+
+# FIXME: move to win-deploy.cmake
+if(WIN32)
+    # Ensure libZUpdater.dll is copied next to the main executable for deployment
+    add_custom_command(TARGET iDescriptor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                $<TARGET_FILE:ZUpdater>
+                $<TARGET_FILE_DIR:iDescriptor>
+        COMMENT "Copying libZUpdater.dll to executable directory"
+    )
+endif()

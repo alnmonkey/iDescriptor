@@ -16,10 +16,15 @@ DiagnoseDialog::DiagnoseDialog(QWidget *parent) : QDialog(parent)
 void DiagnoseDialog::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     mainLayout->setContentsMargins(10, 10, 10, 10);
 
     // Add the main diagnose widget
     m_diagnoseWidget = new DiagnoseWidget();
+    scrollArea->setWidget(m_diagnoseWidget);
 
     // Close button
     QHBoxLayout *buttonLayout = new QHBoxLayout();
@@ -33,7 +38,7 @@ void DiagnoseDialog::setupUI()
     buttonLayout->addWidget(m_closeButton);
 
     // Layout assembly
-    mainLayout->addWidget(m_diagnoseWidget, 1);
+    mainLayout->addWidget(scrollArea);
     mainLayout->addLayout(buttonLayout);
 }
 

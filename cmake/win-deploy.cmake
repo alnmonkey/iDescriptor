@@ -19,7 +19,6 @@ message("  MSYS2_BIN_PATH: ${MSYS2_BIN_PATH}")
 
 if(NOT EXISTS ${EXECUTABLE_PATH})
     message(STATUS "Executable not found: ${EXECUTABLE_PATH}")
-    message(STATUS "Checking if it's a path issue...")
     
     # Try to find the executable with different path formats
     get_filename_component(DIR_PATH ${EXECUTABLE_PATH} DIRECTORY)
@@ -75,7 +74,7 @@ file(GET_RUNTIME_DEPENDENCIES
     PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-" "^AVRT" "^avrt" "^MSVCP" "^VCRUNTIME" "^ucrtbase" "^libgcc_s_seh-1\\.dll$" "^libstdc\\+\\+-6\\.dll$" "^libwinpthread-1\\.dll$" "^Qt.*\\.dll$" "^libgstreamer-1\\.0-0\\.dll$" "^libgstbase-1\\.0-0\\.dll$" "^libgobject-2\\.0-0\\.dll$" "^libglib-2\\.0-0\\.dll$" "^libintl-8\\.dll$" "^libiconv-2\\.dll$"
     #PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-" "^AVRT" "^avrt" "^MSVCP" "^VCRUNTIME" "^ucrtbase"
     POST_EXCLUDE_REGEXES ".*system32/.*\\.dll" ".*SysWOW64/.*\\.dll" ".*Windows/.*\\.dll" ".*Microsoft.VC.*" ".*Qt.*\\.dll$"
-    DIRECTORIES ${QT_BIN_PATH} ${MSYS2_BIN_PATH} "C:/lxqt/lib" $ENV{PATH}
+    DIRECTORIES ${BUILD_DIR} ${QT_BIN_PATH} ${MSYS2_BIN_PATH} "C:/lxqt/lib" $ENV{PATH}
 )
 
 set(COPIED_DLLS 0)
@@ -119,23 +118,52 @@ message("Processed ${TOTAL_DLLS} runtime dependencies, copied ${COPIED_DLLS} fil
 
 # Step 3: Copy GStreamer plugins
 message("Copying GStreamer plugins...")
-file(GLOB GSTREAMER_PLUGINS "${MSYS2_BIN_PATH}/../lib/gstreamer-1.0/*.dll")
+# OLD: file(GLOB GSTREAMER_PLUGINS "${MSYS2_BIN_PATH}/../lib/gstreamer-1.0/*.dll")
+# Replace broad copy with targeted list (matches versioned names via glob)
+set(GSTREAMER_PLUGIN_DIR "${MSYS2_BIN_PATH}/../lib/gstreamer-1.0")
 
-if(GSTREAMER_PLUGINS)
-    # Create gstreamer-1.0 directory in output
-    file(MAKE_DIRECTORY ${OUTPUT_DIR}/gstreamer-1.0)
-    
-    foreach(PLUGIN ${GSTREAMER_PLUGINS})
-        get_filename_component(PLUGIN_NAME ${PLUGIN} NAME)
-        message("Copying GStreamer plugin: ${PLUGIN_NAME}")
-        file(COPY ${PLUGIN} DESTINATION ${OUTPUT_DIR}/gstreamer-1.0)
-    endforeach()
-    
-    list(LENGTH GSTREAMER_PLUGINS PLUGIN_COUNT)
-    message("Successfully copied ${PLUGIN_COUNT} GStreamer plugins")
-else()
-    message(WARNING "No GStreamer plugins found in ${MSYS2_BIN_PATH}/../lib/gstreamer-1.0/")
-endif()
+# List of plugin basenames to copy (no extension or version). Add items as needed.
+set(WANTED_PLUGINS
+    "libgstaudioconvert"
+    "libgstvolume"
+    "libgstcoreelements"
+    "libgstautodetect"
+    "libgstdirectsound"
+    "libgstlibav"
+    "libgstapp"
+    "libgstlevel"
+    "libgstwasapi"
+    "libgstplayback"
+    "libgstaudioresample"
+    "libgstaudiomixer"
+    "libgstaudiotestsrc"
+    "libgstmediafoundation"
+    "libgstdecodebin"
+    "libgsttypefindfunctions"
+    "libgstvideoscale"
+    "libgstvideoconvert"
+    "libgstvideorate"
+    "libgstoverlaycomposition"
+)
+
+file(MAKE_DIRECTORY "${OUTPUT_DIR}/gstreamer-1.0")
+set(COPIED_PLUGIN_COUNT 0)
+foreach(BASENAME ${WANTED_PLUGINS})
+    # match any versioned filename starting with the basename
+    file(GLOB MATCHES "${GSTREAMER_PLUGIN_DIR}/${BASENAME}*.dll")
+    if(MATCHES)
+        foreach(PLUGIN_PATH ${MATCHES})
+            get_filename_component(PLUGIN_NAME ${PLUGIN_PATH} NAME)
+            message("Copying GStreamer plugin: ${PLUGIN_NAME}")
+            file(COPY "${PLUGIN_PATH}" DESTINATION "${OUTPUT_DIR}/gstreamer-1.0")
+            math(EXPR COPIED_PLUGIN_COUNT "${COPIED_PLUGIN_COUNT} + 1")
+        endforeach()
+    else()
+        message(WARNING "Requested GStreamer plugin not found: ${BASENAME} (searched ${GSTREAMER_PLUGIN_DIR})")
+    endif()
+endforeach()
+
+message("Successfully copied ${COPIED_PLUGIN_COUNT} requested GStreamer plugins")
 
 # Step 4: Manually copy the correct MSYS2 MinGW runtime DLLs.
 # This ensures the versions required by GStreamer/FFmpeg are used.
@@ -204,5 +232,8 @@ file(COPY "${GST_LIBEXEC_PATH}/gst-ptp-helper.exe" DESTINATION "${OUTPUT_DIR}/li
 message("Copying executables")
 file(COPY C:/msys64/mingw64/bin/iproxy.exe DESTINATION ${OUTPUT_DIR})
 
+message("Copying required scripts")
+file(COPY "${CMAKE_SOURCE_DIR}/install-apple-drivers.ps1" DESTINATION ${OUTPUT_DIR})
+file(COPY "${CMAKE_SOURCE_DIR}/install-win-fsp.silent.bat" DESTINATION ${OUTPUT_DIR})
 
 message("=== Windows deployment completed ===")

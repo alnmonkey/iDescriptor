@@ -28,10 +28,6 @@
 #include <QMenuBar>
 #include <QMessageBox>
 
-#ifdef WIN32
-#include "platform/windows/diagnose_widget.h"
-#endif
-
 void handleCallback(const idevice_event_t *event, void *userData)
 {
     printf("Device event received: ");
@@ -79,7 +75,6 @@ void handleCallback(const idevice_event_t *event, void *userData)
     default:
         qDebug() << "Unhandled event: " << event->event;
     }
-    // return;
 }
 
 void handleCallbackRecovery(const irecv_device_event_t *event, void *userData)
@@ -117,10 +112,7 @@ MainWindow::MainWindow(QWidget *parent)
     const QSize minSize(900, 600);
     setMinimumSize(minSize);
     resize(minSize);
-    // TODO
-    // setWindowIcon(QIcon(":/resources/icons/icon.png"));
 
-    // Create custom tab widget
     m_ZTabWidget = new ZTabWidget(this);
     m_ZTabWidget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
 
@@ -131,31 +123,8 @@ MainWindow::MainWindow(QWidget *parent)
 #endif
     setCentralWidget(m_ZTabWidget);
 
-    // Create device manager and stacked widget for main tab
     m_mainStackedWidget = new QStackedWidget();
-
-    // Welcome page (shown when no devices are connected)
     WelcomeWidget *welcomePage = new WelcomeWidget(this);
-    // No devices page
-    QWidget *noDevicesPage = new QWidget();
-    QVBoxLayout *noDeviceLayout = new QVBoxLayout(noDevicesPage);
-    noDeviceLayout->addStretch();
-    QHBoxLayout *labelLayout = new QHBoxLayout();
-    labelLayout->addStretch();
-    QLabel *noDeviceLabel = new QLabel("No devices detected");
-    noDeviceLabel->setAlignment(Qt::AlignCenter);
-    labelLayout->addWidget(noDeviceLabel);
-    labelLayout->addStretch();
-    noDeviceLayout->addLayout(labelLayout);
-
-#ifdef WIN32
-    // Add diagnose widget to check dependencies
-    // DiagnoseWidget *diagnoseWidget = new DiagnoseWidget();
-    // noDeviceLayout->addWidget(diagnoseWidget);
-#endif
-
-    noDeviceLayout->addStretch();
-
     m_deviceManager = new DeviceManagerWidget(this);
 
     m_mainStackedWidget->addWidget(welcomePage);

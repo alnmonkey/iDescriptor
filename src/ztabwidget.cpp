@@ -9,7 +9,12 @@
 ZTab::ZTab(const QString &text, QWidget *parent) : QPushButton(text, parent)
 {
     setCheckable(true);
+#ifndef WIN32
     setFixedHeight(50);
+#else
+    setFixedHeight(40);
+#endif
+
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 }
 
@@ -21,7 +26,11 @@ ZTabWidget::ZTabWidget(QWidget *parent) : QWidget(parent), m_currentIndex(0)
 
     // Create tab bar container
     m_tabBar = new QWidget();
+#ifndef WIN32
     m_tabBar->setFixedHeight(50);
+#else
+    m_tabBar->setFixedHeight(40);
+#endif
     m_tabBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_tabLayout = new QHBoxLayout(m_tabBar);
     m_tabLayout->setSpacing(0);

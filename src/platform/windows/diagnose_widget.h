@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "../../qprocessindicator.h"
 
 class DependencyItem : public QWidget
 {
@@ -20,6 +21,7 @@ public:
                             QWidget *parent = nullptr);
     void setInstalled(bool installed);
     void setChecking(bool checking);
+    void setInstalling(bool installing);
 
 signals:
     void installRequested(const QString &name);
@@ -33,7 +35,7 @@ private:
     QLabel *m_descriptionLabel;
     QLabel *m_statusLabel;
     QPushButton *m_installButton;
-    QProgressBar *m_progressBar;
+    QProcessIndicator *m_processIndicator;
 };
 
 class DiagnoseWidget : public QWidget
@@ -44,10 +46,11 @@ public:
     explicit DiagnoseWidget(QWidget *parent = nullptr);
 
 public slots:
-    void checkDependencies();
+    void checkDependencies(bool autoExpand = true);
 
 private slots:
     void onInstallRequested(const QString &name);
+    void onToggleExpand();
 
 private:
     void setupUI();
@@ -56,9 +59,10 @@ private:
     QVBoxLayout *m_mainLayout;
     QVBoxLayout *m_itemsLayout;
     QPushButton *m_checkButton;
+    QPushButton *m_toggleButton;
     QLabel *m_summaryLabel;
-    QScrollArea *m_scrollArea;
     QWidget *m_itemsWidget;
+    bool m_isExpanded;
 
     QList<DependencyItem *> m_dependencyItems;
 };
