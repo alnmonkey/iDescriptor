@@ -83,6 +83,7 @@ void AppDownloadDialog::onDownloadClicked()
     int buttonIndex = m_layout->indexOf(m_actionButton);
     layout()->removeWidget(m_actionButton);
     m_actionButton->deleteLater();
-
+    qDebug() << "Starting download to" << m_outputDir;
+    qDebug() << "Bundle ID:" << m_bundleId;
     startDownloadProcess(m_bundleId, m_outputDir, buttonIndex);
 }

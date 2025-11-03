@@ -79,7 +79,7 @@ private:
     void createAppCard(const QString &name, const QString &bundleId,
                        const QString &description, const QString &logoUrl,
                        const QString &websiteUrl, QGridLayout *gridLayout,
-                       int row, int col,
+                       int row, int col, bool useBundleIdForIcon = true,
                        const SponsorType &sponsorType = SponsorType());
     void setupDefaultAppsPage();
     void setupLoadingPage();

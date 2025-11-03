@@ -160,8 +160,9 @@ void AppStoreManager::searchApps(
 }
 
 void AppStoreManager::downloadApp(
-    const QString &bundleId, const QString &outputDir, const QString &country,
-    bool acquireLicense, std::function<void(int result)> callback,
+    const QString &bundleId, const QString &outputDir,
+    const QString &externalVersionId, bool acquireLicense,
+    std::function<void(int result)> callback,
     std::function<void(long long current, long long total)> progressCallback)
 {
     if (!m_initialized) {
@@ -189,15 +190,15 @@ void AppStoreManager::downloadApp(
         };
     }
 
-    QFuture<int> future = QtConcurrent::run([bundleId, outputDir, country,
-                                             acquireLicense, cProgressCallback,
-                                             progressUserData]() {
-        int result = IpaToolDownloadApp(bundleId.toUtf8().data(),
-                                        outputDir.toUtf8().data(),
-                                        country.toUtf8().data(), acquireLicense,
-                                        cProgressCallback, progressUserData);
-        return result;
-    });
+    QFuture<int> future = QtConcurrent::run(
+        [bundleId, outputDir, externalVersionId, acquireLicense,
+         cProgressCallback, progressUserData]() {
+            int result = IpaToolDownloadApp(
+                bundleId.toUtf8().data(), outputDir.toUtf8().data(),
+                externalVersionId.toUtf8().data(), acquireLicense,
+                cProgressCallback, progressUserData);
+            return result;
+        });
 
     QFutureWatcher<int> *watcher = new QFutureWatcher<int>(this);
     connect(

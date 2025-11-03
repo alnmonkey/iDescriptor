@@ -118,11 +118,11 @@ QJsonObject getVersionedConfig(const QJsonObject &rootObj)
     }
 }
 
-// watch for login and logout events
+// TODO: watch for login and logout events
 AppsWidget *AppsWidget::sharedInstance()
 {
-    static AppsWidget instance;
-    return &instance;
+    static AppsWidget *instance = new AppsWidget();
+    return instance;
 }
 
 AppsWidget::AppsWidget(QWidget *parent) : QWidget(parent), m_isLoggedIn(false)
@@ -406,9 +406,11 @@ void AppsWidget::populateDefaultApps()
         QString logoUrl = sponsorObj.value("logo").toString();
         QString description = sponsorObj.value("description").toString();
         QString url = sponsorObj.value("url").toString();
-
+        bool useBundleIdForIcon =
+            sponsorObj.value("useBundleIdForIcon").toBool(true);
         createAppCard(name, bundleId, description, logoUrl, url, gridLayout,
-                      row, col, SponsorType(SponsorType::Platinum));
+                      row, col, useBundleIdForIcon,
+                      SponsorType(SponsorType::Platinum));
         advanceGridPos();
     }
 
@@ -419,8 +421,11 @@ void AppsWidget::populateDefaultApps()
         QString description = sponsorObj.value("description").toString();
         QString logoUrl = sponsorObj.value("logo").toString();
         QString url = sponsorObj.value("url").toString();
+        bool useBundleIdForIcon =
+            sponsorObj.value("useBundleIdForIcon").toBool(true);
         createAppCard(name, bundleId, description, logoUrl, url, gridLayout,
-                      row, col, SponsorType(SponsorType::Gold));
+                      row, col, useBundleIdForIcon,
+                      SponsorType(SponsorType::Gold));
         advanceGridPos();
     }
 
@@ -466,9 +471,13 @@ void AppsWidget::populateDefaultApps()
         QString bundleId = sponsorObj.value("bundleId").toString();
         QString description = sponsorObj.value("description").toString();
         QString url = sponsorObj.value("url").toString();
+        QString logoUrl = sponsorObj.value("logo").toString();
+        bool useBundleIdForIcon =
+            sponsorObj.value("useBundleIdForIcon").toBool(true);
 
-        createAppCard(name, bundleId, description, "", url, gridLayout, row,
-                      col, SponsorType(SponsorType::Silver));
+        createAppCard(name, bundleId, description, logoUrl, url, gridLayout,
+                      row, col, useBundleIdForIcon,
+                      SponsorType(SponsorType::Silver));
         advanceGridPos();
     }
 
@@ -478,8 +487,13 @@ void AppsWidget::populateDefaultApps()
         QString bundleId = sponsorObj.value("bundleId").toString();
         QString description = sponsorObj.value("description").toString();
         QString url = sponsorObj.value("url").toString();
-        createAppCard(name, bundleId, description, "", url, gridLayout, row,
-                      col, SponsorType(SponsorType::Bronze));
+        QString logoUrl = sponsorObj.value("logo").toString();
+
+        bool useBundleIdForIcon =
+            sponsorObj.value("useBundleIdForIcon").toBool(true);
+        createAppCard(name, bundleId, description, logoUrl, url, gridLayout,
+                      row, col, useBundleIdForIcon,
+                      SponsorType(SponsorType::Bronze));
         advanceGridPos();
     }
     gridLayout->setRowStretch(gridLayout->rowCount(), 1);
@@ -526,12 +540,10 @@ void AppsWidget::createSponsorCard(QGridLayout *gridLayout, int row, int col)
     gridLayout->addWidget(sponsorCard, row, col);
 }
 
-void AppsWidget::createAppCard(const QString &name, const QString &bundleId,
-                               const QString &description,
-                               const QString &logoUrl,
-                               const QString &websiteUrl,
-                               QGridLayout *gridLayout, int row, int col,
-                               const SponsorType &sponsorType)
+void AppsWidget::createAppCard(
+    const QString &name, const QString &bundleId, const QString &description,
+    const QString &logoUrl, const QString &websiteUrl, QGridLayout *gridLayout,
+    int row, int col, bool useBundleIdForIcon, const SponsorType &sponsorType)
 {
     QWidget *cardWidget = new QWidget();
 
@@ -541,6 +553,7 @@ void AppsWidget::createAppCard(const QString &name, const QString &bundleId,
 
     // App icon
     QLabel *iconLabel = new QLabel();
+    QPointer<QLabel> safeIconLabel = iconLabel;
     QPixmap placeholderIcon = QApplication::style()
                                   ->standardIcon(QStyle::SP_ComputerIcon)
                                   .pixmap(64, 64);
@@ -548,41 +561,43 @@ void AppsWidget::createAppCard(const QString &name, const QString &bundleId,
     iconLabel->setAlignment(Qt::AlignCenter);
     cardLayout->addWidget(iconLabel);
 
-    // If logoUrl is provided and bundleId is empty, use the logo directly
-    if (!logoUrl.isEmpty()) {
+    if (!logoUrl.isEmpty() && !useBundleIdForIcon) {
         QUrl url(logoUrl);
         QNetworkRequest request(url);
         QNetworkReply *reply = m_networkManager->get(request);
-        connect(reply, &QNetworkReply::finished, [reply, iconLabel]() {
-            if (reply->error() == QNetworkReply::NoError) {
-                QByteArray data = reply->readAll();
-                QPixmap pixmap;
-                if (pixmap.loadFromData(data)) {
-                    QPixmap scaled =
-                        pixmap.scaled(64, 64, Qt::KeepAspectRatioByExpanding,
-                                      Qt::SmoothTransformation);
-                    QPixmap rounded(64, 64);
-                    rounded.fill(Qt::transparent);
+        // Use Qt's parent-child relationship to auto-cleanup
+        connect(
+            reply, &QNetworkReply::finished, this, [reply, safeIconLabel]() {
+                if (reply->error() == QNetworkReply::NoError && safeIconLabel) {
+                    QByteArray data = reply->readAll();
+                    QPixmap pixmap;
+                    if (pixmap.loadFromData(data)) {
+                        QPixmap scaled = pixmap.scaled(
+                            64, 64, Qt::KeepAspectRatioByExpanding,
+                            Qt::SmoothTransformation);
+                        QPixmap rounded(64, 64);
+                        rounded.fill(Qt::transparent);
 
-                    QPainter painter(&rounded);
-                    painter.setRenderHint(QPainter::Antialiasing);
-                    QPainterPath path;
-                    path.addRoundedRect(QRectF(0, 0, 64, 64), 16, 16);
-                    painter.setClipPath(path);
-                    painter.drawPixmap(0, 0, scaled);
-                    painter.end();
+                        QPainter painter(&rounded);
+                        painter.setRenderHint(QPainter::Antialiasing);
+                        QPainterPath path;
+                        path.addRoundedRect(QRectF(0, 0, 64, 64), 16, 16);
+                        painter.setClipPath(path);
+                        painter.drawPixmap(0, 0, scaled);
+                        painter.end();
 
-                    iconLabel->setPixmap(rounded);
+                        safeIconLabel->setPixmap(rounded);
+                    }
                 }
-            }
-            reply->deleteLater();
-        });
+                reply->deleteLater();
+            });
+        // Ensure reply is deleted if iconLabel is destroyed
+        connect(iconLabel, &QObject::destroyed, reply, &QNetworkReply::abort);
     } else if (!bundleId.isEmpty()) {
-        // Use Apple's API for app icons
         fetchAppIconFromApple(
-            bundleId,
-            [iconLabel](const QPixmap &pixmap) {
-                if (!pixmap.isNull()) {
+            m_networkManager, bundleId, [safeIconLabel](const QPixmap &pixmap) {
+                // Check if iconLabel still exists
+                if (safeIconLabel && !pixmap.isNull()) {
                     QPixmap scaled =
                         pixmap.scaled(64, 64, Qt::KeepAspectRatioByExpanding,
                                       Qt::SmoothTransformation);
@@ -597,10 +612,9 @@ void AppsWidget::createAppCard(const QString &name, const QString &bundleId,
                     painter.drawPixmap(0, 0, scaled);
                     painter.end();
 
-                    iconLabel->setPixmap(rounded);
+                    safeIconLabel->setPixmap(rounded);
                 }
-            },
-            cardWidget);
+            });
     }
 
     // Vertical layout for name and description

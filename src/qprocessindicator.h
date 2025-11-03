@@ -47,6 +47,7 @@ private:
     void drawRotateLine(QPainter *painter);
     void drawScaleLine(QPainter *painter);
     void drawRotateBall(QPainter *painter);
+    void updateStyle();
 
 private:
     int m_type;

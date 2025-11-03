@@ -25,7 +25,7 @@ public:
         const QString &searchTerm, int limit,
         std::function<void(bool success, const QString &results)> callback);
     void downloadApp(const QString &bundleId, const QString &outputDir,
-                     const QString &country, bool acquireLicense,
+                     const QString &externalVersionId, bool acquireLicense,
                      std::function<void(int result)> callback,
                      std::function<void(long long current, long long total)>
                          progressCallback = nullptr);

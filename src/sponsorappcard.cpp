@@ -39,9 +39,8 @@ SponsorAppCard::SponsorAppCard(QWidget *parent) : QWidget{parent}
         "Create an online store within minutes and start selling.";
     QString websiteUrl = "https://www.shopify.com";
 
-    fetchAppIconFromApple(
-        bundleId,
-        [iconLabel](const QPixmap &pixmap) {
+    ::fetchAppIconFromApple(
+        m_networkManager, bundleId, [iconLabel](const QPixmap &pixmap) {
             if (!pixmap.isNull()) {
                 QPixmap scaled =
                     pixmap.scaled(64, 64, Qt::KeepAspectRatioByExpanding,
@@ -59,8 +58,7 @@ SponsorAppCard::SponsorAppCard(QWidget *parent) : QWidget{parent}
 
                 iconLabel->setPixmap(rounded);
             }
-        },
-        this);
+        });
 
     // Vertical layout for name and description
     QVBoxLayout *textLayout = new QVBoxLayout();

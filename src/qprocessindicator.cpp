@@ -1,6 +1,6 @@
 // https://github.com/raythorn/QProcessIndicator/blob/master/QProcessIndicator/QProcessIndicator.cpp
 #include "qprocessindicator.h"
-
+#include <QApplication>
 #include <QDebug>
 #include <QPoint>
 #include <QtGlobal>
@@ -16,6 +16,13 @@ QProcessIndicator::QProcessIndicator(QWidget *parent)
 
     m_timer = new QTimer();
     connect(m_timer, SIGNAL(timeout()), this, SLOT(onTimeout()));
+    connect(qApp, &QApplication::paletteChanged, this,
+            &QProcessIndicator::updateStyle);
+}
+void QProcessIndicator::updateStyle()
+{
+    m_color = palette().color(QPalette::Highlight);
+    update();
 }
 
 QProcessIndicator::~QProcessIndicator()

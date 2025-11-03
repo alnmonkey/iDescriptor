@@ -1,6 +1,7 @@
 #pragma once
 #include <QDebug>
 #include <QImage>
+#include <QNetworkAccessManager>
 #include <QtCore/QObject>
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/installation_proxy.h>
@@ -375,9 +376,9 @@ void get_battery_info(std::string productType, idevice_t idevice,
 void parseOldDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d);
 void parseDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d);
 
-void fetchAppIconFromApple(const QString &bundleId,
-                           std::function<void(const QPixmap &)> callback,
-                           QObject *context);
+void fetchAppIconFromApple(QNetworkAccessManager *manager,
+                           const QString &bundleId,
+                           std::function<void(const QPixmap &)> callback);
 
 afc_error_t afc2_client_new(idevice_t device, afc_client_t *afc);
 

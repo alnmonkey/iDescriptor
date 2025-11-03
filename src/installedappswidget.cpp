@@ -36,9 +36,8 @@ AppTabWidget::AppTabWidget(const QString &appName, const QString &bundleId,
 
 void AppTabWidget::fetchAppIcon()
 {
-    fetchAppIconFromApple(
-        m_bundleId,
-        [this](const QPixmap &pixmap) {
+    ::fetchAppIconFromApple(
+        m_networkManager, m_bundleId, [this](const QPixmap &pixmap) {
             if (!pixmap.isNull()) {
                 QPixmap scaled =
                     pixmap.scaled(32, 32, Qt::KeepAspectRatioByExpanding,
@@ -56,8 +55,7 @@ void AppTabWidget::fetchAppIcon()
 
                 m_iconLabel->setPixmap(rounded);
             }
-        },
-        this);
+        });
 }
 
 void AppTabWidget::setSelected(bool selected)

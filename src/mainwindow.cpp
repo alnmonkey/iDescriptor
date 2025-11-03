@@ -265,7 +265,9 @@ MainWindow::MainWindow(QWidget *parent)
                                     // installed via package manager on Linux
                              this);
     qDebug() << "Checking for updates...";
-    m_updater->checkForUpdates();
+    SettingsManager::sharedInstance()->doIfEnabled(
+        SettingsManager::Setting::AutoCheckUpdates,
+        [this]() { m_updater->checkForUpdates(); });
 }
 
 void MainWindow::createMenus()

@@ -7,6 +7,7 @@
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QTemporaryDir>
+#include <QNetworkAccessManager>
 
 class AppInstallDialog : public AppDownloadBaseDialog
 {
@@ -30,6 +31,7 @@ private:
     QLabel *m_statusLabel;
     QFutureWatcher<int> *m_installWatcher;
     QTemporaryDir *m_tempDir = nullptr;
+    QNetworkAccessManager *m_manager = nullptr;
     void updateDeviceList();
     void performInstallation(const QString &ipaPath, const QString &deviceUdid);
 };

@@ -8,6 +8,7 @@
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QMessageBox>
+#include <QNetworkAccessManager>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
@@ -24,14 +25,13 @@ AppInstallDialog::AppInstallDialog(const QString &appName,
     setWindowTitle("Install " + appName + " - iDescriptor");
     setModal(true);
     setFixedWidth(500);
-
+    m_manager = new QNetworkAccessManager(this);
     QVBoxLayout *layout = qobject_cast<QVBoxLayout *>(this->layout());
     // App info section
     QHBoxLayout *appInfoLayout = new QHBoxLayout();
     QLabel *iconLabel = new QLabel();
-    fetchAppIconFromApple(
-        bundleId,
-        [iconLabel](const QPixmap &pixmap) {
+    ::fetchAppIconFromApple(
+        m_manager, bundleId, [iconLabel](const QPixmap &pixmap) {
             if (!pixmap.isNull()) {
                 QPixmap scaled =
                     pixmap.scaled(64, 64, Qt::KeepAspectRatioByExpanding,
@@ -49,8 +49,7 @@ AppInstallDialog::AppInstallDialog(const QString &appName,
 
                 iconLabel->setPixmap(rounded);
             }
-        },
-        this);
+        });
     QPixmap icon = QApplication::style()
                        ->standardIcon(QStyle::SP_ComputerIcon)
                        .pixmap(64, 64);

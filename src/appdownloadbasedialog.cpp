@@ -86,7 +86,8 @@ void AppDownloadBaseDialog::startDownloadProcess(const QString &bundleId,
 
     manager->downloadApp(
         bundleId, outputDir, "", acquireLicense,
-        [this, outputDir, promptToOpenDir](int result) {
+        [this, promptToOpenDir, outputDir](int result) {
+            m_operationInProgress = false;
             if (result == 0) { // Success
                 emit downloadFinished(true, "Success");
                 m_progressBar->setValue(100);
