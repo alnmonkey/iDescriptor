@@ -68,7 +68,6 @@ jobs:
         shell: pwsh
         run: |
           choco install winfsp -y
-          refreshenv
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
