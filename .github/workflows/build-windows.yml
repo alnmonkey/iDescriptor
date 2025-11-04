@@ -122,6 +122,7 @@ jobs:
           pushd lxqt-build-tools
           mkdir build && cd build
           cmake .. -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+          make
           make install
           popd
 
@@ -129,6 +130,7 @@ jobs:
           pushd qtermwidget
           mkdir build && cd build
           cmake .. -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+          make
           make install
           popd
 
