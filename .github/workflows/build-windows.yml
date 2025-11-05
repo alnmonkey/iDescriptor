@@ -71,8 +71,9 @@ jobs:
       - name: Install WiX UI Extension
         shell: pwsh
         run: |
-          wix extension add --global WixToolset.UI.wixext/4.0.5
+          wix extension add WixToolset.UI.wixext/4.0.5
           wix extension list
+          echo "WIX_EXTENSIONS=$env:USERPROFILE" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Set PKG_CONFIG environment variable
         run: echo "PKG_CONFIG_EXECUTABLE=C:/msys64/mingw64/bin/pkg-config.exe" >> $GITHUB_ENV
