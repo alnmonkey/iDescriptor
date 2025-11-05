@@ -64,10 +64,12 @@ jobs:
           dotnet-version: "8.x"
 
       - name: Install WiX Toolset
+        shell: pwsh
         run: |
           dotnet tool install --global wix --version 4.0.5
 
       - name: Install WiX UI Extension
+        shell: pwsh
         run: |
           wix extension add --global WixToolset.UI.wixext/4.0.5
           wix extension list
