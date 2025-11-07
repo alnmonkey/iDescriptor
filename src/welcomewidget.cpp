@@ -45,14 +45,12 @@ void WelcomeWidget::setupUI()
     m_titleLabel = createStyledLabel("Welcome to iDescriptor", 28, true);
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_mainLayout->addWidget(m_titleLabel);
-    m_mainLayout->addSpacing(12);
 
     // Subtitle
-    m_subtitleLabel = createStyledLabel("Open-Source & Free", 16, false);
+    m_subtitleLabel = createStyledLabel("Open-Source & Free", 10, false);
     m_subtitleLabel->setAlignment(Qt::AlignCenter);
     QPalette palette = m_subtitleLabel->palette();
     m_mainLayout->addWidget(m_subtitleLabel);
-    m_mainLayout->addSpacing(10);
 
     m_imageLabel = new ResponsiveQLabel();
     m_imageLabel->setPixmap(QPixmap(":/resources/connect.png"));
@@ -66,7 +64,7 @@ void WelcomeWidget::setupUI()
     m_mainLayout->addSpacing(10);
 
     m_instructionLabel = createStyledLabel(
-        "Please connect an iOS device to get started", 14, false);
+        "Please connect an iDevice to get started", 14, false);
     m_instructionLabel->setAlignment(Qt::AlignCenter);
     m_mainLayout->addWidget(m_instructionLabel);
     m_mainLayout->addSpacing(10);
@@ -74,7 +72,8 @@ void WelcomeWidget::setupUI()
     // GitHub link
     m_githubLabel =
         createStyledLabel("Found an issue? Report it on GitHub", 12, false);
-    m_githubLabel->setAlignment(Qt::AlignCenter);
+    m_githubLabel->setWordWrap(false);
+    m_githubLabel->setMaximumWidth(m_imageLabel->sizeHint().width());
     m_githubLabel->setCursor(Qt::PointingHandCursor);
     connect(m_githubLabel, &ZLabel::clicked, this, []() {
         QDesktopServices::openUrl(
@@ -90,7 +89,7 @@ void WelcomeWidget::setupUI()
     // Connect click functionality using installEventFilter
     m_githubLabel->installEventFilter(this);
 
-    m_mainLayout->addWidget(m_githubLabel);
+    m_mainLayout->addWidget(m_githubLabel, 0, Qt::AlignCenter);
 
     // no additional deps needed on macOS
 #ifndef __APPLE__

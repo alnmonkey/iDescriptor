@@ -133,19 +133,19 @@ void ExportProgressDialog::setupUI()
     buttonLayout->addStretch();
 
     m_cancelButton = new QPushButton("Cancel");
-    m_cancelButton->setFixedSize(80, 32);
+    m_cancelButton->setMaximumWidth(m_cancelButton->sizeHint().width());
     connect(m_cancelButton, &QPushButton::clicked, this,
             &ExportProgressDialog::onCancelClicked);
     buttonLayout->addWidget(m_cancelButton);
 
     m_closeButton = new QPushButton("Close");
-    m_closeButton->setFixedSize(80, 32);
+    m_closeButton->setMaximumWidth(m_closeButton->sizeHint().width());
     m_closeButton->setVisible(false);
     connect(m_closeButton, &QPushButton::clicked, this, &QDialog::accept);
     buttonLayout->addWidget(m_closeButton);
 
     m_openDirButton = new QPushButton("Show Files");
-    m_openDirButton->setFixedSize(80, 32);
+    m_openDirButton->setMaximumWidth(m_openDirButton->sizeHint().width());
     m_openDirButton->setVisible(false);
     connect(m_openDirButton, &QPushButton::clicked, this,
             &ExportProgressDialog::onOpenDirectoryClicked);
@@ -311,6 +311,8 @@ void ExportProgressDialog::onExportFinished(const QUuid &jobId,
     m_jobCompleted = true;
     m_transferRateTimer->stop();
 
+    m_destinationPath = summary.destinationPath;
+
     m_progressBar->setValue(100);
     m_currentFileLabel->clear();
 
@@ -376,8 +378,10 @@ void ExportProgressDialog::onCancelClicked()
 
 void ExportProgressDialog::onOpenDirectoryClicked()
 {
+    qDebug() << "Opening export directory:" << m_destinationPath;
     if (!m_destinationPath.isEmpty()) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(m_destinationPath));
+        QTimer::singleShot(100, this, &QDialog::accept);
     }
 }
 

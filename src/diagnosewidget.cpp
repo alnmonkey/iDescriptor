@@ -38,10 +38,8 @@ DependencyItem::DependencyItem(const QString &name, const QString &description,
                                QWidget *parent)
     : QWidget(parent), m_name(name)
 {
-    setFixedHeight(80);
-
     QHBoxLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(10, 5, 10, 5);
+    layout->setContentsMargins(0, 0, 0, 0);
 
     // Left side - info
     QVBoxLayout *infoLayout = new QVBoxLayout();
@@ -130,7 +128,7 @@ void DependencyItem::setInstalling(bool installing)
 void DependencyItem::onInstallClicked() { emit installRequested(m_name); }
 
 DiagnoseWidget::DiagnoseWidget(QWidget *parent)
-    : QFrame(parent), m_isExpanded(false)
+    : QWidget(parent), m_isExpanded(false)
 {
     setupUI();
 
@@ -138,8 +136,7 @@ DiagnoseWidget::DiagnoseWidget(QWidget *parent)
     // Add dependency items
     addDependencyItem("Apple Mobile Device Support",
                       "Required for iOS device communication");
-    addDependencyItem("WinFsp",
-                      "Required for filesystem operations and mounting");
+    addDependencyItem("WinFsp", "Required for mounting your device as a drive");
 #endif
 
 #ifdef __linux__
@@ -155,16 +152,10 @@ DiagnoseWidget::DiagnoseWidget(QWidget *parent)
 void DiagnoseWidget::setupUI()
 {
     setObjectName("diagnoseWidget");
-    setContentsMargins(20, 10, 10, 0);
-    setStyleSheet("QFrame#diagnoseWidget { "
-                  "    background-color: palette(window); " // Set background
-                                                            // from the theme
-                  "    border-top-right-radius: 10px; "
-                  "    border-top-left-radius: 10px; "
-                  "    border-top: 1px solid #ccc; "
-                  "}");
+    setContentsMargins(20, 2, 20, 0);
+    setAutoFillBackground(true);
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(10);
+    m_mainLayout->setSpacing(5);
 
     // Title and summary
     QLabel *titleLabel = new QLabel("Dependency Check");
@@ -189,11 +180,8 @@ void DiagnoseWidget::setupUI()
             &DiagnoseWidget::onToggleExpand);
 
     m_itemsWidget = new QWidget();
-    // m_itemsWidget->setSizePolicy(QSizePolicy::Expanding,
-    //                              QSizePolicy::Preferred);
-    m_itemsWidget->setFixedHeight(400);
     m_itemsLayout = new QVBoxLayout(m_itemsWidget);
-    m_itemsLayout->setSpacing(5);
+    m_itemsLayout->setSpacing(10);
     m_itemsLayout->addStretch();
     m_itemsWidget->setVisible(m_isExpanded);
 
@@ -565,4 +553,6 @@ void DiagnoseWidget::onToggleExpand()
     m_isExpanded = !m_isExpanded;
     m_itemsWidget->setVisible(m_isExpanded);
     m_toggleButton->setText(m_isExpanded ? "▲" : "▼");
+    m_itemsWidget->updateGeometry();
+    adjustSize();
 }

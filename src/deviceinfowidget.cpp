@@ -42,6 +42,7 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QtCore>
 
 DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     : QWidget(parent), m_device(device)
@@ -156,9 +157,9 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     m_lightningIconLabel = new ZIconLabel(
         QIcon(":/resources/icons/MdiLightningBolt.png"), " Charging", this);
 
-    m_batteryWidget =
-        new BatteryWidget(device->deviceInfo.batteryInfo.currentBatteryLevel,
-                          device->deviceInfo.batteryInfo.isCharging, this);
+    m_batteryWidget = new BatteryWidget(
+        qBound<int>(1, device->deviceInfo.batteryInfo.currentBatteryLevel, 100),
+        device->deviceInfo.batteryInfo.isCharging, this);
 
     // Add the widgets to the new layout
     chargingLayout->addWidget(m_chargingStatusLabel);
@@ -375,8 +376,9 @@ void DeviceInfoWidget::updateBatteryInfo()
              ? "USB"
              : "USB-C"));
 
-    m_batteryWidget->updateContext(d.batteryInfo.isCharging,
-                                   d.batteryInfo.currentBatteryLevel);
+    m_batteryWidget->updateContext(
+        d.batteryInfo.isCharging,
+        qBound<int>(1, d.batteryInfo.currentBatteryLevel, 100));
 }
 
 void DeviceInfoWidget::updateChargingStatusIcon()
