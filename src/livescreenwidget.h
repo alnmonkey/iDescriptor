@@ -17,8 +17,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef REALTIMESCREEN_H
-#define REALTIMESCREEN_H
+#ifndef LIVESCREEN_H
+#define LIVESCREEN_H
 
 #include "iDescriptor.h"
 #include <QLabel>
@@ -27,13 +27,13 @@
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/screenshotr.h>
 
-class RealtimeScreenWidget : public QWidget
+class LiveScreenWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit RealtimeScreenWidget(iDescriptorDevice *device,
-                                  QWidget *parent = nullptr);
-    ~RealtimeScreenWidget();
+    explicit LiveScreenWidget(iDescriptorDevice *device,
+                              QWidget *parent = nullptr);
+    ~LiveScreenWidget();
 
 private:
     bool initializeScreenshotService(bool notify);
@@ -50,4 +50,4 @@ private:
 signals:
 };
 
-#endif // REALTIMESCREEN_H
+#endif // LIVESCREEN_H

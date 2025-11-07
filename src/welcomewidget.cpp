@@ -35,7 +35,7 @@ void WelcomeWidget::setupUI()
 {
     // Main layout with proper spacing and margins
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setContentsMargins(0, 0, 0, 0);
+    m_mainLayout->setContentsMargins(0, 10, 0, 0);
     m_mainLayout->setSpacing(0);
 
     // Add top stretch

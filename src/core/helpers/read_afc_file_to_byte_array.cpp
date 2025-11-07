@@ -28,11 +28,11 @@ QByteArray read_afc_file_to_byte_array(afc_client_t afcClient, const char *path)
         afc_file_open(afcClient, path, AFC_FOPEN_RDONLY, &fd_handle);
 
     if (fd_err != AFC_E_SUCCESS) {
-        qDebug() << "Could not open file" << path;
+        qDebug() << "Could not open file" << path << "Error:" << fd_err;
         return QByteArray();
     }
 
-    // TODO: is this necessary
+    // TODO:Maybe use afc_get_file_info_plist instead?
     char **info = NULL;
     afc_get_file_info(afcClient, path, &info);
     uint64_t fileSize = 0;
@@ -52,14 +52,18 @@ QByteArray read_afc_file_to_byte_array(afc_client_t afcClient, const char *path)
     }
 
     QByteArray buffer;
-
     buffer.resize(fileSize);
-    uint32_t bytesRead = 0;
-    afc_file_read(afcClient, fd_handle, buffer.data(), buffer.size(),
-                  &bytesRead);
 
-    if (bytesRead != fileSize) {
-        qDebug() << "AFC Error: Read mismatch for file" << path;
+    uint32_t bytesRead = 0;
+    afc_error_t read_err = afc_file_read(afcClient, fd_handle, buffer.data(),
+                                         buffer.size(), &bytesRead);
+
+    afc_file_close(afcClient, fd_handle);
+
+    if (read_err != AFC_E_SUCCESS || bytesRead != fileSize) {
+        qDebug() << "AFC Error: Read mismatch for file" << path
+                 << "Error:" << read_err << "Read:" << bytesRead
+                 << "Expected:" << fileSize;
         return QByteArray(); // Read failed
     }
 

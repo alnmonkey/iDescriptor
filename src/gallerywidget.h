@@ -46,6 +46,7 @@ public:
     explicit GalleryWidget(iDescriptorDevice *device,
                            QWidget *parent = nullptr);
     void load();
+    ~GalleryWidget();
 
 private slots:
     void onSortOrderChanged();

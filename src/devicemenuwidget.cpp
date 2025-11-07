@@ -99,3 +99,8 @@ void DeviceMenuWidget::switchToTab(const QString &tabName)
         qDebug() << "Tab not found:" << tabName;
     }
 }
+
+DeviceMenuWidget::~DeviceMenuWidget()
+{
+    qDebug() << "DeviceMenuWidget destructor called";
+}

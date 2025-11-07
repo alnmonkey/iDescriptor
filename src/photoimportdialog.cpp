@@ -135,13 +135,14 @@ void PhotoImportDialog::onServerStarted()
     QString localIP = getLocalIP();
     int port = m_httpServer->getPort();
     QString jsonFileName = m_httpServer->getJsonFileName();
-
-    generateQRCode(
-        QString("http://192.168.1.149:5173/?local=%1&port=%2&file=%3")
-            // QString("https://uncor3.github.io/test-2?local=%1&port=%2&file=%3")
+    QString url =
+        QString("https://idescriptor.github.io/import?local=%1&port=%2&file=%3")
             .arg(localIP)
             .arg(port)
-            .arg(jsonFileName));
+            .arg(jsonFileName);
+    qDebug() << "Server url" << url;
+
+    generateQRCode(url);
 
     instructionLabel->setText(
         QString("Server started at %1:%2\n\n1. Scan the QR code to open the "

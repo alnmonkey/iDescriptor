@@ -20,6 +20,7 @@
 #ifndef DIAGNOSE_WIDGET_H
 #define DIAGNOSE_WIDGET_H
 
+#include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -27,7 +28,6 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
-#include <QWidget>
 
 #include "qprocessindicator.h"
 
@@ -57,7 +57,7 @@ private:
     QProcessIndicator *m_processIndicator;
 };
 
-class DiagnoseWidget : public QWidget
+class DiagnoseWidget : public QFrame
 {
     Q_OBJECT
 

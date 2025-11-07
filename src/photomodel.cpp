@@ -44,8 +44,8 @@ PhotoModel::PhotoModel(iDescriptorDevice *device, QObject *parent)
         "/photo_thumbs";
     QDir().mkpath(m_cacheDir);
 
-    // Configure memory cache (50MB limit - much more reasonable)
-    m_thumbnailCache.setMaxCost(50 * 1024 * 1024);
+    // Configure memory cache (150MB limit)
+    m_thumbnailCache.setMaxCost(150 * 1024 * 1024);
 
     connect(this, &PhotoModel::thumbnailNeedsToBeLoaded, this,
             &PhotoModel::requestThumbnail, Qt::QueuedConnection);
@@ -55,6 +55,7 @@ PhotoModel::PhotoModel(iDescriptorDevice *device, QObject *parent)
 
 PhotoModel::~PhotoModel()
 {
+    qDebug() << "PhotoModel destructor called";
     // Clean up any active watchers
     for (auto *watcher : m_activeLoaders.values()) {
         if (watcher) {
@@ -64,6 +65,9 @@ PhotoModel::~PhotoModel()
         }
     }
     m_activeLoaders.clear();
+    m_loadingPaths.clear();
+    m_thumbnailCache.clear();
+    QDir(m_cacheDir).removeRecursively();
 }
 
 QPixmap PhotoModel::generateVideoThumbnail(iDescriptorDevice *device,
@@ -262,12 +266,16 @@ void PhotoModel::requestThumbnail(int index)
                 // Remove from loading sets
                 m_loadingPaths.remove(filePath);
                 m_activeLoaders.remove(cacheKey);
-
+                // scale down and store in cache
                 if (!thumbnail.isNull()) {
                     // Cache the thumbnail (both memory and disk)
                     int cost = thumbnail.width() * thumbnail.height() * 4;
-                    m_thumbnailCache.insert(cacheKey, new QPixmap(thumbnail),
-                                            cost);
+                    m_thumbnailCache.insert(
+                        cacheKey,
+                        new QPixmap(thumbnail.scaled(m_thumbnailSize,
+                                                     Qt::KeepAspectRatio,
+                                                     Qt::SmoothTransformation)),
+                        cost);
 
                     // Find the model index and emit dataChanged
                     for (int i = 0; i < m_photos.size(); ++i) {
@@ -714,6 +722,20 @@ PhotoInfo::FileType PhotoModel::determineFileType(const QString &fileName) const
 void PhotoModel::setAlbumPath(const QString &albumPath)
 {
     if (m_albumPath != albumPath) {
+        // Clear cache when switching albums to prevent memory buildup
+        clearCache();
+
+        // Cancel any pending thumbnail requests
+        for (auto *watcher : m_activeLoaders.values()) {
+            if (watcher) {
+                watcher->cancel();
+                watcher->waitForFinished();
+                watcher->deleteLater();
+            }
+        }
+        m_activeLoaders.clear();
+        m_loadingPaths.clear();
+
         m_albumPath = albumPath;
         populatePhotoPaths();
     }

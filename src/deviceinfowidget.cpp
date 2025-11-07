@@ -153,7 +153,7 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     chargingLayout->setSpacing(5);
 
     // Create icon label
-    m_lightningIconLabel = new ZIconWidget(
+    m_lightningIconLabel = new ZIconLabel(
         QIcon(":/resources/icons/MdiLightningBolt.png"), " Charging", this);
 
     m_batteryWidget =

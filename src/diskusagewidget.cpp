@@ -88,11 +88,9 @@ void DiskUsageWidget::setupUI()
 
     // Disk usage bar container
     m_diskBarContainer = new QWidget(this);
-    m_diskBarContainer->setMinimumHeight(20);
-    m_diskBarContainer->setMaximumHeight(20);
-    m_diskBarContainer->setObjectName("diskBarContainer");
-    m_diskBarContainer->setStyleSheet(
-        "QWidget#diskBarContainer { margin: 0; padding: 0; border: none; }");
+    m_diskBarContainer->setSizePolicy(QSizePolicy::Expanding,
+                                      QSizePolicy::Fixed);
+    m_diskBarContainer->setFixedHeight(20);
     m_diskBarLayout = new QHBoxLayout(m_diskBarContainer);
     m_diskBarLayout->setContentsMargins(0, 0, 0, 0);
     m_diskBarLayout->setSpacing(0);
@@ -149,6 +147,13 @@ void DiskUsageWidget::setupUI()
         "QWidget#freeBar { background-color: #474747; border: 1px solid "
         "#4f4f4f; padding: 0; margin: 0; border-top-right-radius: 3px; "
         "border-bottom-right-radius: 3px; }");
+
+    // remove padding margin from layout
+    m_systemBar->setContentsMargins(0, 0, 0, 0);
+    m_appsBar->setContentsMargins(0, 0, 0, 0);
+    m_mediaBar->setContentsMargins(0, 0, 0, 0);
+    m_othersBar->setContentsMargins(0, 0, 0, 0);
+    m_freeBar->setContentsMargins(0, 0, 0, 0);
 #endif
 
     m_diskBarLayout->addWidget(m_systemBar);
@@ -159,21 +164,22 @@ void DiskUsageWidget::setupUI()
 
     m_dataLayout->addWidget(m_diskBarContainer);
 
-    // Legend layout
-    m_legendLayout = new QHBoxLayout();
+    QWidget *m_legendWidget = new QWidget();
+    m_legendWidget->setContentsMargins(0, 0, 0, 0);
+    m_legendWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    m_legendLayout = new QHBoxLayout(m_legendWidget);
     m_legendLayout->setSpacing(0);
     m_legendLayout->setContentsMargins(0, 0, 0, 0);
 
-    // Legend labels
-    m_systemLabel = new QLabel("System", m_dataPage);
-    m_appsLabel = new QLabel("Apps", m_dataPage);
-    m_mediaLabel = new QLabel("Media", m_dataPage);
-    m_othersLabel = new QLabel("Others", m_dataPage);
-    m_freeLabel = new QLabel("Free", m_dataPage);
+    m_systemLabel = new QLabel("System", m_legendWidget);
+    m_appsLabel = new QLabel("Apps", m_legendWidget);
+    m_mediaLabel = new QLabel("Media", m_legendWidget);
+    m_othersLabel = new QLabel("Others", m_legendWidget);
+    m_freeLabel = new QLabel("Free", m_legendWidget);
 
-    // Style legend labels with colored backgrounds
     QString labelStyle =
-        "padding: 2px 6px; margin: 0px; border-radius: 3px; font-size: 10px;";
+        "margin: 0px; padding: 0px 4px 0px 0px; font-size: 10px;";
     m_systemLabel->setStyleSheet(labelStyle);
     m_appsLabel->setStyleSheet(labelStyle);
     m_mediaLabel->setStyleSheet(labelStyle);
@@ -187,16 +193,14 @@ void DiskUsageWidget::setupUI()
     m_legendLayout->addWidget(m_freeLabel);
     m_legendLayout->addStretch();
 
-    m_dataLayout->addLayout(m_legendLayout);
-    // m_dataLayout->addStretch();
+    // Add the legend widget (not the layout) to the data layout
+    m_dataLayout->addWidget(m_legendWidget);
 
     m_stackedWidget->addWidget(m_dataPage);
 
     // Initially show loading page
     m_stackedWidget->setCurrentWidget(m_loadingErrorPage);
 }
-
-QSize DiskUsageWidget::sizeHint() const { return QSize(400, 80); }
 
 void DiskUsageWidget::updateUI()
 {

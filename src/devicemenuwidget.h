@@ -35,7 +35,8 @@ public:
                               QWidget *parent = nullptr);
     void switchToTab(const QString &tabName);
     void init();
-    // ~DeviceMenuWidget();
+    ~DeviceMenuWidget();
+
 private:
     QStackedWidget *stackedWidget; // Pointer to the stacked widget
     iDescriptorDevice *device;     // Pointer to the iDescriptor device

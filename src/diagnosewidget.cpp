@@ -26,6 +26,7 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QFrame>
 #include <QMessageBox>
 #include <QProcess>
 #include <QRegularExpression>
@@ -129,7 +130,7 @@ void DependencyItem::setInstalling(bool installing)
 void DependencyItem::onInstallClicked() { emit installRequested(m_name); }
 
 DiagnoseWidget::DiagnoseWidget(QWidget *parent)
-    : QWidget(parent), m_isExpanded(false)
+    : QFrame(parent), m_isExpanded(false)
 {
     setupUI();
 
@@ -144,7 +145,7 @@ DiagnoseWidget::DiagnoseWidget(QWidget *parent)
 #ifdef __linux__
     // Add Linux-specific dependency items
     addDependencyItem("USB Device Permissions",
-                      "Required for recovery device access (udev rules)");
+                      "Required for recovery devices (udev rules)");
 #endif
 
     // Auto-check on startup
@@ -153,7 +154,15 @@ DiagnoseWidget::DiagnoseWidget(QWidget *parent)
 
 void DiagnoseWidget::setupUI()
 {
-    setAutoFillBackground(true);
+    setObjectName("diagnoseWidget");
+    setContentsMargins(20, 10, 10, 0);
+    setStyleSheet("QFrame#diagnoseWidget { "
+                  "    background-color: palette(window); " // Set background
+                                                            // from the theme
+                  "    border-top-right-radius: 10px; "
+                  "    border-top-left-radius: 10px; "
+                  "    border-top: 1px solid #ccc; "
+                  "}");
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setSpacing(10);
 
@@ -168,7 +177,7 @@ void DiagnoseWidget::setupUI()
 
     // Check button
     m_checkButton = new QPushButton("Refresh Check(s)");
-    m_checkButton->setMaximumWidth(150);
+    m_checkButton->setMaximumWidth(m_checkButton->sizeHint().width());
     connect(m_checkButton, &QPushButton::clicked, this,
             [this]() { checkDependencies(false); });
 
@@ -488,8 +497,8 @@ void DiagnoseWidget::onInstallRequested(const QString &name)
                     QMessageBox::information(
                         this, "Installation Complete",
                         "USB device permissions have been configured.\n\n"
-                        "Note: You may need to log out and log back in for "
-                        "group membership changes to take full effect.");
+                        "Note: You may need to log out and log back in for or "
+                        "even restart for changes to take full effect.");
                     checkDependencies(false);
                 }
                 itemToInstall->setInstalling(false);

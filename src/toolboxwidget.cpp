@@ -28,10 +28,10 @@
 #ifndef __APPLE__
 #include "ifusewidget.h"
 #endif
+#include "livescreenwidget.h"
 #include "querymobilegestaltwidget.h"
-#include "realtimescreenwidget.h"
 #include "virtuallocationwidget.h"
-#include "wirelessphotoimportwidget.h"
+#include "wirelessgalleryimportwidget.h"
 #include <QApplication>
 #include <QDebug>
 #include <QMessageBox>
@@ -138,17 +138,15 @@ void ToolboxWidget::setupUI()
         {iDescriptorTool::Airplayer, "Cast your device screen ", false, ""});
     mainToolWidgets.append({iDescriptorTool::VirtualLocation,
                             "Simulate GPS location on your device", true, ""});
-    mainToolWidgets.append(
-        {iDescriptorTool::RealtimeScreen,
-         "View device screen in real-time (wired connection required)", true,
-         ""});
+    mainToolWidgets.append({iDescriptorTool::LiveScreen,
+                            "View device screen in real-time", true, ""});
     mainToolWidgets.append({iDescriptorTool::QueryMobileGestalt,
                             "Query device hardware information", true, ""});
     mainToolWidgets.append({iDescriptorTool::DeveloperDiskImages,
                             "Manage developer disk images", false, ""});
     mainToolWidgets.append(
-        {iDescriptorTool::WirelessPhotoImport,
-         "Import photos wirelessly to your iDevice (requires Shortcut app)",
+        {iDescriptorTool::WirelessGalleryImport,
+         "Import photos wirelessly to your iDevice (requires Shortcuts app)",
          false, ""});
 #ifndef __APPLE__
     mainToolWidgets.append({iDescriptorTool::iFuse,
@@ -222,59 +220,75 @@ ClickableWidget *ToolboxWidget::createToolbox(iDescriptorTool tool,
 
     QVBoxLayout *layout = new QVBoxLayout(b);
 
-    // Icon
-    QLabel *iconLabel = new QLabel();
-    QIcon icon =
-        // TODO:icons
-        this->style()->standardIcon(
-            static_cast<QStyle::StandardPixmap>(QStyle::SP_DialogOkButton));
-    iconLabel->setPixmap(icon.pixmap(32, 32));
-    iconLabel->setAlignment(Qt::AlignCenter);
+    ZIconLabel *icon = new ZIconLabel(QIcon(), nullptr, this);
     QString title;
     switch (tool) {
     case iDescriptorTool::Airplayer:
         title = "Airplayer";
+        icon->setIcon(
+            QIcon(":/resources/icons/MaterialSymbolsLightAirplayOutline.png"));
         break;
-    case iDescriptorTool::RealtimeScreen:
-        title = "Realtime Screen";
+    case iDescriptorTool::LiveScreen:
+        title = "Live Screen";
+        icon->setIcon(QIcon(":/resources/icons/PepiconsPrintCellphoneEye.png"));
         break;
     case iDescriptorTool::MountDevImage:
         title = "Mount Dev Image";
+        icon->setIcon(QIcon(":/resources/icons/MdiDisk.png"));
         break;
     case iDescriptorTool::VirtualLocation:
         title = "Virtual Location";
+        icon->setIcon(
+            QIcon(":/resources/icons/MaterialSymbolsLocationOnOutline.png"));
         break;
     case iDescriptorTool::Restart:
         title = "Restart";
+        icon->setIcon(QIcon(":/resources/icons/IcTwotoneRestartAlt.png"));
         break;
     case iDescriptorTool::Shutdown:
         title = "Shutdown";
+        icon->setIcon(QIcon(":/resources/icons/IcOutlinePowerSettingsNew.png"));
         break;
     case iDescriptorTool::RecoveryMode:
         title = "Recovery Mode";
+        icon->setIcon(QIcon(":/resources/icons/HugeiconsWrench01.png"));
         break;
     case iDescriptorTool::QueryMobileGestalt:
         title = "Query Mobile Gestalt";
+        icon->setIcon(
+            QIcon(":/resources/icons/"
+                  "StreamlineProgrammingBrowserSearchSearchWindowGlassAppCod"
+                  "eProgrammingQueryFindMagnifyingApps.png"));
         break;
     case iDescriptorTool::DeveloperDiskImages:
         title = "Dev Disk Images";
+        icon->setIcon(QIcon(":/resources/icons/TablerDatabaseExport.png"));
         break;
-    case iDescriptorTool::WirelessPhotoImport:
-        title = "Wireless Photo Import";
+    case iDescriptorTool::WirelessGalleryImport:
+        title = "Wireless Gallery Import";
+        icon->setIcon(
+            QIcon(":/resources/icons/MaterialSymbolsAndroidWifi3BarPlus.png"));
         break;
     case iDescriptorTool::iFuse:
         title = "iFuse Mount";
+        icon->setIcon(QIcon(":/resources/icons/fuse.png"));
+        icon->setIconThemable(false);
         break;
     case iDescriptorTool::CableInfoWidget:
         title = "Cable Info";
+        icon->setIcon(
+            QIcon(":/resources/icons/MaterialSymbolsLightCableRounded.png"));
         break;
     case iDescriptorTool::NetworkDevices:
         title = "Network Devices";
+        icon->setIcon(QIcon(
+            ":/resources/icons/StreamlineUltimateMultipleUsersNetwork.png"));
         break;
     default:
         title = "Unknown Tool";
         break;
     }
+
     // Title
     QLabel *titleLabel = new QLabel(title);
     titleLabel->setAlignment(Qt::AlignCenter);
@@ -284,8 +298,10 @@ ClickableWidget *ToolboxWidget::createToolbox(iDescriptorTool tool,
     descLabel->setWordWrap(true);
     descLabel->setAlignment(Qt::AlignCenter);
     descLabel->setStyleSheet("color: #666; font-size: 12px;");
+    icon->setFixedSize(60, 60);
+    icon->setIconSize(QSize(45, 45));
 
-    layout->addWidget(iconLabel);
+    layout->addWidget(icon, 0, Qt::AlignCenter);
     layout->addWidget(titleLabel);
     layout->addWidget(descLabel);
 
@@ -321,8 +337,6 @@ void ToolboxWidget::updateDeviceList()
         }
     }
 
-    // After rebuilding the list, explicitly sync the UI to match the
-    // state from AppContext. This avoids creating a feedback loop.
     onCurrentDeviceChanged(
         AppContext::sharedInstance()->getCurrentDeviceSelection());
 
@@ -410,11 +424,10 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
         }
     } break;
 
-    case iDescriptorTool::RealtimeScreen: {
-        RealtimeScreenWidget *realtimeScreen =
-            new RealtimeScreenWidget(m_currentDevice);
-        realtimeScreen->setAttribute(Qt::WA_DeleteOnClose);
-        realtimeScreen->show();
+    case iDescriptorTool::LiveScreen: {
+        LiveScreenWidget *liveScreen = new LiveScreenWidget(m_currentDevice);
+        liveScreen->setAttribute(Qt::WA_DeleteOnClose);
+        liveScreen->show();
     } break;
     case iDescriptorTool::RecoveryMode: {
         // Handle entering recovery mode
@@ -498,18 +511,18 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
             m_devDiskImagesWidget->activateWindow();
         }
     } break;
-    case iDescriptorTool::WirelessPhotoImport: {
-        if (!m_wirelessPhotoImportWidget) {
-            m_wirelessPhotoImportWidget = new WirelessPhotoImportWidget();
-            connect(m_wirelessPhotoImportWidget, &QObject::destroyed, this,
-                    [this]() { m_wirelessPhotoImportWidget = nullptr; });
-            m_wirelessPhotoImportWidget->setAttribute(Qt::WA_DeleteOnClose);
-            m_wirelessPhotoImportWidget->setWindowFlag(Qt::Window);
-            // m_wirelessPhotoImportWidget->resize(800, 600);
-            m_wirelessPhotoImportWidget->show();
+    case iDescriptorTool::WirelessGalleryImport: {
+        if (!m_wirelessGalleryImportWidget) {
+            m_wirelessGalleryImportWidget = new WirelessGalleryImportWidget();
+            connect(m_wirelessGalleryImportWidget, &QObject::destroyed, this,
+                    [this]() { m_wirelessGalleryImportWidget = nullptr; });
+            m_wirelessGalleryImportWidget->setAttribute(Qt::WA_DeleteOnClose);
+            m_wirelessGalleryImportWidget->setWindowFlag(Qt::Window);
+            // m_wirelessGalleryImportWidget->resize(800, 600);
+            m_wirelessGalleryImportWidget->show();
         } else {
-            m_wirelessPhotoImportWidget->raise();
-            m_wirelessPhotoImportWidget->activateWindow();
+            m_wirelessGalleryImportWidget->raise();
+            m_wirelessGalleryImportWidget->activateWindow();
         }
     } break;
 #ifndef __APPLE__

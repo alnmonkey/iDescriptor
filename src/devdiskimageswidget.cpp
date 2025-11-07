@@ -123,7 +123,6 @@ void DevDiskImagesWidget::setupUi()
     m_imageListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_imageListWidget->setStyleSheet(
         "QListWidget { background: transparent; border: none; }");
-    m_imageListWidget->viewport()->setStyleSheet("background: transparent;");
 
     m_stackedWidget->addWidget(m_imageListWidget);
 

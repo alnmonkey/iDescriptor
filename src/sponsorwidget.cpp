@@ -26,6 +26,7 @@ SponsorWidget::SponsorWidget(QWidget *parent) : QWidget(parent)
 {
     setLayout(new QVBoxLayout(this));
     QLabel *sponsorTitle = new QLabel("Would you like to sponsor us?");
+    sponsorTitle->setStyleSheet("font-weight: bold; font-size: 16pt;");
     sponsorTitle->setAlignment(Qt::AlignCenter);
 
     QLabel *sponsorDesc =
@@ -33,6 +34,7 @@ SponsorWidget::SponsorWidget(QWidget *parent) : QWidget(parent)
                    "And in order to keep it that way, we rely on donations. "
                    "Consider becoming a sponsor to support "
                    "and promote your app/brand here");
+    sponsorDesc->setStyleSheet("font-size: 10pt;");
     sponsorDesc->setWordWrap(true);
     layout()->addWidget(sponsorTitle);
     layout()->addWidget(sponsorDesc);

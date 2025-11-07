@@ -17,7 +17,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "realtimescreenwidget.h"
+#include "livescreenwidget.h"
 #include "appcontext.h"
 #include "devdiskimagehelper.h"
 #include "devdiskmanager.h"
@@ -31,13 +31,12 @@
 #include <QVBoxLayout>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/screenshotr.h>
-// todo: rename to livescreenwidget
-RealtimeScreenWidget::RealtimeScreenWidget(iDescriptorDevice *device,
-                                           QWidget *parent)
+
+LiveScreenWidget::LiveScreenWidget(iDescriptorDevice *device, QWidget *parent)
     : QWidget{parent}, m_device(device), m_timer(nullptr),
-      m_shotrClient(nullptr), m_fps(50)
+      m_shotrClient(nullptr), m_fps(20)
 {
-    setWindowTitle("Real-time Screen - iDescriptor");
+    setWindowTitle("Live Screen - iDescriptor");
 
     unsigned int device_version = get_device_version(m_device->device);
     unsigned int deviceMajorVersion = (device_version >> 16) & 0xFF;
@@ -71,20 +70,6 @@ RealtimeScreenWidget::RealtimeScreenWidget(iDescriptorDevice *device,
     m_statusLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(m_statusLabel);
 
-    // FPS control
-    QHBoxLayout *controlLayout = new QHBoxLayout();
-    QLabel *fpsLabel = new QLabel("Frame Rate:");
-    QSpinBox *fpsSpinBox = new QSpinBox();
-    fpsSpinBox->setRange(1, 50);
-    fpsSpinBox->setValue(m_fps);
-    fpsSpinBox->setSuffix(" FPS");
-    fpsSpinBox->setMaximumWidth(100);
-
-    controlLayout->addWidget(fpsLabel);
-    controlLayout->addWidget(fpsSpinBox);
-    controlLayout->addStretch();
-    mainLayout->addLayout(controlLayout);
-
     // Screenshot display
     m_imageLabel = new QLabel();
     m_imageLabel->setMinimumSize(300, 600);
@@ -96,15 +81,7 @@ RealtimeScreenWidget::RealtimeScreenWidget(iDescriptorDevice *device,
     m_timer = new QTimer(this);
     m_timer->setInterval(1000 / m_fps);
     connect(m_timer, &QTimer::timeout, this,
-            &RealtimeScreenWidget::updateScreenshot);
-
-    connect(fpsSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            [this](int value) {
-                m_fps = value;
-                if (m_timer && m_timer->isActive()) {
-                    m_timer->setInterval(1000 / m_fps);
-                }
-            });
+            &LiveScreenWidget::updateScreenshot);
 
     const bool initializeScreenshotServiceSuccess =
         initializeScreenshotService(false);
@@ -135,7 +112,7 @@ RealtimeScreenWidget::RealtimeScreenWidget(iDescriptorDevice *device,
     helper->start();
 }
 
-RealtimeScreenWidget::~RealtimeScreenWidget()
+LiveScreenWidget::~LiveScreenWidget()
 {
     if (m_timer) {
         m_timer->stop();
@@ -147,7 +124,7 @@ RealtimeScreenWidget::~RealtimeScreenWidget()
     }
 }
 
-bool RealtimeScreenWidget::initializeScreenshotService(bool notify)
+bool LiveScreenWidget::initializeScreenshotService(bool notify)
 {
     lockdownd_client_t lockdownClient = nullptr;
     lockdownd_service_descriptor_t service = nullptr;
@@ -206,8 +183,7 @@ bool RealtimeScreenWidget::initializeScreenshotService(bool notify)
         }
 
         // Successfully initialized, start capturing
-        m_statusLabel->setText("Capturing at " + QString::number(m_fps) +
-                               " FPS");
+        m_statusLabel->setText("Capturing");
         startCapturing();
         return true;
     } catch (const std::exception &e) {
@@ -226,7 +202,7 @@ bool RealtimeScreenWidget::initializeScreenshotService(bool notify)
     }
 }
 
-void RealtimeScreenWidget::startCapturing()
+void LiveScreenWidget::startCapturing()
 {
     if (!m_shotrClient) {
         qWarning()
@@ -236,11 +212,11 @@ void RealtimeScreenWidget::startCapturing()
 
     if (m_timer) {
         m_timer->start();
-        qDebug() << "Started capturing at" << m_fps << "FPS";
+        qDebug() << "Started capturing";
     }
 }
 
-void RealtimeScreenWidget::updateScreenshot()
+void LiveScreenWidget::updateScreenshot()
 {
     if (!m_shotrClient) {
         qWarning() << "Screenshot client not initialized";

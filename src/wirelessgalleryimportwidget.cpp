@@ -87,7 +87,7 @@ void WirelessGalleryImportWidget::setupUI()
     leftLayout->addWidget(m_scrollArea, 1);
 
     // Import button
-    m_importButton = new QPushButton("Import Photos to iOS");
+    m_importButton = new QPushButton("Import to Gallery");
     m_importButton->setEnabled(false);
     connect(m_importButton, &QPushButton::clicked, this,
             &WirelessGalleryImportWidget::onImportPhotos);

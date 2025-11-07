@@ -26,7 +26,7 @@
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "networkdeviceswidget.h"
-#include "wirelessphotoimportwidget.h"
+#include "wirelessgalleryimportwidget.h"
 #include <QComboBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -75,7 +75,7 @@ private:
 #ifndef __APPLE__
     iFuseWidget *m_ifuseWidget = nullptr;
 #endif
-    WirelessPhotoImportWidget *m_wirelessPhotoImportWidget = nullptr;
+    WirelessGalleryImportWidget *m_wirelessGalleryImportWidget = nullptr;
 
 signals:
 };

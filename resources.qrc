@@ -19,6 +19,18 @@
         <file>resources/icons/MaterialSymbolsLightHome.png</file>
         <file>resources/icons/MdiGithub.png</file>
         <file>resources/icons/app-icon/icon.ico</file> 
+        <file>resources/icons/MaterialSymbolsLightAirplayOutline.png</file>
+        <file>resources/icons/MaterialSymbolsLightCableRounded.png</file>
+        <file>resources/icons/MaterialSymbolsLocationOnOutline.png</file>
+        <file>resources/icons/MdiDisk.png</file>
+        <file>resources/icons/PepiconsPrintCellphoneEye.png</file>
+        <file>resources/icons/StreamlineProgrammingBrowserSearchSearchWindowGlassAppCodeProgrammingQueryFindMagnifyingApps.png</file>
+        <file>resources/icons/fuse.png</file>
+        <file>resources/icons/TablerDatabaseExport.png</file>
+        <file>resources/icons/StreamlineUltimateMultipleUsersNetwork.png</file>
+        <file>resources/icons/MaterialSymbolsAndroidWifi3BarPlus.png</file>
+        <file>resources/icons/IconParkTwotoneMoreTwo.png</file>
+        <file>resources/icons/BxBxsTerminal.png</file>
         <file>qml/MapView.qml</file>
         <file>resources/iphone.png</file>
         <file>resources/ios-wallpapers/iphone-ios4.png</file>

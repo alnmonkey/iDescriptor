@@ -37,7 +37,6 @@ class DiskUsageWidget : public QWidget
 public:
     explicit DiskUsageWidget(iDescriptorDevice *device,
                              QWidget *parent = nullptr);
-    QSize sizeHint() const override;
 
 private:
     void fetchData();

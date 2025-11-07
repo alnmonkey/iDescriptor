@@ -27,7 +27,7 @@
 #endif
 
 #include "iDescriptor.h"
-#include "sshterminalwidget.h"
+#include "opensshterminalwidget.h"
 #include <QAbstractButton>
 #include <QButtonGroup>
 #include <QGroupBox>
@@ -36,7 +36,15 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-enum class DeviceType { None, Wired, Wireless };
+class ClickableWidget;
+
+// Define the struct here so it's available to the class declaration
+struct JailbreakToolInfo {
+    QString title;
+    QString description;
+    QString iconPath;
+    bool enabled = true;
+};
 
 class JailbrokenWidget : public QWidget
 {
@@ -47,53 +55,10 @@ public:
     ~JailbrokenWidget();
 
 private slots:
-    void onOpenSSHTerminal();
-    void onWiredDeviceAdded(iDescriptorDevice *device);
-    void onWiredDeviceRemoved(const std::string &udid);
-    void onWirelessDeviceAdded(const NetworkDevice &device);
-    void onWirelessDeviceRemoved(const QString &deviceName);
-    void onDeviceSelected(QAbstractButton *button);
-
 private:
-    void setupDeviceSelectionUI(QVBoxLayout *layout);
-    void updateDeviceList();
-    void clearDeviceButtons();
-    void addWiredDevice(iDescriptorDevice *device);
-    void addWirelessDevice(const NetworkDevice &device);
-    void resetSelection();
-
-    QLabel *m_infoLabel;
-    QPushButton *m_connectButton;
-
-    // Device selection UI
-    QVBoxLayout *m_deviceLayout;
-    QGroupBox *m_wiredDevicesGroup;
-    QGroupBox *m_wirelessDevicesGroup;
-    QVBoxLayout *m_wiredDevicesLayout;
-    QVBoxLayout *m_wirelessDevicesLayout;
-    QButtonGroup *m_deviceButtonGroup;
-
-#ifdef __linux__
-    AvahiService *m_wirelessProvider = nullptr;
-#else
-    DnssdService *m_wirelessProvider = nullptr;
-#endif
-
-    DeviceType m_selectedDeviceType = DeviceType::None;
-    iDescriptorDevice *m_selectedWiredDevice = nullptr;
-    NetworkDevice m_selectedNetworkDevice;
-
-    // Legacy device pointer (kept for compatibility)
-    iDescriptorDevice *m_device = nullptr;
-
-    // SSH components
-    ssh_session m_sshSession;
-    ssh_channel m_sshChannel;
-    QTimer *m_sshTimer;
-    QProcess *iproxyProcess = nullptr;
-
-    bool m_sshConnected = false;
-    bool m_isInitialized = false;
+    // Helper function to create a tool widget
+    ClickableWidget *createJailbreakTool(const JailbreakToolInfo &info);
+    OpenSSHTerminalWidget *m_sshTerminalWidget = nullptr;
 };
 
 #endif // JAILBROKENWIDGET_H

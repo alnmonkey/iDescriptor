@@ -90,8 +90,15 @@ public:
     ZIcon(const QString &fileName) : QIcon(fileName) {}
     ZIcon(const QPixmap &pixmap) : QIcon(pixmap) {}
 
+    void setThemable(bool themable) { m_themable = themable; }
+
     QPixmap getThemedPixmap(const QSize &size, const QPalette &palette) const
     {
+        // If not themable, return the original pixmap without color filling.
+        if (!m_themable) {
+            return QIcon::pixmap(size);
+        }
+
         QPixmap pixmap = QIcon::pixmap(size);
         if (pixmap.isNull()) {
             return pixmap;
@@ -123,6 +130,9 @@ public:
             QIcon::paint(painter, rect);
         }
     }
+
+private:
+    bool m_themable = true;
 };
 
 class ZIconWidget : public QAbstractButton
@@ -174,9 +184,61 @@ private:
     ZIcon m_icon;
 };
 
+// Add this new class for display-only icons
+class ZIconLabel : public QLabel
+{
+    Q_OBJECT
+public:
+    ZIconLabel(const QIcon &icon, const QString &tooltip,
+               QWidget *parent = nullptr)
+        : QLabel(parent), m_icon(icon), m_iconSize(24, 24)
+    {
+        setToolTip(tooltip);
+        // setFixedSize(32, 32);
+        connect(qApp, &QApplication::paletteChanged, this,
+                [this]() { update(); });
+    }
+
+    void setIcon(const QIcon &icon)
+    {
+        m_icon = ZIcon(icon);
+        update();
+    }
+
+    void setIconThemable(bool themable)
+    {
+        m_icon.setThemable(themable);
+        update();
+    }
+
+    void setIconSize(const QSize &size)
+    {
+        m_iconSize = size;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event)
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        QRect iconRect = rect();
+        iconRect.setSize(m_iconSize);
+        iconRect.moveCenter(rect().center());
+
+        m_icon.paint(&painter, iconRect, palette());
+    }
+
+private:
+    ZIcon m_icon;
+    QSize m_iconSize;
+};
+
 enum class iDescriptorTool {
     Airplayer,
-    RealtimeScreen,
+    LiveScreen,
     MountDevImage,
     VirtualLocation,
     Restart,
@@ -184,7 +246,7 @@ enum class iDescriptorTool {
     RecoveryMode,
     QueryMobileGestalt,
     DeveloperDiskImages,
-    WirelessPhotoImport,
+    WirelessGalleryImport,
     CableInfoWidget,
     /*
         TODO: to be implemented

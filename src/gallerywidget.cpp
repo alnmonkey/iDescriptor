@@ -622,3 +622,8 @@ void GalleryWidget::onPhotoContextMenu(const QPoint &pos)
 
     contextMenu.exec(m_listView->viewport()->mapToGlobal(pos));
 }
+
+GalleryWidget::~GalleryWidget()
+{
+    qDebug() << "GalleryWidget destructor called";
+}

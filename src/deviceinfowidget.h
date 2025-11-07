@@ -46,7 +46,7 @@ private:
     QLabel *m_chargingStatusLabel;
     QLabel *m_chargingWattsWithCableTypeLabel;
     BatteryWidget *m_batteryWidget;
-    ZIconWidget *m_lightningIconLabel;
+    ZIconLabel *m_lightningIconLabel;
 
     DeviceImageWidget *m_deviceImageWidget;
 };
