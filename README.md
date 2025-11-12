@@ -1,5 +1,5 @@
 <p align="center" style="text-align: center">
-  <img src="./resources/icons/app-icon/icon.png" width="55%"><br/>
+  <img src="./resources/icons/app-icon/icon.png" width="25%"><br/>
 </p>
 
 <p align="center">
@@ -36,31 +36,51 @@
 
 ## Features
 
+### Connection
 | Feature                     | Status               | Notes                                                                                       |
 | --------------------------- | -------------------- | ------------------------------------------------------------------------------------------- |
-| **Connection**       |                      |                                                                                             |
 | USB Connection              | ✅ Implemented       | Fully supported on Windows, macOS, and Linux.                                               |
-| Wireless Connection (Wi-Fi) | ⚠️ To be implemented |  - |
-| **Tools**                   |                      |                                                                                             |
-| AirPlay Mirroring           | ✅ Implemented       | Cast your device screen to your computer.                                                   |     |
-| [Virtual Location](#virtual-location)            | ✅ Implemented       | Simulate GPS location. Requires a mounted Developer Disk Image. **( iOS 6 - iOS 16)**       |
-| [iFuse Filesystem Mount](#ifuse-filesystem-mount) | ✅ Implemented       | Mount the device's filesystem. (Windows & Linux only)                                       |
-| Query MobileGestalt         | ✅ Implemented       | Read detailed hardware and software information from the device.                            |
-| Developer Disk Images       | ✅ Implemented       | Manage and mount developer disk images. **( iOS 6 - iOS 16)**                               |
-| Wireless Gallery Import     | ✅ Implemented       | Import photos wirelessly (requires the Shortcuts app on the iDevice).                       |     |
-| [Cable Info](#cable-info)                  | ✅ Implemented       | Check authenticity of connected USB cables and more.                                                 |
-| [Network Device Discovery](#network-device-discovery)    | ✅ Implemented       | Discover and monitor devices on your local network.                                         |
-| Live Screen                 | ✅ Implemented       | View your device's screen in real-time **(wired)**.                                         |
-| [SSH Terminal](#ssh-terminal)  **(Jailbroken)**              | ✅ Implemented       | Open up a terminal on your iDevice.                                         |
-| **Device Actions**          |                      |                                                                                             |
+| Wireless Connection (Wi‑Fi) | ⚠️ To be implemented | - |
+
+### Tools
+| Feature                                                          | Status               | Notes                                                                                       |
+| ---------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------- |
+| AirPlay Mirroring                                                 | ✅ Implemented       | Cast your device screen to your computer.                                                   |
+| [Download & Install Apps From Apple Store](#app-store)            | ✅ Implemented       | Download and install apps directly from the Apple Store.                                    |
+| [Virtual Location](#virtual-location)                             | ✅ Implemented       | Simulate GPS location. Requires a mounted Developer Disk Image. **( iOS 6 - iOS 16)**       |
+| [iFuse Filesystem Mount](#ifuse-filesystem-mount)                 | ✅ Implemented       | Mount the device's filesystem. (Windows & Linux only)                                       |
+| Gallery                                            | ✅ Implemented       | -                       |
+| File Explorer                                            | ✅ Implemented       | Explore the device's filesystem.                       |
+| Wireless Gallery Import                                            | ✅ Implemented       | Import photos wirelessly (requires the Shortcuts app on the iDevice).                       |
+| [Cable Info](#cable-info)                                         | ✅ Implemented       | Check authenticity of connected USB cables and more.                                        |
+| [Network Device Discovery](#network-device-discovery)             | ✅ Implemented       | Discover and monitor devices on your local network.                                         |
+| [SSH Terminal](#ssh-terminal)  **(Jailbroken)**                   | ✅ Implemented       | Open up a terminal on your iDevice.                                                          |
+| Query MobileGestalt                                               | ✅ Implemented       | Read detailed hardware and software information from the device.                            |
+| Live Screen                                                       | ✅ Implemented       | View your device's screen in real-time **(wired)**.                                         |
+| Developer Disk Images                                             | ✅ Implemented       | Manage and mount developer disk images. **( iOS 6 - iOS 16)**                               |
+
+### Device Actions
+| Feature                     | Status               | Notes                                                                                       |
+| --------------------------- | -------------------- | ------------------------------------------------------------------------------------------- |
 | Restart Device              | ✅ Implemented       |                                                                                             |
 | Shutdown Device             | ✅ Implemented       |                                                                                             |
 | Enter Recovery Mode         | ✅ Implemented       |                                                                                             |
 
 ## Fully Theme Aware
+<p align="center">
+    <img src="./resources/repo/macos-theme.gif"><br/>
+</p>
+<p align="center">
+    <img src="./resources/repo/ubuntu-theme.gif"><br/>
+</p>
+
+## App Store
+### Download and Install Apps directly from the Apple Store!
+
+You need to sign in with your Apple ID to use this feature.
 
 <p align="center">
-    <img src="./resources/repo/descriptor-ubuntu-theme.gif"><br/>
+    <img src="./resources/repo/ipatool.png"><br/>
 </p>
 
 ## Virtual Location
@@ -72,6 +92,8 @@
 ## iFuse Filesystem Mount
 
 ### Use your iDevice as a regular DRIVE!
+
+Literally mount your iDevice filesystem and use it as a regular drive , read and write are both allowed. Don't try to import photos or videos because it won't work that way, use the Gallery Import feature for that.
 
 #### Windows
 
@@ -85,17 +107,18 @@
     <img src="./resources/repo/ifuse.gif"><br/>
 </p>
 
-## SSH Terminal
-
-### Open up a terminal on your Jailbroken iDevice!
-
+### Gallery
 <p align="center">
-    <img src="./resources/repo/ssh-terminal.gif"><br/>
+    <img src="./resources/repo/gallery.png"><br/>
 </p>
 
 
-## Cable Info
+### File Explorer
+<p align="center">
+    <img src="./resources/repo/file-explorer.png"><br/>
+</p>
 
+## Cable Info
 
 <p align="center">
     <img src="./resources/repo/cable-info-genuine.png"><br/>
@@ -105,6 +128,33 @@
 <p align="center">
     <img src="./resources/repo/network-devices.png"><br/>
 </p>
+
+## SSH Terminal
+
+### Open up a terminal on your Jailbroken iDevice!
+
+<p align="center">
+    <img src="./resources/repo/ssh-terminal.gif"><br/>
+</p>
+
+
+
+## **Authentication Required** ?
+
+ You might get this pop-up on any platform this is because this app uses secure backends to retrieve and store your Apple credentials. You can disabled this in settings but it is not recommended and not safe for your Apple account. Also if you leave this enabled and sign in you can use the same credentials in ipatool without signing in again.
+<p align="center">
+    <img src="./resources/repo/authentication-required.png"><br/>
+</p>
+
+## Become a Sponsor
+
+If you like this project and want to support its development, consider becoming a sponsor on [GitHub Sponsors](https://github.com/sponsors/yourusername).
+
+## Thanks
+
+- [libimobiledevice](https://libimobiledevice.org/) - Cross-platform software library that talks the protocols to support iPhone, iPad, iPod Touch devices.
+- [ipatool](https://github.com/majd/ipatool) - A command-line tool for managing iOS apps and devices.
+
 
 @uncore  sudo cat /etc/udev/rules.d/99-idevice.rules
 SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", MODE="0666"
