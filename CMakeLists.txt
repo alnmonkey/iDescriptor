@@ -5,6 +5,7 @@ project(iDescriptor VERSION 0.1.0 LANGUAGES CXX)
 option(ENABLE_RECOVERY_DEVICE_SUPPORT "Enable recovery device support (requires libirecovery)" ON)
 set(PACKAGE_MANAGER_HINT "" CACHE STRING "Name of package manager(s) used to manage this build (e.g. paru, yay, pamac)")
 option(PACKAGE_MANAGER_MANAGED "Build as package manager managed version (auto updates will be handled by the package manager)" OFF)
+option(DEPLOY "Deploy the application (WIN32 only)" ON)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -386,7 +387,7 @@ if(QT_VERSION_MAJOR EQUAL 6)
 endif()
 
 # Copy runtime DLLs to build directory after building
-if(WIN32 AND NOT DEFINED NO_DEPLOY)
+if(WIN32 AND DEPLOY)
     add_custom_command(TARGET iDescriptor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Starting Windows deployment..."
         COMMAND ${CMAKE_COMMAND}
@@ -441,29 +442,34 @@ set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_WIX_VERSION 4)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "iDescriptor Application")
 set(CPACK_PACKAGE_VENDOR "iDescriptor")
-set(CPACK_PACKAGE_CONTACT "support@idescriptor.com")
+set(CPACK_PACKAGE_CONTACT "https://github.com/iDescriptor/iDescriptor")
 
 set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_BINARY_DIR}/artifacts")
 
 if(WIN32)
     set(CPACK_GENERATOR "WIX;ZIP")
 
+    set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-Windows_x86_64")
+
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
+
     string(UUID CPACK_WIX_PRODUCT_GUID NAMESPACE "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d" NAME "${PROJECT_NAME}" TYPE MD5)
     string(UUID CPACK_WIX_UPGRADE_GUID NAMESPACE "d6c5b4a3-f2e1-d0c9-b8a7-f6e5d4c3b2a1" NAME "${PROJECT_NAME}" TYPE MD5)
     set(CPACK_WIX_UI_REF "WixUI_InstallDir")
     
+    set(CPACK_WIX_UI_BANNER "${CMAKE_CURRENT_SOURCE_DIR}/resources/installer/banner.bmp")
+    set(CPACK_WIX_UI_DIALOG "${CMAKE_CURRENT_SOURCE_DIR}/resources/installer/dialog.bmp")
+
     set(CPACK_WIX_INSTALL_SCOPE "perMachine")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "${PROJECT_NAME}")
     set(CPACK_PACKAGE_EXECUTABLES "iDescriptor" "iDescriptor")
     set(CPACK_WIX_CREATE_DESKTOP_SHORTCUT "iDescriptor")
     set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app-icon/icon.ico")
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf")
-        set(CPACK_WIX_LICENSE_RTF "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf")
-    endif()
-    set(CPACK_WIX_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-win64-setup")
-
+    set(CPACK_WIX_LICENSE_RTF "${CMAKE_CURRENT_SOURCE_DIR}/resources/installer/LICENSE.rtf")
+    
+    set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
     set(CPACK_ARCHIVE_COMPONENT_INSTALL TRUE)
-    set(CPACK_ARCHIVE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-win64-portable")
+    set(CPACK_ARCHIVE_INSTALL_DIRECTORY ".")
     
     # Tell CPack to use the pre-built dist directory
     set(CPACK_INSTALLED_DIRECTORIES "${CMAKE_INSTALL_PREFIX};.")

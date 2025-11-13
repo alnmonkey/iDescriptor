@@ -73,7 +73,6 @@ file(GET_RUNTIME_DEPENDENCIES
     EXECUTABLES ${EXECUTABLE_PATH}
     RESOLVED_DEPENDENCIES_VAR DLLS
     PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-" "^AVRT" "^avrt" "^MSVCP" "^VCRUNTIME" "^ucrtbase" "^libgcc_s_seh-1\\.dll$" "^libstdc\\+\\+-6\\.dll$" "^libwinpthread-1\\.dll$" "^Qt.*\\.dll$" "^libgstreamer-1\\.0-0\\.dll$" "^libgstbase-1\\.0-0\\.dll$" "^libgobject-2\\.0-0\\.dll$" "^libglib-2\\.0-0\\.dll$" "^libintl-8\\.dll$" "^libiconv-2\\.dll$"
-    #PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-" "^AVRT" "^avrt" "^MSVCP" "^VCRUNTIME" "^ucrtbase"
     POST_EXCLUDE_REGEXES ".*system32/.*\\.dll" ".*SysWOW64/.*\\.dll" ".*Windows/.*\\.dll" ".*Microsoft.VC.*" ".*Qt.*\\.dll$"
     DIRECTORIES ${BUILD_DIR} ${QT_BIN_PATH} ${MSYS2_BIN_PATH} "C:/lxqt/lib" $ENV{PATH}
 )
@@ -117,13 +116,9 @@ endforeach()
 list(LENGTH DLLS TOTAL_DLLS)
 message("Processed ${TOTAL_DLLS} runtime dependencies, copied ${COPIED_DLLS} files")
 
-# Step 3: Copy GStreamer plugins
 message("Copying GStreamer plugins...")
-# OLD: file(GLOB GSTREAMER_PLUGINS "${MSYS2_BIN_PATH}/../lib/gstreamer-1.0/*.dll")
-# Replace broad copy with targeted list (matches versioned names via glob)
 set(GSTREAMER_PLUGIN_DIR "${MSYS2_BIN_PATH}/../lib/gstreamer-1.0")
 
-# List of plugin basenames to copy (no extension or version). Add items as needed.
 set(WANTED_PLUGINS
     "libgstaudioconvert"
     "libgstvolume"
@@ -227,8 +222,7 @@ endforeach()
 
 message("Copying GStreamer helper executables...")
 set(GST_LIBEXEC_PATH "${MSYS2_BIN_PATH}/../libexec/gstreamer-1.0")
-file(COPY "${GST_LIBEXEC_PATH}/gst-plugin-scanner.exe" DESTINATION "${OUTPUT_DIR}/libexec/gstreamer-1.0")
-file(COPY "${GST_LIBEXEC_PATH}/gst-ptp-helper.exe" DESTINATION "${OUTPUT_DIR}/libexec/gstreamer-1.0")
+file(COPY "${GST_LIBEXEC_PATH}/gst-plugin-scanner.exe" DESTINATION "${OUTPUT_DIR}/gstreamer-1.0/libexec")
 
 message("Copying executables")
 file(COPY C:/msys64/mingw64/bin/iproxy.exe DESTINATION ${OUTPUT_DIR})
