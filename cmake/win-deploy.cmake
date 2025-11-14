@@ -140,6 +140,7 @@ set(WANTED_PLUGINS
     "libgstvideoconvert"
     "libgstvideorate"
     "libgstoverlaycomposition"
+    "libgstfaad"
 )
 
 file(MAKE_DIRECTORY "${OUTPUT_DIR}/gstreamer-1.0")
@@ -175,6 +176,12 @@ set(ADDITIONAL_DLLS
     "libiconv-2.dll"
     "libfdk-aac-2.dll"
     "libfaad-2.dll"
+    "avcodec-61.dll"
+    "avformat-61.dll"
+    "avutil-59.dll"
+    "swresample-5.dll"
+    "swscale-8.dll"
+    "avfilter-11.dll"
     "avfilter-10.dll"
     "libopenal-1.dll"
     "libgstaudio-1.0-0.dll"
