@@ -159,6 +159,7 @@ jobs:
             "libgstosxaudio"
             "libgstplayback"
             "libgstvolume"
+            "libgstfaad"
           )
 
           for plugin in "${PLUGINS[@]}"; do
@@ -166,6 +167,25 @@ jobs:
           done
 
           cp "$(brew --prefix gstreamer)/libexec/gstreamer-1.0/gst-plugin-scanner" "build/iDescriptor.app/Contents/Frameworks/"
+
+          # Bundle FFmpeg libraries
+          FFMPEG_LIBS=(
+            "libavcodec.61.dylib"
+            "libavformat.61.dylib"
+            "libavutil.59.dylib"
+            "libswresample.5.dylib"
+            "libswscale.8.dylib"
+            "libavfilter.11.dylib"
+          )
+
+          for lib in "${FFMPEG_LIBS[@]}"; do
+            if [ -f "$(brew --prefix ffmpeg)/lib/${lib}" ]; then
+              cp "$(brew --prefix ffmpeg)/lib/${lib}" build/iDescriptor.app/Contents/Frameworks/
+              install_name_tool -id "@rpath/${lib}" "build/iDescriptor.app/Contents/Frameworks/${lib}"
+            else
+              echo "Warning: ${lib} not found"
+            fi
+          done
 
           # Bundle libjxl_cms
           cp "$(brew --prefix)/lib/libjxl_cms.0.11.dylib" build/iDescriptor.app/Contents/Frameworks/
