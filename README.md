@@ -21,7 +21,7 @@
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg"/>
   <img alt="Language" src="https://img.shields.io/badge/C++-20-hotpink.svg"/>
   <img alt="Qt" src="https://img.shields.io/badge/Qt-6-brightgreen.svg"/>
-  <a href="https://github.com/YourUsername/iDescriptor/releases">
+  <a href="https://github.com/iDescriptor/iDescriptor/releases">
     <img src="https://img.shields.io/badge/AppImage-available-brightgreen" alt="AppImage"/>
   </a>
   <a href="https://github.com/iDescriptor/iDescriptor/releases">
@@ -185,7 +185,7 @@ If you like this project and want to support its development, consider becoming 
 
 ## Linux Udev Rules
 
-iDescriptor will check for udev rules but in case it fails to detect your device you can manually add the udev rules by doing similar to the following:
+iDescriptor will check for udev rules but in case it fails, you can manually add the udev rules by doing similar to the following:
 
 ```bash
 @uncore  sudo cat /etc/udev/rules.d/99-idevice.rules
