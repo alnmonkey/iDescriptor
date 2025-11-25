@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-    Cross platform, open-source and free idevice management tool written in C++
+    Cross-platform, open-source and free idevice management tool written in C++
   <br/>
   <br/>
   <a href="https://github.com/iDescriptor/iDescriptor/blob/main/LICENSE">
@@ -29,7 +29,7 @@
   </a>
   <br/>
   <br/>
-   <a href="https://aur.archlinux.org/packages/idescriptor-git/">
+   <a href="https://opencollective.com/idescriptor">
     <img src="https://img.shields.io/badge/OpenCollective-1F87FF?style=for-the-badge&logo=OpenCollective&logoColor=white" alt="AppImage"/>
   </a>
 </p>
@@ -57,7 +57,7 @@
 
 - **Installer (.msi)**: Download and run the installer. Recommended for most users.
 - **Portable (.zip)**: Extract and run `iDescriptor.exe`. No installation required.
-- Choco :
+- **Choco** :
 ```bash
  choco install idescriptor --version=0.1.0
  ```
@@ -224,7 +224,9 @@ You might get this pop-up on any platform this is because this app uses secure b
 
 ## Become a Sponsor
 
-If you like this project and want to support its development, consider becoming a sponsor on [GitHub Sponsors](https://github.com/sponsors/yourusername).
+Please support us at   <a href="https://opencollective.com/idescriptor">
+    <img src="https://img.shields.io/badge/OpenCollective-1F87FF?style=for-the-badge&logo=OpenCollective&logoColor=white" alt="AppImage"/>
+  </a>
 
 ## Thanks
 
