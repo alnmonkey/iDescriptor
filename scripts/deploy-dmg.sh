@@ -93,9 +93,29 @@ for lib in "${GST_LIBS[@]}"; do
   fi
 done
 
-# Copy FFmpeg libavfilter
+# Copy FFmpeg libraries
 FFMPEG_LIB_DIR="$(brew --prefix ffmpeg)/lib"
-cp "${FFMPEG_LIB_DIR}"/libavfilter.*.dylib "${FRAMEWORKS_DIR}/"
+FFMPEG_LIBS=(
+  "libavformat"
+  "libavcodec"
+  "libavutil"
+  "libswscale"
+  "libavfilter"
+)
+
+for lib_base in "${FFMPEG_LIBS[@]}"; do
+  # Use find to get the full versioned filename
+  lib_path=$(find "${FFMPEG_LIB_DIR}" -name "${lib_base}.*.dylib" -print -quit)
+  if [ -f "$lib_path" ]; then
+    lib_name=$(basename "$lib_path")
+    cp "$lib_path" "${FRAMEWORKS_DIR}/"
+    #These maybe unneeded, macdeployqt already does this but just in case
+    install_name_tool -id "@rpath/${lib_name}" "${FRAMEWORKS_DIR}/${lib_name}"
+    echo "Copied and fixed rpath for ${lib_name}"
+  else
+    echo "Warning: ${lib_base} library not found in ${FFMPEG_LIB_DIR}"
+  fi
+done
 
 macdeployqt "${APP_PATH}" -qmldir=qml -verbose=2
 
