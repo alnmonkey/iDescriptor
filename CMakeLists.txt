@@ -54,7 +54,6 @@ endif()
  
 find_package(PkgConfig REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia MultimediaWidgets Network QuickControls2 SerialPort Positioning Location QuickWidgets) 
-find_package(Qt6 REQUIRED COMPONENTS Core)
 
 # Add QTermWidget
 # Prefer CMake-native qtermwidget6, fallback to pkg-config if needed
@@ -89,13 +88,13 @@ find_program(CARGO_EXECUTABLE cargo REQUIRED)
 message(STATUS "Using idevice-rs Rust implementation")
 
 set(IDEVICE_RS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/idevice-rs)
-set(IDEVICE_RS_LIB_PATH ${IDEVICE_RS_SOURCE_DIR}/target/release/libidevice_ffi.a)
+set(IDEVICE_RS_LIB_PATH ${IDEVICE_RS_SOURCE_DIR}/target/debug/libidevice_ffi.a)
 
 # This command builds the Rust library and declares its output file.
 # Any target that uses this output file will automatically depend on this command.
 add_custom_command(
     OUTPUT ${IDEVICE_RS_LIB_PATH}
-    COMMAND ${CARGO_EXECUTABLE} build --release --manifest-path ${IDEVICE_RS_SOURCE_DIR}/Cargo.toml
+    COMMAND ${CARGO_EXECUTABLE} build --manifest-path ${IDEVICE_RS_SOURCE_DIR}/Cargo.toml
     WORKING_DIRECTORY ${IDEVICE_RS_SOURCE_DIR}
     COMMENT "Building idevice-rs FFI library"
     VERBATIM
@@ -271,6 +270,18 @@ src/networkdevicemanager.cpp
 src/networkdevicemanager.h
 src/*.ui
 resources.qrc
+src/gallerywidget.cpp
+src/gallerywidget.h
+src/photomodel.cpp
+src/photomodel.h
+src/core/services/load_heic.cpp
+src/servicemanager.cpp
+src/servicemanager.h
+src/core/services/get_file_tree.cpp
+src/core/helpers/read_afc_file_to_byte_array.cpp
+src/heartbeat.h
+src/zloadingwidget.h
+src/zloadingwidget.cpp
 )
 
 if(APPLE)
@@ -429,7 +440,6 @@ if(APPLE)
         ${SECURITY_FRAMEWORK}
         ${COREFOUNDATION_FRAMEWORK}
     )
-target_link_libraries(iDescriptor PRIVATE Qt6::Core)
 endif()
 
 # Add compile definition for source directory

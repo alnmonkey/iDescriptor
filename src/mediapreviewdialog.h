@@ -36,7 +36,6 @@
 #include <QVBoxLayout>
 #include <QVideoWidget>
 #include <QtGlobal>
-#include <libimobiledevice/afc.h>
 
 /**
  * @brief A dialog for previewing images and videos from iOS devices

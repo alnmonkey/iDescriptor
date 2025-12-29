@@ -26,7 +26,6 @@
 #include <QMutex>
 #include <QObject>
 #include <QUrl>
-#include <libimobiledevice/afc.h>
 
 /**
  * @brief Singleton manager for MediaStreamer instances

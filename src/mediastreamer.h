@@ -25,7 +25,6 @@
 #include <QMutex>
 #include <QTcpServer>
 #include <QUrl>
-#include <libimobiledevice/afc.h>
 
 QT_BEGIN_NAMESPACE
 class QTcpSocket;

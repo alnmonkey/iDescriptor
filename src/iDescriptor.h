@@ -25,6 +25,7 @@
 #include <QRegularExpression>
 #include <QtCore/QObject>
 
+// #include "idevice.h"
 #include <idevice++/bindings.hpp>
 #include <idevice++/core_device_proxy.hpp>
 #include <idevice++/diagnostics_relay.hpp>
@@ -186,7 +187,7 @@ struct DeviceInfo {
 struct iDescriptorDevice {
     std::string udid;
     DeviceMonitorThread::IdeviceConnectionType conn_type;
-    IdeviceProviderHandle *device;
+    IdeviceProviderHandle *provider;
     DeviceInfo deviceInfo;
     AfcClientHandle *afcClient;
     AfcClientHandle *afc2Client;
@@ -198,7 +199,7 @@ struct iDescriptorDevice {
 struct iDescriptorInitDeviceResult {
     bool success = false;
     IdeviceFfiError error;
-    IdeviceProviderHandle *device;
+    IdeviceProviderHandle *provider;
     DeviceInfo deviceInfo;
     AfcClientHandle *afcClient;
     AfcClientHandle *afc2Client;
@@ -324,8 +325,8 @@ struct AFCFileTree {
     std::string currentPath;
 };
 
-// AFCFileTree get_file_tree(afc_client_t afcClient,
-//                           const std::string &path = "/");
+AFCFileTree get_file_tree(const iDescriptorDevice *device, bool checkDir,
+                          const std::string &path = "/");
 
 bool detect_jailbroken(AfcClientHandle *afc);
 
@@ -456,8 +457,8 @@ struct NetworkDevice {
 
 QPixmap load_heic(const QByteArray &data);
 
-// QByteArray read_afc_file_to_byte_array(afc_client_t afcClient,
-//                                        const char *path);
+QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
+                                       const char *path);
 
 bool isDarkMode();
 

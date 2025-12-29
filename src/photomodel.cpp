@@ -19,7 +19,7 @@
 
 #include "photomodel.h"
 #include "iDescriptor.h"
-#include "mediastreamermanager.h"
+// #include "mediastreamermanager.h"
 #include "servicemanager.h"
 #include <QDebug>
 #include <QEventLoop>
@@ -84,30 +84,32 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
 {
     QPixmap thumbnail;
 
-    uint64_t fileHandle = 0;
+    AfcFileHandle *fileHandle = nullptr;
 
-    afc_error_t openResult = ServiceManager::safeAfcFileOpen(
-        device, filePath.toUtf8().constData(), AFC_FOPEN_RDONLY, &fileHandle);
+    IdeviceFfiError *err =
+        ServiceManager::safeAfcFileOpen(device, filePath.toUtf8().constData(),
+                                        AfcFopenMode::AfcRdOnly, &fileHandle);
 
-    if (openResult != AFC_E_SUCCESS || fileHandle == 0) {
+    if (err || fileHandle == nullptr) {
         qWarning() << "Failed to open video file for thumbnail:" << filePath;
+        if (err) {
+            // idevice_error_free(err);
+        }
         return {};
     }
 
     // Get file size
-    char **fileInfo = nullptr;
-    afc_error_t infoResult = ServiceManager::safeAfcGetFileInfo(
-        device, filePath.toUtf8().constData(), &fileInfo);
+    AfcFileInfo *info = nullptr;
+    err = ServiceManager::safeAfcGetFileInfo(
+        device, filePath.toUtf8().constData(), info);
 
     uint64_t fileSize = 0;
-    if (infoResult == AFC_E_SUCCESS && fileInfo) {
-        for (int i = 0; fileInfo[i]; i += 2) {
-            if (strcmp(fileInfo[i], "st_size") == 0) {
-                fileSize = strtoull(fileInfo[i + 1], nullptr, 10);
-                break;
-            }
+    if (!err && info) {
+        fileSize = info->size;
+        // afc_file_info_free(info);
+        if (err) {
+            // idevice_error_free(err);
         }
-        afc_dictionary_free(fileInfo);
     }
 
     if (fileSize == 0) {
@@ -127,7 +129,7 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
     // Context for streaming read from device
     struct StreamContext {
         iDescriptorDevice *device;
-        uint64_t fileHandle;
+        AfcFileHandle *fileHandle;
         uint64_t fileSize;
         uint64_t currentPos;
     };
@@ -137,27 +139,31 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
 
     // Custom read function that reads from device on-demand
     auto readPacket = [](void *opaque, uint8_t *buf, int bufSize) -> int {
-        StreamContext *ctx = static_cast<StreamContext *>(opaque);
+        // StreamContext *ctx = static_cast<StreamContext *>(opaque);
 
-        if (ctx->currentPos >= ctx->fileSize) {
-            return AVERROR_EOF;
-        }
+        // if (ctx->currentPos >= ctx->fileSize) {
+        //     return AVERROR_EOF;
+        // }
 
-        uint32_t toRead =
-            std::min(static_cast<uint32_t>(bufSize),
-                     static_cast<uint32_t>(ctx->fileSize - ctx->currentPos));
-        uint32_t bytesRead = 0;
+        // uint32_t toRead =
+        //     std::min(static_cast<uint32_t>(bufSize),
+        //              static_cast<uint32_t>(ctx->fileSize - ctx->currentPos));
+        // uint32_t bytesRead = 0;
 
-        afc_error_t result = ServiceManager::safeAfcFileRead(
-            ctx->device, ctx->fileHandle, reinterpret_cast<char *>(buf), toRead,
-            &bytesRead);
+        // IdeviceFfiError *err = ServiceManager::safeAfcFileRead(
+        //     ctx->device, ctx->fileHandle, reinterpret_cast<char *>(buf),
+        //     toRead, &bytesRead);
 
-        if (result != AFC_E_SUCCESS || bytesRead == 0) {
-            return AVERROR(EIO);
-        }
+        // if (err || bytesRead == 0) {
+        //     if (err) {
+        //         idevice_error_free(err);
+        //     }
+        //     return AVERROR(EIO);
+        // }
 
-        ctx->currentPos += bytesRead;
-        return static_cast<int>(bytesRead);
+        // ctx->currentPos += bytesRead;
+        // return static_cast<int>(bytesRead);
+        return 0;
     };
 
     // Custom seek function using AFC seek
@@ -188,11 +194,12 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
             return -1;
         }
 
-        // Use AFC seek
-        afc_error_t result = ServiceManager::safeAfcFileSeek(
+        IdeviceFfiError *err = ServiceManager::safeAfcFileSeek(
             ctx->device, ctx->fileHandle, newPos, seekWhence);
 
-        if (result != AFC_E_SUCCESS) {
+        if (err) {
+            qDebug() << "AFC seek error:" << err->message;
+            // idevice_error_free(err);
             return -1;
         }
 
@@ -615,16 +622,19 @@ void PhotoModel::populatePhotoPaths()
     QByteArray albumPathBytes = m_albumPath.toUtf8();
     const char *albumPathCStr = albumPathBytes.constData();
 
-    char **albumInfo = nullptr;
-    afc_error_t infoResult =
+    AfcFileInfo albumInfo = {};
+
+    IdeviceFfiError *err =
         ServiceManager::safeAfcGetFileInfo(m_device, albumPathCStr, &albumInfo);
-    if (infoResult != AFC_E_SUCCESS) {
+    if (err) {
         qDebug() << "Album path does not exist or cannot be accessed:"
-                 << m_albumPath << "Error:" << infoResult;
+                 << m_albumPath << "Error:" << err->message;
+        idevice_error_free(err);
         return;
     }
-    if (albumInfo) {
-        afc_dictionary_free(albumInfo);
+    // FIXME: should we continue if albumInfo is null?
+    if (albumInfo.size) {
+        afc_file_info_free(&albumInfo);
     }
 
     // Fix: Store the QByteArray to keep the C string valid
@@ -633,13 +643,12 @@ void PhotoModel::populatePhotoPaths()
     qDebug() << "Photo directory:" << m_albumPath;
     qDebug() << "Photo directory C string:" << photoDir;
 
-    // Use ServiceManager for thread-safe AFC operations
     char **files = nullptr;
-    afc_error_t readResult =
-        ServiceManager::safeAfcReadDirectory(m_device, photoDir, &files);
-    if (readResult != AFC_E_SUCCESS) {
+    err = ServiceManager::safeAfcReadDirectory(m_device, photoDir, &files);
+    if (err) {
         qDebug() << "Failed to read photo directory:" << photoDir
-                 << "Error:" << readResult;
+                 << "Error:" << err->message;
+        idevice_error_free(err);
         return;
     }
 
@@ -663,7 +672,8 @@ void PhotoModel::populatePhotoPaths()
                 m_allPhotos.append(info);
             }
         }
-        afc_dictionary_free(files);
+        // free(files);
+        // afc_dictionary_free(files);
     }
 
     // Apply initial filtering and sorting, which will also reset the model
@@ -792,74 +802,22 @@ QStringList PhotoModel::getFilteredFilePaths() const
 // Helper methods
 QDateTime PhotoModel::extractDateTimeFromFile(const QString &filePath) const
 {
-    plist_t info = nullptr;
-    afc_error_t afc_err = ServiceManager::safeAfcGetFileInfoPlist(
-        m_device, filePath.toUtf8().constData(), &info);
+    AfcFileInfo *info = nullptr;
+    IdeviceFfiError *err = ServiceManager::safeAfcGetFileInfo(
+        m_device, filePath.toUtf8().constData(), info);
+    if (!err && info) {
+        uint64_t birthtime_ns = info->st_birthtime;
+        // Convert nanoseconds since epoch to QDateTime
+        // The timestamp appears to be in nanoseconds since Unix epoch
+        uint64_t seconds = birthtime_ns / 1000000000ULL;
+        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(seconds, Qt::UTC);
 
-    if (afc_err == AFC_E_SUCCESS && info) {
-        plist_t birthtime_node = plist_dict_get_item(info, "st_birthtime");
-        if (birthtime_node &&
-            plist_get_node_type(birthtime_node) == PLIST_UINT) {
-            uint64_t birthtime_ns = 0;
-            plist_get_uint_val(birthtime_node, &birthtime_ns);
-
-            // Convert nanoseconds since epoch to QDateTime
-            // The timestamp appears to be in nanoseconds since Unix epoch
-            uint64_t seconds = birthtime_ns / 1000000000ULL;
-            QDateTime dateTime =
-                QDateTime::fromSecsSinceEpoch(seconds, Qt::UTC);
-
-            plist_free(info);
-            if (dateTime.isValid()) {
-                return dateTime;
-            }
-        }
-
-        // Fallback to st_mtime (modification time) if birthtime not available
-        plist_t mtime_node = plist_dict_get_item(info, "st_mtime");
-        if (mtime_node && plist_get_node_type(mtime_node) == PLIST_UINT) {
-            uint64_t mtime_ns = 0;
-            plist_get_uint_val(mtime_node, &mtime_ns);
-
-            // Convert nanoseconds since epoch to QDateTime
-            uint64_t seconds = mtime_ns / 1000000000ULL;
-            QDateTime dateTime =
-                QDateTime::fromSecsSinceEpoch(seconds, Qt::UTC);
-
-            plist_free(info);
-            if (dateTime.isValid()) {
-                return dateTime;
-            }
-        }
-
-        plist_free(info);
-    }
-
-    // Final fallback: try to extract date from filename pattern like
-    // IMG_20231025_143052.jpg
-    QFileInfo fileInfo(filePath);
-    QString baseName = fileInfo.baseName();
-
-    QRegularExpression dateRegex(
-        R"((\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2}))");
-    QRegularExpressionMatch match = dateRegex.match(baseName);
-
-    if (match.hasMatch()) {
-        int year = match.captured(1).toInt();
-        int month = match.captured(2).toInt();
-        int day = match.captured(3).toInt();
-        int hour = match.captured(4).toInt();
-        int minute = match.captured(5).toInt();
-        int second = match.captured(6).toInt();
-
-        QDateTime dateTime(QDate(year, month, day),
-                           QTime(hour, minute, second));
+        // afc_file_info_free(info);
         if (dateTime.isValid()) {
             return dateTime;
         }
     }
 
-    // Ultimate fallback: return current time
     return QDateTime::currentDateTime();
 }
 

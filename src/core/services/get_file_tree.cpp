@@ -18,68 +18,113 @@
  */
 
 #include "../../iDescriptor.h"
+#include "../../servicemanager.h"
 #include <QDebug>
 #include <iostream>
-#include <libimobiledevice/afc.h>
-#include <libimobiledevice/lockdown.h>
 #include <string.h>
 
-AFCFileTree get_file_tree(afc_client_t afcClient, const std::string &path)
+AFCFileTree get_file_tree(const iDescriptorDevice *device, bool checkDir,
+                          const std::string &path)
 {
-
+    qDebug() << "Getting file tree for path:" << QString::fromStdString(path);
     AFCFileTree result;
     result.currentPath = path;
+    result.success = false;
 
-    char **dirs = NULL;
-    if (afc_read_directory(afcClient, path.c_str(), &dirs) != AFC_E_SUCCESS) {
-        result.success = false;
+    char **dirs = nullptr;
+    size_t count = 0;
+
+    // Use safe wrapper to read directory
+    IdeviceFfiError *err =
+        ServiceManager::safeAfcReadDirectory(device, path.c_str(), &dirs);
+
+    if (err) {
+        qDebug() << "Failed to read directory:" << path.c_str()
+                 << "Error:" << err->message << "Code:" << err->code;
+        idevice_error_free(err);
         return result;
     }
 
+    if (!dirs) {
+        result.success = true;
+        return result;
+    }
+
+    // Iterate through directory entries
     for (int i = 0; dirs[i]; i++) {
+        qDebug() << "Found entry:" << dirs[i];
         std::string entryName = dirs[i];
         if (entryName == "." || entryName == "..")
             continue;
 
-        char **info = NULL;
         std::string fullPath = path;
         if (fullPath.back() != '/')
             fullPath += "/";
         fullPath += entryName;
+
+        if (!checkDir) {
+            result.entries.push_back({entryName, false});
+            continue;
+        }
+
+        // Get file info using safe wrapper
+        AfcFileInfo info = {};
+        IdeviceFfiError *info_err =
+            ServiceManager::safeAfcGetFileInfo(device, fullPath.c_str(), &info);
+
+        if (info_err) {
+            qDebug() << "Failed to get file info for:" << fullPath.c_str()
+                     << "Error:" << info_err->message;
+        }
+
         bool isDir = false;
-        if (afc_get_file_info(afcClient, fullPath.c_str(), &info) ==
-                AFC_E_SUCCESS &&
-            info) {
-            if (entryName == "var") {
-                qDebug() << "File info for var:" << info[0] << info[1]
-                         << info[2] << info[3] << info[4] << info[5];
-            }
-            for (int j = 0; info[j]; j += 2) {
-                if (strcmp(info[j], "st_ifmt") == 0) {
-                    if (strcmp(info[j + 1], "S_IFDIR") == 0) {
-                        isDir = true;
-                    } else if (strcmp(info[j + 1], "S_IFLNK") == 0) {
-                        /*symlink*/
-                        char **dir_contents = NULL;
-                        if (afc_read_directory(afcClient, fullPath.c_str(),
-                                               &dir_contents) ==
-                            AFC_E_SUCCESS) {
-                            isDir = true;
-                            if (dir_contents) {
-                                afc_dictionary_free(dir_contents);
-                            }
-                        }
-                    }
-                    break;
+        if (!info_err) {
+            qDebug() << "Entry:" << entryName.c_str() << "Type:" << info.st_ifmt
+                     << "Size:" << info.size;
+            if (strcmp(info.st_ifmt, "S_IFDIR") == 0) {
+                isDir = true;
+            } else if (strcmp(info.st_ifmt, "S_IFLNK") == 0) {
+                // Check if symlink points to a directory
+                char **dir_contents = nullptr;
+                IdeviceFfiError *link_err =
+                    ServiceManager::safeAfcReadDirectory(
+                        device, fullPath.c_str(), &dir_contents);
+
+                if (!link_err) {
+                    isDir = true;
+                    // if (dir_contents) {
+                    //     // FIXME: is this ok ?
+                    //     for (int j = 0; dir_contents[j]; j++) {
+                    //         free(dir_contents[j]);
+                    //     }
+                    //     free(dir_contents);
+                    // }
+                }
+
+                if (link_err) {
+                    idevice_error_free(link_err);
                 }
             }
-            afc_dictionary_free(info);
+
+            // Free file info
+            // afc_file_info_free(&info);
         }
+
+        if (info_err) {
+            idevice_error_free(info_err);
+        }
+
         result.entries.push_back({entryName, isDir});
     }
+
+    // Free the directory list
     if (dirs) {
-        afc_dictionary_free(dirs);
+        // for (int i = 0; dirs[i]; i++) {
+        //     free(dirs[i]);
+        // }
+        // free(dirs);
     }
+
     result.success = true;
     return result;
 }

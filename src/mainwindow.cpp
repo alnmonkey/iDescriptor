@@ -450,16 +450,16 @@ MainWindow::MainWindow(QWidget *parent)
     connect(NetworkDeviceManager::sharedInstance(),
             &NetworkDeviceManager::deviceAdded, this,
             [this](const NetworkDevice &device) {
-                // const iDescriptorDevice *idevice =
-                //     AppContext::sharedInstance()->getDeviceByMacAddress(
-                //         device.macAddress);
-                // if (idevice) {
-                //     qDebug() << "Network device matched to connected device:"
-                //              << QString::fromStdString(
-                //                     idevice->deviceInfo.deviceName)
-                //              << "MAC:" << device.macAddress;
-                //     // You can now use 'idevice' as needed
-                // }
+                const iDescriptorDevice *idevice =
+                    AppContext::sharedInstance()->getDeviceByMacAddress(
+                        device.macAddress);
+                if (idevice) {
+                    qDebug() << "Network device matched to connected device:"
+                             << QString::fromStdString(
+                                    idevice->deviceInfo.deviceName)
+                             << "MAC:" << device.macAddress;
+                    // You can now use 'idevice' as needed
+                }
                 // FIXME: both macAddress and udid can be used to get pairing
                 // file
 

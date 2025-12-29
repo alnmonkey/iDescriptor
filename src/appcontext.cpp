@@ -65,7 +65,7 @@ AppContext::AppContext(QObject *parent) : QObject{parent}
         plist_print(fileData);
         const std::string wifiMacAddress =
             PlistNavigator(fileData)["WiFiMACAddress"].getString();
-        plist_free(fileData);
+        // plist_free(fileData);
         qDebug() << "Found pairing file for MAC"
                  << QString::fromStdString(wifiMacAddress);
         bool isCompatible = !wifiMacAddress.empty();
@@ -229,7 +229,7 @@ void AppContext::addDevice(QString udid,
         iDescriptorDevice *device = new iDescriptorDevice{
             .udid = udid.toStdString(),
             .conn_type = conn_type,
-            .device = initResult.device,
+            .provider = initResult.provider,
             .deviceInfo = initResult.deviceInfo,
             .afcClient = initResult.afcClient,
             .afc2Client = initResult.afc2Client,
@@ -417,20 +417,19 @@ AppContext::~AppContext()
 
 void AppContext::setCurrentDeviceSelection(const DeviceSelection &selection)
 {
-    // qDebug() << "New selection -"
-    //          << " Type:" << selection.type
-    //          << " UDID:" << QString::fromStdString(selection.udid)
-    //          << " ECID:" << selection.ecid << " Section:" <<
-    //          selection.section;
-    // if (m_currentSelection.type == selection.type &&
-    //     m_currentSelection.udid == selection.udid &&
-    //     m_currentSelection.ecid == selection.ecid &&
-    //     m_currentSelection.section == selection.section) {
-    //     qDebug() << "setCurrentDeviceSelection: No change in selection";
-    //     return; // No change
-    // }
-    // m_currentSelection = selection;
-    // emit currentDeviceSelectionChanged(m_currentSelection);
+    qDebug() << "New selection -"
+             << " Type:" << selection.type
+             << " UDID:" << QString::fromStdString(selection.udid)
+             << " ECID:" << selection.ecid << " Section:" << selection.section;
+    if (m_currentSelection.type == selection.type &&
+        m_currentSelection.udid == selection.udid &&
+        m_currentSelection.ecid == selection.ecid &&
+        m_currentSelection.section == selection.section) {
+        qDebug() << "setCurrentDeviceSelection: No change in selection";
+        return; // No change
+    }
+    m_currentSelection = selection;
+    emit currentDeviceSelectionChanged(m_currentSelection);
 }
 
 const DeviceSelection &AppContext::getCurrentDeviceSelection() const

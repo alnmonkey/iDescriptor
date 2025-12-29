@@ -18,146 +18,164 @@
  */
 
 #include "servicemanager.h"
+#include "iDescriptor.h"
 
-afc_error_t
-ServiceManager::safeAfcReadDirectory(iDescriptorDevice *device,
+IdeviceFfiError *
+ServiceManager::safeAfcReadDirectory(const iDescriptorDevice *device,
                                      const char *path, char ***dirs,
-                                     std::optional<afc_client_t> altAfc)
+                                     std::optional<AfcClientHandle *> altAfc)
 {
-    return executeAfcOperation(
+    size_t count = 0;
+    return executeAfcClientOperation(
         device,
-        [path, dirs](afc_client_t client) {
-            return afc_read_directory(client, path, dirs);
+        [path, dirs, &count, device](AfcClientHandle *client) {
+            IdeviceFfiError *err = nullptr;
+            err = afc_list_directory(client, path, dirs, &count);
+            /*TODO -1 is unknown error*/
+            if (err && (err->code == -1 || err->code == -11)) {
+                qDebug() << "Reconnecting AFC client for path:" << path;
+                // afc_client_free(client);
+                // err = afc_client_connect(device->provider, &client);
+                err = afc_client_connect(
+                    device->provider,
+                    &const_cast<iDescriptorDevice *>(device)->afcClient);
+
+                err = afc_list_directory(
+                    const_cast<iDescriptorDevice *>(device)->afcClient, path,
+                    dirs, &count);
+            }
+            return err;
         },
         altAfc);
 }
 
-afc_error_t
-ServiceManager::safeAfcGetFileInfo(iDescriptorDevice *device, const char *path,
-                                   char ***info,
-                                   std::optional<afc_client_t> altAfc)
+IdeviceFfiError *
+ServiceManager::safeAfcGetFileInfo(const iDescriptorDevice *device,
+                                   const char *path, AfcFileInfo *info,
+                                   std::optional<AfcClientHandle *> altAfc)
 {
-    return executeAfcOperation(
+    return executeAfcClientOperation(
         device,
-        [path, info](afc_client_t client) {
-            return afc_get_file_info(client, path, info);
+        [path, info, device](AfcClientHandle *client) {
+            IdeviceFfiError *err = nullptr;
+            err = afc_get_file_info(client, path, info);
+            /*TODO -1 is unknown error*/
+            if (err && err->code == -1) {
+                // afc_client_free(client);
+                // err = afc_client_connect(device->provider, &client);
+                err = afc_client_connect(
+                    device->provider,
+                    &const_cast<iDescriptorDevice *>(device)->afcClient);
+
+                err = afc_get_file_info(
+                    const_cast<iDescriptorDevice *>(device)->afcClient, path,
+                    info);
+            }
+            return err;
         },
         altAfc);
 }
 
-afc_error_t
-ServiceManager::safeAfcGetFileInfoPlist(iDescriptorDevice *device,
-                                        const char *path, plist_t *info,
-                                        std::optional<afc_client_t> altAfc)
+IdeviceFfiError *ServiceManager::safeAfcFileOpen(
+    const iDescriptorDevice *device, const char *path, AfcFopenMode mode,
+    AfcFileHandle **handle, std::optional<AfcClientHandle *> altAfc)
 {
-    return executeAfcOperation(
+    return executeAfcClientOperation(
         device,
-        [path, info](afc_client_t client) {
-            return afc_get_file_info_plist(client, path, info);
+        [path, mode, handle, device](AfcClientHandle *client) {
+            IdeviceFfiError *err = nullptr;
+            err = afc_file_open(client, path, mode, handle);
+            /*TODO -1 is unknown error*/
+            if (err && err->code == -1) {
+                // afc_client_free(client);
+                err = afc_client_connect(
+                    device->provider,
+                    &const_cast<iDescriptorDevice *>(device)->afcClient);
+                err = afc_file_open(
+                    const_cast<iDescriptorDevice *>(device)->afcClient, path,
+                    mode, handle);
+            }
+            return err;
         },
         altAfc);
 }
 
-afc_error_t ServiceManager::safeAfcFileOpen(iDescriptorDevice *device,
-                                            const char *path,
-                                            afc_file_mode_t mode,
-                                            uint64_t *handle,
-                                            std::optional<afc_client_t> altAfc)
+IdeviceFfiError *
+ServiceManager::safeAfcFileRead(const iDescriptorDevice *device,
+                                AfcFileHandle *handle, uint8_t **data,
+                                uintptr_t length, size_t *bytes_read)
 {
     return executeAfcOperation(
         device,
-        [path, mode, handle](afc_client_t client) {
-            return afc_file_open(client, path, mode, handle);
+        [data, length, bytes_read](AfcFileHandle *handle) {
+            return afc_file_read(handle, data, length, bytes_read);
         },
-        altAfc);
+        handle);
 }
 
-afc_error_t ServiceManager::safeAfcFileRead(iDescriptorDevice *device,
-                                            uint64_t handle, char *data,
-                                            uint32_t length,
-                                            uint32_t *bytes_read,
-                                            std::optional<afc_client_t> altAfc)
+IdeviceFfiError *
+ServiceManager::safeAfcFileWrite(const iDescriptorDevice *device,
+                                 AfcFileHandle *handle, const uint8_t *data,
+                                 uint32_t length)
 {
     return executeAfcOperation(
         device,
-        [handle, data, length, bytes_read](afc_client_t client) {
-            return afc_file_read(client, handle, data, length, bytes_read);
+        [data, length](AfcFileHandle *handle) {
+            return afc_file_write(handle, data, length);
         },
-        altAfc);
+        handle);
 }
 
-afc_error_t ServiceManager::safeAfcFileWrite(iDescriptorDevice *device,
-                                             uint64_t handle, const char *data,
-                                             uint32_t length,
-                                             uint32_t *bytes_written,
-                                             std::optional<afc_client_t> altAfc)
+IdeviceFfiError *
+ServiceManager::safeAfcFileClose(const iDescriptorDevice *device,
+                                 AfcFileHandle *handle)
 {
     return executeAfcOperation(
-        device,
-        [handle, data, length, bytes_written](afc_client_t client) {
-            return afc_file_write(client, handle, data, length, bytes_written);
-        },
-        altAfc);
+        device, [](AfcFileHandle *handle) { return afc_file_close(handle); },
+        handle);
 }
 
-afc_error_t ServiceManager::safeAfcFileClose(iDescriptorDevice *device,
-                                             uint64_t handle,
-                                             std::optional<afc_client_t> altAfc)
+IdeviceFfiError *
+ServiceManager::safeAfcFileSeek(const iDescriptorDevice *device,
+                                AfcFileHandle *handle, int64_t offset,
+                                int whence)
 {
+    off_t *newPos = nullptr;
     return executeAfcOperation(
         device,
-        [handle](afc_client_t client) {
-            return afc_file_close(client, handle);
+        [offset, whence, newPos](AfcFileHandle *handle) {
+            return afc_file_seek(handle, offset, whence, newPos);
         },
-        altAfc);
+        handle);
 }
 
-afc_error_t ServiceManager::safeAfcFileSeek(iDescriptorDevice *device,
-                                            uint64_t handle, int64_t offset,
-                                            int whence,
-                                            std::optional<afc_client_t> altAfc)
+IdeviceFfiError *
+ServiceManager::safeAfcFileTell(const iDescriptorDevice *device,
+                                AfcFileHandle *handle, off_t *position)
 {
     return executeAfcOperation(
         device,
-        [handle, offset, whence](afc_client_t client) {
-            return afc_file_seek(client, handle, offset, whence);
+        [position](AfcFileHandle *handle) {
+            return afc_file_tell(handle, position);
         },
-        altAfc);
-}
-
-afc_error_t ServiceManager::safeAfcFileTell(iDescriptorDevice *device,
-                                            uint64_t handle, uint64_t *position,
-                                            std::optional<afc_client_t> altAfc)
-{
-    return executeAfcOperation(
-        device,
-        [handle, position](afc_client_t client) {
-            return afc_file_tell(client, handle, position);
-        },
-        altAfc);
+        handle);
 }
 
 QByteArray
-ServiceManager::safeReadAfcFileToByteArray(iDescriptorDevice *device,
-                                           const char *path,
-                                           std::optional<afc_client_t> altAfc)
+ServiceManager::safeReadAfcFileToByteArray(const iDescriptorDevice *device,
+                                           const char *path)
 {
-    return executeOperation<QByteArray>(
-        device,
-        [path](afc_client_t client) -> QByteArray {
-            return read_afc_file_to_byte_array(client, path);
-        },
-        altAfc);
+    return executeOperation<QByteArray>(device, [path, device]() -> QByteArray {
+        return read_afc_file_to_byte_array(device, path);
+    });
 }
 
-AFCFileTree ServiceManager::safeGetFileTree(iDescriptorDevice *device,
+AFCFileTree ServiceManager::safeGetFileTree(const iDescriptorDevice *device,
                                             const std::string &path,
-                                            std::optional<afc_client_t> altAfc)
+                                            bool checkDir)
 {
     return executeOperation<AFCFileTree>(
-        device,
-        [path](afc_client_t client) -> AFCFileTree {
-            return get_file_tree(client, path.c_str());
-        },
-        altAfc);
+        device, [path, device, checkDir]() -> AFCFileTree {
+            return get_file_tree(device, checkDir, path);
+        });
 }

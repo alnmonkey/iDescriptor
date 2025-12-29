@@ -404,7 +404,7 @@ void DiskUsageWidget::fetchData()
 
     QFuture<QVariantMap> future = QtConcurrent::run([this]() -> QVariantMap {
         QVariantMap result;
-        if (!m_device || !m_device->device) {
+        if (!m_device || !m_device->provider) {
             result["error"] = "Invalid device.";
             return result;
         }
@@ -418,7 +418,7 @@ void DiskUsageWidget::fetchData()
             m_device->deviceInfo.diskInfo.totalSystemCapacity);
 
         // Create provider wrapper from existing handle
-        Provider provider = Provider::adopt(m_device->device);
+        Provider provider = Provider::adopt(m_device->provider);
 
         // Apps usage
         uint64_t totalAppsSpace = 0;
@@ -466,7 +466,7 @@ void DiskUsageWidget::fetchData()
             }
         }
         result["appsUsage"] = QVariant::fromValue(totalAppsSpace);
-        plist_free(client_opts); // client_opts is consumed by browse, but
+        // plist_free(client_opts); // client_opts is consumed by browse, but
 
         // Media usage
         uint64_t mediaSpace = 0;

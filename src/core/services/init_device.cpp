@@ -27,11 +27,13 @@
 #include <QDebug>
 #include <string.h>
 
+#include "../../heartbeat.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
 #include <sstream>
+#include <unistd.h>
 std::string safeGetXML(const char *key, pugi::xml_node dict)
 {
     for (pugi::xml_node child = dict.first_child(); child;
@@ -360,14 +362,9 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     }
 }
 
-// [DeviceMonitor] Device connected: "a5c08c1dfdc9fcf81366bd6159c81bba73deaa27"
-// Device added:  "a5c08c1dfdc9fcf81366bd6159c81bba73deaa27"
-// Initializing iDescriptor device with UDID:
-// "a5c08c1dfdc9fcf81366bd6159c81bba73deaa27" Failed to create idevice handle
-// Initialization failed, cleaning up resources. FfiInvalidArg
-// init_idescriptor_device success ?:  false
-// Failed to initialize device with UDID:
-// "a5c08c1dfdc9fcf81366bd6159c81bba73deaa27"
+// FIXME:spawn on a new thread?
+//  wireless connections sometimes take more than 10sec to connect
+//  and ofc it freezes the ui
 iDescriptorInitDeviceResult
 init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
 {
@@ -389,6 +386,9 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
     uint32_t actual_device_id = 0;
     IdevicePairingFile *pairing_file = nullptr;
     IdeviceHandle *deviceHandle = nullptr;
+    HeartbeatClientHandle *heartbeat = nullptr;
+    HeartBeatThread *heartbeatThread = nullptr;
+
     // FIXME: remove debug
     std::stringstream ss;
 
@@ -484,43 +484,30 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
 
     uint16_t heartbeat_port;
     bool heartbeat_ssl;
-    if (isWireless) {
-        // err = lockdownd_start_service(lockdown, "com.apple.heartbeat",
-        //                               &heartbeat_port, &heartbeat_ssl);
-        // if (err) {
-        //     qDebug() << "Failed to start Heartbeat service";
-        //     goto cleanup;
-        // }
+    // if (isWireless) {
+    // err = lockdownd_start_service(lockdown, "com.apple.heartbeat",
+    //                               &heartbeat_port, &heartbeat_ssl);
 
-        // Start heartbeat client to keep connection alive
-        HeartbeatClientHandle *heartbeat = nullptr;
-        err = heartbeat_connect(provider, &heartbeat);
-
-        if (err) {
-            qDebug() << "Failed to connect to Heartbeat client";
-            goto cleanup;
-        }
-
-        // // After getting the heartbeat port from lockdown
-        // IdeviceHandle *deviceHandle = nullptr;
-
-        // // Then create IdeviceHandle from the socket
-        // err = idevice_new(socket, "heartbeat", &deviceHandle);
-        // if (err) {
-        //     qDebug() << "Failed to create idevice handle";
-        //     goto cleanup;
-        // }
-
-        // // Now use with heartbeat_new
-        // HeartbeatClientHandle *heartbeat = nullptr;
-        // err = heartbeat_new(deviceHandle, &heartbeat);
-        // if (err) {
-        //     qDebug() << "Failed to create Heartbeat client";
-        //     goto cleanup;
-        // }
-
-        qDebug() << "Heartbeat client created successfully";
+    // Start heartbeat client to keep connection alive
+    err = heartbeat_connect(provider, &heartbeat);
+    if (err) {
+        qDebug() << "Failed to start Heartbeat service";
+        goto cleanup;
     }
+    heartbeatThread = new HeartBeatThread(heartbeat);
+    heartbeatThread->start();
+
+    // while (!heartbeatThread->initialCompleted()) {
+    //     sleep(1);
+    // }
+
+    if (err) {
+        qDebug() << "Failed to connect to Heartbeat client";
+        goto cleanup;
+    }
+
+    qDebug() << "Heartbeat client created successfully";
+    // }
 
     // 5. Start AFC service
     uint16_t afc_port;
@@ -539,21 +526,21 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
         goto cleanup;
     }
 
-    // 7. AFC2 is optional
-    uint16_t afc2_port;
-    bool afc2_ssl;
-    err = lockdownd_start_service(lockdown, "com.apple.afc2", &afc2_port,
-                                  &afc2_ssl);
-    if (!err) {
-        err = afc_client_connect(provider, &afc2_client);
-    }
+    // // 7. AFC2 is optional
+    // uint16_t afc2_port;
+    // bool afc2_ssl;
+    // err = lockdownd_start_service(lockdown, "com.apple.afc2", &afc2_port,
+    //                               &afc2_ssl);
+    // if (!err) {
+    //     err = afc_client_connect(provider, &afc2_client);
+    // }
 
     get_device_info_xml(udid.toUtf8().constData(), lockdown, infoXml);
-    infoXml.print(ss, "  "); // "  " for indentation
-    qDebug().noquote() << "--- Full Device Info XML ---"
-                       << QString::fromStdString(ss.str());
+    // infoXml.print(ss, "  "); // "  " for indentation
+    // qDebug().noquote() << "--- Full Device Info XML ---"
+    //                    << QString::fromStdString(ss.str());
 
-    result.device = provider;
+    result.provider = provider;
     result.success = true;
     result.afcClient = afc_client;
     result.afc2Client = afc2_client;

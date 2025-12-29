@@ -23,7 +23,6 @@
 #include "iDescriptor.h"
 #include <QDebug>
 #include <functional>
-#include <libimobiledevice/afc.h>
 #include <mutex>
 #include <optional>
 
@@ -39,9 +38,10 @@ class ServiceManager
 {
 public:
     template <typename T>
-    static T executeOperation(iDescriptorDevice *device,
-                              std::function<T(afc_client_t)> operation,
-                              std::optional<afc_client_t> altAfc = std::nullopt)
+    static T
+    executeOperation(const iDescriptorDevice *device,
+                     std::function<T(AfcClientHandle *)> operation,
+                     std::optional<AfcClientHandle *> altAfc = std::nullopt)
     {
         if (!device || !device->mutex) {
             return T{}; // Return default-constructed value for the type
@@ -61,16 +61,19 @@ public:
         }
 
         // Determine which client to use
-        afc_client_t client = altAfc ? *altAfc : device->afcClient;
+        AfcClientHandle *client = altAfc ? *altAfc : device->afcClient;
+
         return operation(client);
     }
 
     template <typename T>
-    static T executeOperation(iDescriptorDevice *device,
-                              std::function<T()> operation,
-                              std::optional<afc_client_t> altAfc = std::nullopt)
+    static T
+    executeOperation(const iDescriptorDevice *device,
+                     std::function<T()> operation,
+                     std::optional<AfcClientHandle *> altAfc = std::nullopt)
     {
         if (!device || !device->mutex) {
+            qDebug() << "[executeOperation] Device or mutex is null";
             return T{}; // Return default-constructed value for the type
         }
 
@@ -78,21 +81,24 @@ public:
 
         // Double-check device is still valid after acquiring lock
         if (!device->afcClient) {
+            qDebug() << "[executeOperation] AFC client is null";
             return T{};
         }
 
         if (altAfc && !*altAfc) {
             // altAfc was explicitly provided but is null, which is an
             // invalid state.
+            qDebug() << "[executeOperation] altAfc is null";
             return T{};
         }
         return operation();
     }
 
     template <typename T>
-    static T executeOperation(iDescriptorDevice *device,
-                              std::function<T()> operation, T failureValue,
-                              std::optional<afc_client_t> altAfc = std::nullopt)
+    static T
+    executeOperation(const iDescriptorDevice *device,
+                     std::function<T()> operation, T failureValue,
+                     std::optional<AfcClientHandle *> altAfc = std::nullopt)
     {
         if (!device || !device->mutex) {
             return failureValue;
@@ -115,8 +121,9 @@ public:
     }
 
     static void
-    executeOperation(iDescriptorDevice *device, std::function<void()> operation,
-                     std::optional<afc_client_t> altAfc = std::nullopt)
+    executeOperation(const iDescriptorDevice *device,
+                     std::function<void()> operation,
+                     std::optional<AfcClientHandle *> altAfc = std::nullopt)
     {
         if (!device || !device->mutex) {
             return;
@@ -138,84 +145,109 @@ public:
         operation();
     }
 
-    static afc_error_t
-    executeAfcOperation(iDescriptorDevice *device,
-                        std::function<afc_error_t(afc_client_t)> operation,
-                        std::optional<afc_client_t> altAfc = std::nullopt)
+    static IdeviceFfiError *executeAfcOperation(
+        const iDescriptorDevice *device,
+        std::function<IdeviceFfiError *(AfcFileHandle *handle)> operation,
+        AfcFileHandle *handle)
     {
         try {
             if (!device || !device->mutex) {
-                return AFC_E_UNKNOWN_ERROR;
+                // FIXME: we have to free error
+                return new IdeviceFfiError{1, "DEVICE_OR_MUTEX_IS_NULL"};
             }
 
             std::lock_guard<std::recursive_mutex> lock(*device->mutex);
 
             // Double-check device is still valid after acquiring lock
             if (!device->afcClient) {
-                return AFC_E_UNKNOWN_ERROR;
+                return new IdeviceFfiError{1, "AFC_CLIENT_IS_NULL"};
+            }
+
+            if (!handle) {
+                return new IdeviceFfiError{1, "FILE HANDLE IS NULL"};
+            }
+
+            return operation(handle);
+        } catch (const std::exception &e) {
+            qDebug() << "Exception in executeAfcOperation:" << e.what();
+            return new IdeviceFfiError{1, "AFC_CLIENT_IS_NULL"};
+        }
+    }
+
+    static IdeviceFfiError *executeAfcClientOperation(
+        const iDescriptorDevice *device,
+        std::function<IdeviceFfiError *(AfcClientHandle *client)> operation,
+        std::optional<AfcClientHandle *> altAfc = std::nullopt)
+    {
+        try {
+            if (!device || !device->mutex) {
+                // FIXME: we have to free error
+                qDebug()
+                    << "[executeAfcClientOperation] Device or mutex is null";
+                return new IdeviceFfiError{1, "DEVICE_OR_MUTEX_IS_NULL"};
+            }
+
+            std::lock_guard<std::recursive_mutex> lock(*device->mutex);
+
+            // Double-check device is still valid after acquiring lock
+            if (!device->afcClient) {
+                qDebug() << "[executeAfcClientOperation] AFC client is null";
+                return new IdeviceFfiError{1, "AFC_CLIENT_IS_NULL"};
             }
 
             if (altAfc && !*altAfc) {
                 // altAfc was explicitly provided but is null, which is an
                 // invalid state.
-                return AFC_E_INVALID_ARG;
+                qDebug() << "[executeAfcClientOperation] altAfc is null";
+                return new IdeviceFfiError{1, "ALT_AFC_CLIENT_IS_NULL"};
             }
 
             // Determine which client to use
-            afc_client_t client = altAfc ? *altAfc : device->afcClient;
+            AfcClientHandle *client = altAfc ? *altAfc : device->afcClient;
             return operation(client);
         } catch (const std::exception &e) {
             qDebug() << "Exception in executeAfcOperation:" << e.what();
-            return AFC_E_UNKNOWN_ERROR;
+            return new IdeviceFfiError{1, "AFC_CLIENT_IS_NULL"};
         }
     }
 
     // Specific AFC operation wrappers
-    static afc_error_t
-    safeAfcReadDirectory(iDescriptorDevice *device, const char *path,
-                         char ***dirs,
-                         std::optional<afc_client_t> altAfc = std::nullopt);
-    static afc_error_t
-    safeAfcGetFileInfo(iDescriptorDevice *device, const char *path,
-                       char ***info,
-                       std::optional<afc_client_t> altAfc = std::nullopt);
+    static IdeviceFfiError *safeAfcReadDirectory(
+        const iDescriptorDevice *device, const char *path, char ***dirs,
+        std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
-    static afc_error_t
-    safeAfcGetFileInfoPlist(iDescriptorDevice *device, const char *path,
-                            plist_t *info,
-                            std::optional<afc_client_t> altAfc = std::nullopt);
+    static IdeviceFfiError *
+    safeAfcGetFileInfo(const iDescriptorDevice *device, const char *path,
+                       AfcFileInfo *info,
+                       std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
-    static afc_error_t
-    safeAfcFileOpen(iDescriptorDevice *device, const char *path,
-                    afc_file_mode_t mode, uint64_t *handle,
-                    std::optional<afc_client_t> altAfc = std::nullopt);
-    static afc_error_t
-    safeAfcFileRead(iDescriptorDevice *device, uint64_t handle, char *data,
-                    uint32_t length, uint32_t *bytes_read,
-                    std::optional<afc_client_t> altAfc = std::nullopt);
-    static afc_error_t
-    safeAfcFileWrite(iDescriptorDevice *device, uint64_t handle,
-                     const char *data, uint32_t length, uint32_t *bytes_written,
-                     std::optional<afc_client_t> altAfc = std::nullopt);
-    static afc_error_t
-    safeAfcFileClose(iDescriptorDevice *device, uint64_t handle,
-                     std::optional<afc_client_t> altAfc = std::nullopt);
-    static afc_error_t
-    safeAfcFileSeek(iDescriptorDevice *device, uint64_t handle, int64_t offset,
-                    int whence,
-                    std::optional<afc_client_t> altAfc = std::nullopt);
-    static afc_error_t
-    safeAfcFileTell(iDescriptorDevice *device, uint64_t handle,
-                    uint64_t *position,
-                    std::optional<afc_client_t> altAfc = std::nullopt);
+    static IdeviceFfiError *
+    safeAfcFileOpen(const iDescriptorDevice *device, const char *path,
+                    AfcFopenMode mode, AfcFileHandle **handle,
+                    std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
+    static IdeviceFfiError *safeAfcFileRead(const iDescriptorDevice *device,
+                                            AfcFileHandle *handle,
+                                            uint8_t **data, uintptr_t length,
+                                            size_t *bytes_read);
+    static IdeviceFfiError *safeAfcFileWrite(const iDescriptorDevice *device,
+                                             AfcFileHandle *handle,
+                                             const uint8_t *data,
+                                             uint32_t length);
+    static IdeviceFfiError *safeAfcFileClose(const iDescriptorDevice *device,
+                                             AfcFileHandle *handle);
+    static IdeviceFfiError *safeAfcFileSeek(const iDescriptorDevice *device,
+                                            AfcFileHandle *handle,
+                                            int64_t offset, int whence);
+    static IdeviceFfiError *safeAfcFileTell(const iDescriptorDevice *device,
+                                            AfcFileHandle *handle,
+                                            off_t *position);
     // Utility functions
-    static QByteArray safeReadAfcFileToByteArray(
-        iDescriptorDevice *device, const char *path,
-        std::optional<afc_client_t> altAfc = std::nullopt);
-    static AFCFileTree
-    safeGetFileTree(iDescriptorDevice *device, const std::string &path = "/",
-                    std::optional<afc_client_t> altAfc = std::nullopt);
+    static QByteArray
+    safeReadAfcFileToByteArray(const iDescriptorDevice *device,
+                               const char *path);
+    static AFCFileTree safeGetFileTree(const iDescriptorDevice *device,
+                                       const std::string &path, bool checkDir);
 };
 
 #endif // SERVICEMANAGER_H

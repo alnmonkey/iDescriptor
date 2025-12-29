@@ -42,7 +42,7 @@ private:
     iDescriptorDevice *device;     // Pointer to the iDescriptor device
     DeviceInfoWidget *m_deviceInfoWidget;
     // InstalledAppsWidget *m_installedAppsWidget;
-    // GalleryWidget *m_galleryWidget;
+    GalleryWidget *m_galleryWidget;
     // FileExplorerWidget *m_fileExplorerWidget;
 signals:
 };
