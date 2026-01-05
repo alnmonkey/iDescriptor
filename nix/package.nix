@@ -78,6 +78,9 @@ pkgs.stdenv.mkDerivation rec {
 
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
+    "-DCMAKE_INSTALL_PREFIX=${placeholder "out"}"
+    "-DPACKAGE_MANAGER_MANAGED=ON"
+    "-DPACKAGE_MANAGER_HINT=nix"
   ];
 
   preBuild = ''
