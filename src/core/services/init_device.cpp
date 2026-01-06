@@ -156,7 +156,7 @@ void parseDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d)
 
 DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
                           AfcClientHandle *afcClient,
-                          IdeviceProviderHandle *provider,
+                          DiagnosticsRelay *diagRelay,
                           iDescriptorInitDeviceResult &result)
 {
     pugi::xml_node dict = doc.child("plist").child("dict");
@@ -205,11 +205,12 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     QString q_version = QString::fromStdString(d.productVersion);
     QStringList parts = q_version.split('.');
 
-    int major = (parts.length() > 0) ? parts[0].toInt() : 0;
-    int minor = (parts.length() > 1) ? parts[1].toInt() : 0;
-    int patch = (parts.length() > 2) ? parts[2].toInt() : 0;
+    unsigned int major = (parts.length() > 0) ? parts[0].toInt() : 0;
+    unsigned int minor = (parts.length() > 1) ? parts[1].toInt() : 0;
+    unsigned int patch = (parts.length() > 2) ? parts[2].toInt() : 0;
 
-    d.parsedDeviceVersion = IDEVICE_DEVICE_VERSION(major, minor, patch);
+    d.parsedDeviceVersion =
+        DeviceVersion{.major = major, .minor = minor, .patch = patch};
 
     /*DiskInfo*/
     try {
@@ -241,7 +242,9 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
             // "FSTotalBytes: 63966400512"
             // "FSFreeBytes: 2867101696"
             // "FSBlockSize: 4096"
+            // FIXME: it's too slow on older devices?
             AfcDeviceInfo *info = new AfcDeviceInfo();
+            qDebug() << "afc_get_device_info...";
             IdeviceFfiError *err = afc_get_device_info(afcClient, info);
             if (err) {
                 qDebug() << "AFC get device info error code: " << err->message;
@@ -302,7 +305,7 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
 
     /*BatteryInfo*/
     plist_t diagnostics = nullptr;
-    get_battery_info(provider, diagnostics);
+    get_battery_info(diagRelay, diagnostics);
 
     if (!diagnostics) {
         qDebug() << "Failed to get diagnostics plist.";
@@ -365,6 +368,7 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
 // FIXME:spawn on a new thread?
 //  wireless connections sometimes take more than 10sec to connect
 //  and ofc it freezes the ui
+// TODO:idevice_start_session ?
 iDescriptorInitDeviceResult
 init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
 {
@@ -388,9 +392,13 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
     IdeviceHandle *deviceHandle = nullptr;
     HeartbeatClientHandle *heartbeat = nullptr;
     HeartBeatThread *heartbeatThread = nullptr;
-
+    ImageMounterHandle *image_mounter = nullptr;
+    DiagnosticsRelayClientHandle *diagnostics_relay = nullptr;
+    ScreenshotrClientHandle *screenshotr_client = nullptr;
+    LocationSimulationHandle *location_simulation = nullptr;
     // FIXME: remove debug
     std::stringstream ss;
+    plist_t val = nullptr;
 
     // 1. Connect to usbmuxd
     IdeviceFfiError *err =
@@ -428,8 +436,18 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
             qDebug() << "Failed to create wireless provider";
             goto cleanup;
         }
-        // err = heartbeat_new();
-        // heartbeat_connect
+        err = heartbeat_connect(provider, &heartbeat);
+        if (err) {
+            qDebug() << "Failed to start Heartbeat service";
+            goto cleanup;
+        }
+        heartbeatThread = new HeartBeatThread(heartbeat);
+        heartbeatThread->start();
+
+        while (!heartbeatThread->initialCompleted()) {
+            sleep(1);
+        }
+
     } else {
 
         UsbmuxdDeviceHandle **devices;
@@ -458,17 +476,11 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
         goto cleanup;
     }
 
-    // 4. Connect to lockdown (actual function name)
     err = lockdownd_connect(provider, &lockdown);
     if (err) {
         qDebug() << "Failed to connect to lockdown";
         goto cleanup;
     }
-    // err = idevice_new(socket, "iDescriptor", &deviceHandle);
-    // if (err) {
-    //     qDebug() << "Failed to create idevice handle";
-    //     goto cleanup;
-    // }
 
     err = idevice_provider_get_pairing_file(provider, &pairing_file);
     if (err) {
@@ -482,71 +494,79 @@ init_idescriptor_device(const QString &udid, WirelessInitArgs wirelessArgs)
         goto cleanup;
     }
 
-    uint16_t heartbeat_port;
-    bool heartbeat_ssl;
-    // if (isWireless) {
-    // err = lockdownd_start_service(lockdown, "com.apple.heartbeat",
-    //                               &heartbeat_port, &heartbeat_ssl);
-
-    // Start heartbeat client to keep connection alive
-    err = heartbeat_connect(provider, &heartbeat);
-    if (err) {
-        qDebug() << "Failed to start Heartbeat service";
-        goto cleanup;
-    }
-    heartbeatThread = new HeartBeatThread(heartbeat);
-    heartbeatThread->start();
-
-    // while (!heartbeatThread->initialCompleted()) {
-    //     sleep(1);
-    // }
-
     if (err) {
         qDebug() << "Failed to connect to Heartbeat client";
         goto cleanup;
     }
 
-    qDebug() << "Heartbeat client created successfully";
-    // }
-
-    // 5. Start AFC service
-    uint16_t afc_port;
-    bool afc_ssl;
-    err =
-        lockdownd_start_service(lockdown, "com.apple.afc", &afc_port, &afc_ssl);
-    if (err) {
-        qDebug() << "Failed to start AFC service";
-        goto cleanup;
-    }
-
-    // 6. Create AFC client from provider
     err = afc_client_connect(provider, &afc_client);
     if (err) {
         qDebug() << "Failed to create AFC client";
         goto cleanup;
     }
 
-    // // 7. AFC2 is optional
-    // uint16_t afc2_port;
-    // bool afc2_ssl;
-    // err = lockdownd_start_service(lockdown, "com.apple.afc2", &afc2_port,
-    //                               &afc2_ssl);
-    // if (!err) {
-    //     err = afc_client_connect(provider, &afc2_client);
+    err = image_mounter_connect(provider, &image_mounter);
+    if (err) {
+        qDebug() << "Failed to create Image Mounter client";
+        goto cleanup;
+    }
+
+    err = diagnostics_relay_client_connect(provider, &diagnostics_relay);
+
+    if (err) {
+        qDebug() << "Failed to create Diagnostics Relay client";
+        goto cleanup;
+    }
+
+    // err = screenshotr_connect(provider, &screenshotr_client);
+
+    // if (err) {
+    //     qDebug() << "Failed to create Screenshotr client";
+    //     goto cleanup;
     // }
 
+    err = afc2_client_connect(provider, &afc2_client);
+    if (err) {
+        qDebug() << "Failed to create AFC2 client";
+        // dont cleanup here, afc2 is optional
+    }
+
+    // FIXME: will probably not work on iOS 17 and above
+    // requires dev image disk
+    // err = location_simulation_connect(provider, &location_simulation);
+    // if (err) {
+    //     qDebug() << "Failed to create Location Simulation client";
+    //     goto cleanup;
+    // }
     get_device_info_xml(udid.toUtf8().constData(), lockdown, infoXml);
     // infoXml.print(ss, "  "); // "  " for indentation
     // qDebug().noquote() << "--- Full Device Info XML ---"
     //                    << QString::fromStdString(ss.str());
+
+    //     Received plist: {
+    // Domain: "com.apple.mobile.wireless_lockdown",
+    // Key: "EnableWifiConnections",
+    // Request: "GetValue",
+    // Value: true
+    // }
+    lockdownd_get_value(lockdown, "EnableWifiConnections",
+                        "com.apple.mobile.wireless_lockdown", &val);
+    if (val)
+        plist_print(val);
 
     result.provider = provider;
     result.success = true;
     result.afcClient = afc_client;
     result.afc2Client = afc2_client;
     result.lockdown = lockdown;
+    result.imageMounter = image_mounter;
+    result.screenshotrClient = screenshotr_client;
+    result.diagRelay = std::make_shared<DiagnosticsRelay>(
+        DiagnosticsRelay::adopt(diagnostics_relay));
+    result.locationSimulation = location_simulation;
     AppContext::sharedInstance()->cachePairingFile(udid, pairing_file);
-    fullDeviceInfo(infoXml, afc_client, provider, result);
+    result.deviceInfo.isWireless = isWireless;
+    fullDeviceInfo(infoXml, afc_client, result.diagRelay.get(), result);
 
 cleanup:
     // Cleanup on error

@@ -23,27 +23,10 @@
 #include <string>
 
 // FIXME: return bool
-void get_battery_info(IdeviceProviderHandle *provider, plist_t &diagnostics)
+void get_battery_info(DiagnosticsRelay *diag_client, plist_t &diagnostics)
 {
-    // 1. Connect to the diagnostics_relay service using the raw C function.
-    DiagnosticsRelayClientHandle *client_handle = nullptr;
-    IdeviceFfiError *err =
-        ::diagnostics_relay_client_connect(provider, &client_handle);
-
-    if (err) {
-        qDebug() << "Failed to create diagnostics relay client:"
-                 << err->message;
-        idevice_error_free(err);
-        return;
-    }
-
-    // 2. Adopt the raw handle into the C++ RAII wrapper.
-    // The client will now be automatically freed when it goes out of scope.
-    auto diagnostics_client =
-        IdeviceFFI::DiagnosticsRelay::adopt(client_handle);
-
-    // 3. Query IORegistry for battery info.
-    auto ioreg_result = diagnostics_client.ioregistry(
+    qDebug() << "Fetching battery info via DiagnosticsRelay";
+    auto ioreg_result = diag_client->ioregistry(
         IdeviceFFI::None,                                // current_plane
         IdeviceFFI::None,                                // entry_name
         IdeviceFFI::Some(std::string("IOPMPowerSource")) // entry_class
@@ -55,10 +38,8 @@ void get_battery_info(IdeviceProviderHandle *provider, plist_t &diagnostics)
         return;
     }
 
-    // 4. Unwrap the result and handle the optional plist.
     auto plist_opt = std::move(ioreg_result).unwrap();
     if (plist_opt.is_some()) {
-        // The caller of get_battery_info is responsible for freeing this plist.
         diagnostics = std::move(plist_opt).unwrap();
     }
 }

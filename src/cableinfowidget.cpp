@@ -19,6 +19,7 @@
 
 #include "cableinfowidget.h"
 #include "appcontext.h"
+#include "servicemanager.h"
 #include <QApplication>
 #include <QDebug>
 #include <QGroupBox>
@@ -74,7 +75,7 @@ void CableInfoWidget::setupUI()
 
 void CableInfoWidget::initCableInfo()
 {
-    if (!m_device || !m_device->device) {
+    if (!m_device) {
         m_statusLabel->setText("Something went wrong (no device ?)");
         m_statusLabel->setStyleSheet(
             "QLabel { color: #dc3545; font-size: 18px; font-weight: bold; }");
@@ -82,7 +83,7 @@ void CableInfoWidget::initCableInfo()
     }
 
     m_statusLabel->setText("Analyzing cable...");
-    get_cable_info(m_device->device, m_response);
+    ServiceManager::getCableInfo(m_device, m_response);
 
     analyzeCableInfo();
     updateUI();
@@ -97,9 +98,8 @@ void CableInfoWidget::analyzeCableInfo()
     if (!m_response) {
         return;
     }
-
-    PlistNavigator nav(m_response);
-    PlistNavigator ioreg = nav["IORegistry"];
+    plist_print(m_response);
+    PlistNavigator ioreg(m_response);
 
     if (!ioreg.valid()) {
         return;

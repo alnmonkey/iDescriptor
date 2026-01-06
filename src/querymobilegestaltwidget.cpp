@@ -22,12 +22,22 @@
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMessageBox>
 #include <sstream>
 
 QueryMobileGestaltWidget::QueryMobileGestaltWidget(iDescriptorDevice *device,
                                                    QWidget *parent)
     : QWidget(parent), m_device(device)
 {
+    // todo: not tested on iOS 17,18 but it's deprecated on iOS 26
+    // i am assuming it won't work
+    if (m_device->deviceInfo.parsedDeviceVersion.major > 16) {
+        QMessageBox::warning(this, "Unsupported iOS Version",
+                             "Apple deprecated this protocol for Devices "
+                             "running iOS 17 or later");
+        close();
+        return;
+    }
     setupUI();
     populateKeys();
 }
@@ -1135,32 +1145,34 @@ QueryMobileGestaltWidget::queryMobileGestalt(const QStringList &keys)
 {
     char *xml = nullptr;
     uint32_t xmlLength = 0;
-    bool res = query_mobile_gestalt(m_device, keys, xmlLength, xml);
-    if (!res) {
+
+    std::vector<char *> keys_vector;
+    for (const QString &key : keys) {
+        keys_vector.push_back(key.toUtf8().data());
+    }
+
+    auto res = m_device->diagRelay->mobilegestalt(keys_vector);
+
+    if (!res.is_ok()) {
         qDebug() << "MobileGestalt query failed.";
         return {};
     }
-    pugi::xml_document infoXml;
-    pugi::xml_parse_result result = infoXml.load_string(xml);
-    if (xml)
-        free(xml);
 
-    if (!result) {
-        qDebug() << "Failed to parse XML:" << result.description();
-        return {};
-    }
-    pugi::xml_node dictNode =
-        infoXml.child("plist").child("dict").child("key").next_sibling("dict");
-    if (!dictNode) {
-        qDebug() << "No MobileGestalt <dict> node found in XML.";
-        return {};
-    }
+    plist_t res_plist_raw = res.unwrap().unwrap();
+    // TODO: safety ?
+    auto res_plist = PlistNavigator(res_plist_raw)["MobileGestalt"];
+    plist_print(res_plist_raw);
     QMap<QString, QVariant> results;
     for (const QString &key : keys) {
-        std::string value = safeGetXML(key.toStdString().c_str(), dictNode);
-        if (!value.empty()) {
-            results.insert(key, QString::fromStdString(value));
+        // Use the new toQVariant method to get the value
+        QVariant value = res_plist[key.toStdString()].toQVariant();
+        qDebug() << "Key:" << key
+                 << "Value:" << value; // Print QVariant directly
+        if (!value.isNull()) { // Only insert if the QVariant is valid (key
+                               // exists and value could be parsed)
+            results.insert(key, value);
         }
     }
+    plist_free(res_plist_raw);
     return results;
 }

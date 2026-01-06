@@ -47,7 +47,7 @@ class AfcExplorerWidget : public QWidget
 public:
     explicit AfcExplorerWidget(iDescriptorDevice *device = nullptr,
                                bool favEnabled = false,
-                               afc_client_t afcClient = nullptr,
+                               AfcClientHandle *afcClient = nullptr,
                                QString root = "/", QWidget *parent = nullptr);
     void navigateToPath(const QString &path);
     void goHome();
@@ -109,9 +109,9 @@ private:
     void setupContextMenu();
     void exportSelectedFile(QListWidgetItem *item);
     void exportSelectedFile(QListWidgetItem *item, const QString &directory);
-    int exportFileToPath(afc_client_t afc, const char *device_path,
+    int exportFileToPath(AfcClientHandle *afc, const char *device_path,
                          const char *local_path);
-    int importFileToDevice(afc_client_t afc, const char *device_path,
+    int importFileToDevice(AfcClientHandle *afc, const char *device_path,
                            const char *local_path);
     void updateNavStyles();
     void updateButtonStates();

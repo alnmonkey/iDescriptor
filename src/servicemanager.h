@@ -248,6 +248,17 @@ public:
                                const char *path);
     static AFCFileTree safeGetFileTree(const iDescriptorDevice *device,
                                        const std::string &path, bool checkDir);
+    static MountedImageInfo getMountedImage(const iDescriptorDevice *device);
+    static IdeviceFfiError *mountImage(const iDescriptorDevice *device,
+                                       const char *image_file,
+                                       const char *signature_file);
+    static void getCableInfo(const iDescriptorDevice *device,
+                             plist_t &response);
+
+    static IdeviceFfiError *install_IPA(const iDescriptorDevice *device,
+                                        const char *filePath,
+                                        const char *fileName);
+    static bool enableWirelessConnections(const iDescriptorDevice *device);
 };
 
 #endif // SERVICEMANAGER_H

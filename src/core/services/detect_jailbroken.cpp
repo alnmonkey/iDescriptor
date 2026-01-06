@@ -19,25 +19,16 @@
 
 #include "../../iDescriptor.h"
 
-// char *possible_jailbreak_paths[] = {
-//     "/Applications/Cydia.app",
-//     "/Library/MobileSubstrate/MobileSubstrate.dylib",
-//     "/bin/bash",
-//     "/usr/sbin/sshd",
-//     "/etc/apt",
-//     NULL
-// };
 #include <string>
 
 bool detect_jailbroken(AfcClientHandle *afc)
 {
     char **dirs = NULL;
     size_t count = 0;
-    bool res = false;
     if (!afc_list_directory(afc, (std::string(POSSIBLE_ROOT) + "bin").c_str(),
                             &dirs, &count)) {
-        free(dirs);
+        free_directory_listing(dirs, count);
     }
 
-    return res > 0;
+    return count > 0;
 }

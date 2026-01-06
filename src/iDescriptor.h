@@ -66,6 +66,10 @@
     ((((maj) & 0xFF) << 16) | (((min) & 0xFF) << 8) | ((patch) & 0xFF))
 #include "devicemonitor.h"
 
+#define DeviceLockedMountErrorCode -21
+#define NotFoundErrorCode -14
+#define DISK_IMAGE_TYPE_DEVELOPER "Developer"
+
 struct BatteryInfo {
     QString health;
     uint64_t cycleCount;
@@ -102,6 +106,12 @@ struct DiskInfo {
     uint64_t totalDataCapacity;
     uint64_t totalSystemCapacity;
     uint64_t totalDataAvailable;
+};
+
+struct DeviceVersion {
+    unsigned int major;
+    unsigned int minor;
+    unsigned int patch;
 };
 
 // Carefull not all the vars are initialized in init_device.cpp
@@ -180,8 +190,9 @@ struct DeviceInfo {
     std::string marketingName;
     std::string regionRaw;
     std::string region;
-    unsigned int parsedDeviceVersion;
+    DeviceVersion parsedDeviceVersion;
     std::string wifiMacAddress;
+    bool isWireless = false;
 };
 
 struct iDescriptorDevice {
@@ -192,8 +203,11 @@ struct iDescriptorDevice {
     AfcClientHandle *afcClient;
     AfcClientHandle *afc2Client;
     LockdowndClientHandle *lockdown;
-    bool is_iPhone;
     std::recursive_mutex *mutex;
+    ImageMounterHandle *imageMounter;
+    std::shared_ptr<DiagnosticsRelay> diagRelay;
+    ScreenshotrClientHandle *screenshotrClient;
+    LocationSimulationHandle *locationSimulation;
 };
 
 struct iDescriptorInitDeviceResult {
@@ -204,6 +218,10 @@ struct iDescriptorInitDeviceResult {
     AfcClientHandle *afcClient;
     AfcClientHandle *afc2Client;
     LockdowndClientHandle *lockdown;
+    ImageMounterHandle *imageMounter;
+    std::shared_ptr<DiagnosticsRelay> diagRelay;
+    ScreenshotrClientHandle *screenshotrClient;
+    LocationSimulationHandle *locationSimulation;
 };
 // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 // struct iDescriptorRecoveryDevice {
@@ -256,6 +274,25 @@ public:
         return PlistNavigator(next);
     }
 
+    PlistNavigator operator[](const std::string &key)
+    {
+        if (!current_node || plist_get_node_type(current_node) != PLIST_DICT) {
+            return PlistNavigator(nullptr);
+        }
+        plist_t next = plist_dict_get_item(current_node, key.c_str());
+        return PlistNavigator(next);
+    }
+
+    PlistNavigator operator[](const QString &key)
+    {
+        if (!current_node || plist_get_node_type(current_node) != PLIST_DICT) {
+            return PlistNavigator(nullptr);
+        }
+        plist_t next =
+            plist_dict_get_item(current_node, key.toUtf8().constData());
+        return PlistNavigator(next);
+    }
+
     // array index access
     PlistNavigator operator[](int index)
     {
@@ -303,6 +340,47 @@ public:
         return result;
     }
     plist_t getNode() const { return current_node; }
+
+    QVariant toQVariant() const
+    {
+        if (!current_node) {
+            return QVariant();
+        }
+        // TODO: free
+        plist_type type = plist_get_node_type(current_node);
+        switch (type) {
+        case PLIST_BOOLEAN: {
+            uint8_t val;
+            plist_get_bool_val(current_node, &val);
+            return QVariant(static_cast<bool>(val));
+        }
+        case PLIST_UINT: {
+            uint64_t val;
+            plist_get_uint_val(current_node, &val);
+            return QVariant(static_cast<qulonglong>(val));
+        }
+        case PLIST_STRING: {
+            char *val = nullptr;
+            plist_get_string_val(current_node, &val);
+            QString str_val = QString::fromUtf8(val);
+            if (val)
+                free(val);
+            return QVariant(str_val);
+        }
+        case PLIST_REAL: {
+            double val;
+            plist_get_real_val(current_node, &val);
+            return QVariant(val);
+        }
+        case PLIST_DICT:
+        case PLIST_ARRAY:
+        case PLIST_DATA:
+        case PLIST_DATE:
+        default: {
+            return QVariant("Unsupported Type");
+        }
+        }
+    }
 };
 
 // afc_error_t safe_afc_read_directory(afc_client_t afcClient, idevice_t device,
@@ -351,33 +429,41 @@ init_idescriptor_device(const QString &udid,
 
 // TakeScreenshotResult take_screenshot(screenshotr_client_t shotr);
 
-// mobile_image_mounter_error_t mount_dev_image(idevice_t device,
-//                                              unsigned int device_version,
-//                                              const char *image_dir_path);
-// struct GetMountedImageResult {
-//     bool success;
-//     std::string sig;
-//     std::string message;
-// };
+IdeviceFfiError *mount_dev_image(const iDescriptorDevice *device,
+                                 const char *image_file,
+                                 const char *signature_file);
 
-// plist_t _get_mounted_image(const char *udid);
+struct MountedImageInfo {
+    IdeviceFfiError *err;
+    uint8_t *signature;
+    size_t signature_len;
+};
+
+struct MountedImageResult {
+    bool success;
+    IdeviceFfiError *err;
+};
+
+MountedImageInfo _get_mounted_image(const iDescriptorDevice *device);
+
+void mounted_image_info_free(MountedImageInfo &info);
 
 // bool restart(std::string udid);
 
-// enum class ImageCompatibility {
-//     Compatible,      // Exact match or known compatible version
-//     MaybeCompatible, // Major version matches but minor doesn't
-//     NotCompatible    // Not compatible
-// };
+enum class ImageCompatibility {
+    Compatible,      // Exact match or known compatible version
+    MaybeCompatible, // Major version matches but minor doesn't
+    NotCompatible    // Not compatible
+};
 
-// struct ImageInfo {
-//     QString version;
-//     QString dmgPath;
-//     QString sigPath;
-//     ImageCompatibility compatibility = ImageCompatibility::NotCompatible;
-//     bool isDownloaded = false;
-//     bool isMounted = false;
-// };
+struct ImageInfo {
+    QString version;
+    QString dmgPath;
+    QString sigPath;
+    ImageCompatibility compatibility = ImageCompatibility::NotCompatible;
+    bool isDownloaded = false;
+    bool isMounted = false;
+};
 
 // /**
 //  * @brief Compare two iPhone product types to determine which is newer
@@ -428,19 +514,18 @@ bool is_product_type_newer(const std::string &productType,
 
 // std::string safeGetXML(const char *key, pugi::xml_node dict);
 
-void get_battery_info(IdeviceProviderHandle *provider, plist_t &diagnostics);
+void get_battery_info(DiagnosticsRelay *diagRelay, plist_t &diagnostics);
 
 // void parseOldDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d);
 // void parseDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d);
 
-// void fetchAppIconFromApple(QNetworkAccessManager *manager,
-//                            const QString &bundleId,
-//                            std::function<void(const QPixmap &)>
-//                            callback);
+void fetchAppIconFromApple(QNetworkAccessManager *manager,
+                           const QString &bundleId,
+                           std::function<void(const QPixmap &)> callback);
 
 // afc_error_t afc2_client_new(idevice_t device, afc_client_t *afc);
 
-// void get_cable_info(idevice_t device, plist_t &response);
+void _get_cable_info(const iDescriptorDevice *device, plist_t &response);
 
 struct NetworkDevice {
     QString name;                           // service name
@@ -462,8 +547,8 @@ QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
 
 bool isDarkMode();
 
-// instproxy_error_t install_IPA(idevice_t device, afc_client_t afc,
-//                               const char *filePath);
+IdeviceFfiError *_install_IPA(const iDescriptorDevice *device,
+                              const char *filePath, const char *ipaName);
 
 // Helper struct for semantic version comparison
 struct AppVersion {
@@ -542,4 +627,46 @@ inline QJsonObject getVersionedConfig(const QJsonObject &rootObj)
         }
     }
     return QJsonObject();
+}
+
+inline void free_directory_listing(char **entries, size_t count)
+{
+    if (!entries)
+        return;
+    for (size_t i = 0; i < count; i++) {
+        if (entries[i]) {
+            free(entries[i]);
+        }
+    }
+    free(entries);
+}
+
+inline int read_file(const char *filename, uint8_t **data, size_t *length)
+{
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        perror("Failed to open file");
+        return 0;
+    }
+
+    fseek(file, 0, SEEK_END);
+    *length = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    *data = (uint8_t *)malloc(*length);
+    if (!*data) {
+        perror("Failed to allocate memory");
+        fclose(file);
+        return 0;
+    }
+
+    if (fread(*data, 1, *length, file) != *length) {
+        perror("Failed to read file");
+        free(*data);
+        fclose(file);
+        return 0;
+    }
+
+    fclose(file);
+    return 1;
 }

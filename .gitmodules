@@ -13,3 +13,6 @@
 [submodule "lib/idevice-rs"]
 	path = lib/idevice-rs
 	url = https://github.com/jkcoxson/idevice.git
+[submodule "lib/ztoast"]
+	path = lib/ztoast
+	url = https://github.com/niklashenning/qt-toast.git

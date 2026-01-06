@@ -78,7 +78,7 @@ public:
 
     QUuid startExport(iDescriptorDevice *device, const QList<ExportItem> &items,
                       const QString &destinationPath,
-                      std::optional<afc_client_t> altAfc = std::nullopt);
+                      std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
     void cancelExport(const QUuid &jobId);
 
@@ -113,7 +113,7 @@ private:
         iDescriptorDevice *device = nullptr;
         QList<ExportItem> items;
         QString destinationPath;
-        std::optional<afc_client_t> altAfc;
+        std::optional<AfcClientHandle *> altAfc;
         std::atomic<bool> cancelRequested{false};
         QFuture<void> future;
         QFutureWatcher<void> *watcher = nullptr;
@@ -124,7 +124,7 @@ private:
     ExportResult exportSingleItem(iDescriptorDevice *device,
                                   const ExportItem &item,
                                   const QString &destinationDir,
-                                  std::optional<afc_client_t> altAfc,
+                                  std::optional<AfcClientHandle *> altAfc,
                                   std::atomic<bool> &cancelRequested,
                                   const QUuid &jobId);
 

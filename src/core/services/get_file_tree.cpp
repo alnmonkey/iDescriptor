@@ -74,7 +74,8 @@ AFCFileTree get_file_tree(const iDescriptorDevice *device, bool checkDir,
 
         if (info_err) {
             qDebug() << "Failed to get file info for:" << fullPath.c_str()
-                     << "Error:" << info_err->message;
+                     << "Error:" << info_err->message
+                     << "Code:" << info_err->code;
         }
 
         bool isDir = false;
@@ -86,19 +87,15 @@ AFCFileTree get_file_tree(const iDescriptorDevice *device, bool checkDir,
             } else if (strcmp(info.st_ifmt, "S_IFLNK") == 0) {
                 // Check if symlink points to a directory
                 char **dir_contents = nullptr;
+                // FIXME: recursively call safeAfcGetFileInfo to figure out if
+                // it's a dir
                 IdeviceFfiError *link_err =
                     ServiceManager::safeAfcReadDirectory(
                         device, fullPath.c_str(), &dir_contents);
 
                 if (!link_err) {
                     isDir = true;
-                    // if (dir_contents) {
-                    //     // FIXME: is this ok ?
-                    //     for (int j = 0; dir_contents[j]; j++) {
-                    //         free(dir_contents[j]);
-                    //     }
-                    //     free(dir_contents);
-                    // }
+                    free_directory_listing(dir_contents, count);
                 }
 
                 if (link_err) {
@@ -106,8 +103,7 @@ AFCFileTree get_file_tree(const iDescriptorDevice *device, bool checkDir,
                 }
             }
 
-            // Free file info
-            // afc_file_info_free(&info);
+            afc_file_info_free(&info);
         }
 
         if (info_err) {
@@ -119,10 +115,7 @@ AFCFileTree get_file_tree(const iDescriptorDevice *device, bool checkDir,
 
     // Free the directory list
     if (dirs) {
-        // for (int i = 0; dirs[i]; i++) {
-        //     free(dirs[i]);
-        // }
-        // free(dirs);
+        free_directory_listing(dirs, count);
     }
 
     result.success = true;

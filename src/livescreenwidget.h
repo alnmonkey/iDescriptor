@@ -24,8 +24,6 @@
 #include <QLabel>
 #include <QTimer>
 #include <QWidget>
-#include <libimobiledevice/libimobiledevice.h>
-#include <libimobiledevice/screenshotr.h>
 
 class LiveScreenWidget : public QWidget
 {
@@ -44,7 +42,6 @@ private:
     QTimer *m_timer;
     QLabel *m_imageLabel;
     QLabel *m_statusLabel;
-    screenshotr_client_t m_shotrClient;
     int m_fps;
 
 private:

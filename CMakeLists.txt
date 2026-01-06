@@ -96,7 +96,7 @@ add_custom_command(
     OUTPUT ${IDEVICE_RS_LIB_PATH}
     COMMAND ${CARGO_EXECUTABLE} build --manifest-path ${IDEVICE_RS_SOURCE_DIR}/Cargo.toml
     WORKING_DIRECTORY ${IDEVICE_RS_SOURCE_DIR}
-    COMMENT "Building idevice-rs FFI library"
+    COMMENT "Building idevice-rs FFI libraryy"
     VERBATIM
 )
 
@@ -204,84 +204,106 @@ pkg_check_modules(PUGIXML REQUIRED IMPORTED_TARGET pugixml)
 
 
 file(GLOB PROJECT_SOURCES
-# src/*.cpp
-# src/core/helpers/*.cpp
-# src/core/services/*.cpp
-# src/*.h
-src/mainwindow.cpp
-src/mainwindow.h
-src/devicemonitor.h
-src/main.cpp
-src/core/services/init_device.cpp
-src/core/services/get_battery_info.cpp
-src/core/services/detect_jailbroken.cpp
-src/appcontext.cpp
-src/appcontext.h
-src/devicedatabase.cpp
-src/devicedatabase.h
-src/core/helpers/compare_product_type.cpp
-src/welcomewidget.cpp
-src/welcomewidget.h
-src/ztabwidget.cpp
-src/ztabwidget.h
-src/devicemanagerwidget.cpp
-src/devicemanagerwidget.h
-src/responsiveqlabel.cpp
-src/responsiveqlabel.h
-src/devicesidebarwidget.cpp
-src/devicesidebarwidget.h
-src/devicemenuwidget.cpp
-src/devicemenuwidget.h
-src/deviceinfowidget.cpp
-src/deviceinfowidget.h
-src/batterywidget.cpp
-src/batterywidget.h
-src/diskusagewidget.cpp
-src/diskusagewidget.h
+src/*.cpp
+src/core/helpers/*.cpp
+src/core/services/*.cpp
+src/*.h
+# src/mainwindow.cpp
+# src/mainwindow.h
+# src/devicemonitor.h
+# src/main.cpp
+# src/core/services/init_device.cpp
+# src/core/services/get_battery_info.cpp
+# src/core/services/detect_jailbroken.cpp
+# src/appcontext.cpp
+# src/appcontext.h
+# src/devicedatabase.cpp
+# src/devicedatabase.h
+# src/core/helpers/compare_product_type.cpp
+# src/welcomewidget.cpp
+# src/welcomewidget.h
+# src/ztabwidget.cpp
+# src/ztabwidget.h
+# src/devicemanagerwidget.cpp
+# src/devicemanagerwidget.h
+# src/responsiveqlabel.cpp
+# src/responsiveqlabel.h
+# src/devicesidebarwidget.cpp
+# src/devicesidebarwidget.h
+# src/devicemenuwidget.cpp
+# src/devicemenuwidget.h
+# src/deviceinfowidget.cpp
+# src/deviceinfowidget.h
+# src/batterywidget.cpp
+# src/batterywidget.h
+# src/diskusagewidget.cpp
+# src/diskusagewidget.h
+# # src/deviceimagewidget.cpp
+# # src/deviceimagewidget.h
+# src/iDescriptor-ui.h
+# src/infolabel.cpp
+# src/infolabel.h
+# src/privateinfolabel.cpp
+# src/privateinfolabel.h
+# src/qprocessindicator.cpp
+# src/qprocessindicator.h
+# src/diagnosewidget.cpp
+# src/diagnosewidget.h
+# src/core/services/get-device-info.cpp
 # src/deviceimagewidget.cpp
 # src/deviceimagewidget.h
-src/iDescriptor-ui.h
-src/infolabel.cpp
-src/infolabel.h
-src/privateinfolabel.cpp
-src/privateinfolabel.h
-src/qprocessindicator.cpp
-src/qprocessindicator.h
-src/diagnosewidget.cpp
-src/diagnosewidget.h
-src/core/services/get-device-info.cpp
-src/deviceimagewidget.cpp
-src/deviceimagewidget.h
-src/settingsmanager.cpp
-src/settingsmanager.h
-# src/fileexplorerwidget.cpp
-# src/fileexplorerwidget.h
-src/settingswidget.cpp
-src/settingswidget.h
-src/ifusemanager.cpp
-src/ifusemanager.h
-src/ifusediskunmountbutton.cpp
-src/ifusediskunmountbutton.h
-src/core/services/get_battery_info.cpp
-src/networkdeviceswidget.cpp
-src/core/services/avahi/avahi_service.h
-src/core/services/avahi/avahi_service.cpp
-src/networkdevicemanager.cpp
-src/networkdevicemanager.h
-src/*.ui
+# src/settingsmanager.cpp
+# src/settingsmanager.h
+# # src/fileexplorerwidget.cpp
+# # src/fileexplorerwidget.h
+# src/settingswidget.cpp
+# src/settingswidget.h
+# src/ifusemanager.cpp
+# src/ifusemanager.h
+# src/ifusediskunmountbutton.cpp
+# src/ifusediskunmountbutton.h
+# src/core/services/get_battery_info.cpp
+# src/networkdeviceswidget.cpp
+# src/core/services/avahi/avahi_service.h
+# src/core/services/avahi/avahi_service.cpp
+# src/networkdevicemanager.cpp
+# src/networkdevicemanager.h
+# src/*.ui
 resources.qrc
-src/gallerywidget.cpp
-src/gallerywidget.h
-src/photomodel.cpp
-src/photomodel.h
-src/core/services/load_heic.cpp
-src/servicemanager.cpp
-src/servicemanager.h
-src/core/services/get_file_tree.cpp
-src/core/helpers/read_afc_file_to_byte_array.cpp
-src/heartbeat.h
-src/zloadingwidget.h
-src/zloadingwidget.cpp
+# src/gallerywidget.cpp
+# src/gallerywidget.h
+# src/photomodel.cpp
+# src/photomodel.h
+# src/core/services/load_heic.cpp
+# src/servicemanager.cpp
+# src/servicemanager.h
+# src/core/services/get_file_tree.cpp
+# src/core/helpers/read_afc_file_to_byte_array.cpp
+# src/heartbeat.h
+# src/zloadingwidget.h
+# src/zloadingwidget.cpp
+# src/mediapreviewdialog.h
+# src/mediapreviewdialog.cpp
+# src/mediastreamer.h
+# src/mediastreamer.cpp
+# src/mediastreamermanager.h
+# src/mediastreamermanager.cpp
+# src/querymobilegestaltwidget.h
+# src/querymobilegestaltwidget.cpp
+# src/core/services/mount_dev_image.cpp
+# src/core/services/get_mounted_image.cpp
+# src/devdiskimageswidget.h
+# src/devdiskimageswidget.cpp
+# src/devdiskmanager.h
+# src/devdiskmanager.cpp
+# src/core/helpers/mounted_image_info_free.cpp
+# src/core/services/get_cable_info.cpp
+# src/cableinfowidget.h
+# src/cableinfowidget.cpp
+# src/livescreenwidget.h
+# src/livescreenwidget.cpp
+# src/virtuallocationwidget.h
+# src/virtuallocationwidget.cpp
 )
 
 if(APPLE)
@@ -290,9 +312,7 @@ if(APPLE)
         src/core/services/dnssd/dnssd_service.cpp
         src/core/services/dnssd/dnssd_service.h
     )
-endif()
-
-if (WIN32)
+elseif (WIN32)
     list(APPEND PROJECT_SOURCES
        src/core/services/dnssd/dnssd_service.cpp
         src/core/services/dnssd/dnssd_service.h
@@ -300,14 +320,12 @@ if (WIN32)
 
     file(GLOB WINDOWS_PLATFORM_SOURCES src/platform/windows/*.cpp src/platform/windows/*.h)
     list(APPEND PROJECT_SOURCES ${WINDOWS_PLATFORM_SOURCES})
+else()
+    list(APPEND PROJECT_SOURCES
+        src/core/services/avahi/avahi_service.cpp
+        src/core/services/avahi/avahi_service.h
+    )
 endif()
-
-# if(LINUX)
-#     list(APPEND PROJECT_SOURCES
-#         src/core/services/avahi/avahi_service.cpp
-#         src/core/services/avahi/avahi_service.h
-#     )
-# endif()
 
 if (NOT ENABLE_RECOVERY_DEVICE_SUPPORT)
     list(REMOVE_ITEM PROJECT_SOURCES
@@ -323,6 +341,7 @@ endif()
 add_subdirectory(lib/airplay)
 add_subdirectory(lib/ipatool-go)
 add_subdirectory(lib/zupdater)
+add_subdirectory(lib/ztoast)
 
 if (WIN32) 
     set(NO_DEPLOY_WIN_IFUSE ON) 
@@ -392,6 +411,7 @@ target_link_libraries(iDescriptor PRIVATE
     airplay
     ipatool-go
     ZUpdater
+    ZToast
     ${IDEVICE_IMPLEMENTATION_LIBS}
 )
 

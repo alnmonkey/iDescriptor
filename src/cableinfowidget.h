@@ -29,7 +29,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <plist/plist.h>
 
 class CableInfoWidget : public QWidget
 {

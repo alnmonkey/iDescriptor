@@ -86,31 +86,37 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
 
     AfcFileHandle *fileHandle = nullptr;
 
-    IdeviceFfiError *err =
+    IdeviceFfiError *err_open = // Use distinct variable name for clarity
         ServiceManager::safeAfcFileOpen(device, filePath.toUtf8().constData(),
                                         AfcFopenMode::AfcRdOnly, &fileHandle);
 
-    if (err || fileHandle == nullptr) {
+    if (err_open || fileHandle == nullptr) {
         qWarning() << "Failed to open video file for thumbnail:" << filePath;
-        if (err) {
-            // idevice_error_free(err);
+        if (err_open) {
+            idevice_error_free(err_open);
         }
         return {};
     }
 
     // Get file size
-    AfcFileInfo *info = nullptr;
-    err = ServiceManager::safeAfcGetFileInfo(
-        device, filePath.toUtf8().constData(), info);
+    AfcFileInfo info = {};
+    IdeviceFfiError
+        *err_info = // Use distinct variable name for the error from GetFileInfo
+        ServiceManager::safeAfcGetFileInfo(
+            device, filePath.toUtf8().constData(), &info);
 
     uint64_t fileSize = 0;
-    if (!err && info) {
-        fileSize = info->size;
-        // afc_file_info_free(info);
-        if (err) {
-            // idevice_error_free(err);
-        }
+    if (err_info) {
+        qWarning() << "Failed to get file info for thumbnail:" << filePath
+                   << "Error:" << err_info->message;
+        idevice_error_free(err_info);
+        ServiceManager::safeAfcFileClose(device, fileHandle);
+        afc_file_info_free(&info); // Free internal strings of info
+        return {};
     }
+
+    fileSize = info.size;
+    afc_file_info_free(&info); // Free internal strings of info after use
 
     if (fileSize == 0) {
         ServiceManager::safeAfcFileClose(device, fileHandle);
@@ -139,31 +145,64 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
 
     // Custom read function that reads from device on-demand
     auto readPacket = [](void *opaque, uint8_t *buf, int bufSize) -> int {
-        // StreamContext *ctx = static_cast<StreamContext *>(opaque);
+        StreamContext *ctx = static_cast<StreamContext *>(opaque);
 
-        // if (ctx->currentPos >= ctx->fileSize) {
-        //     return AVERROR_EOF;
-        // }
+        if (ctx->currentPos >= ctx->fileSize) {
+            return AVERROR_EOF;
+        }
 
-        // uint32_t toRead =
-        //     std::min(static_cast<uint32_t>(bufSize),
-        //              static_cast<uint32_t>(ctx->fileSize - ctx->currentPos));
-        // uint32_t bytesRead = 0;
+        uint32_t toRead =
+            std::min(static_cast<uint32_t>(bufSize),
+                     static_cast<uint32_t>(ctx->fileSize - ctx->currentPos));
+        size_t bytesRead = 0;
+        uint8_t *read_data_ptr =
+            nullptr; // Pointer to store the data allocated by safeAfcFileRead
 
-        // IdeviceFfiError *err = ServiceManager::safeAfcFileRead(
-        //     ctx->device, ctx->fileHandle, reinterpret_cast<char *>(buf),
-        //     toRead, &bytesRead);
+        // Call safeAfcFileRead to get the data into a newly allocated buffer
+        IdeviceFfiError *err = ServiceManager::safeAfcFileRead(
+            ctx->device, ctx->fileHandle, &read_data_ptr, toRead, &bytesRead);
 
-        // if (err || bytesRead == 0) {
-        //     if (err) {
-        //         idevice_error_free(err);
-        //     }
-        //     return AVERROR(EIO);
-        // }
+        if (err) {
+            qWarning() << "AFC read error in readPacket for file handle"
+                       << ctx->fileHandle << ":" << err->message;
+            idevice_error_free(err);
+            return AVERROR(EIO);
+        }
 
-        // ctx->currentPos += bytesRead;
-        // return static_cast<int>(bytesRead);
-        return 0;
+        if (bytesRead == 0) {
+            // If bytesRead is 0 but we expected to read more, it's an error.
+            // If currentPos is already at fileSize, it's EOF.
+            if (ctx->currentPos < ctx->fileSize) {
+                qWarning() << "AFC readPacket returned 0 bytes but not EOF, "
+                              "expected toRead:"
+                           << toRead << "currentPos:" << ctx->currentPos
+                           << "fileSize:" << ctx->fileSize;
+                // Free the allocated pointer if safeAfcFileRead still allocates
+                // even for 0 bytes.
+                if (read_data_ptr) {
+                    afc_file_read_data_free(read_data_ptr, 0);
+                }
+                return AVERROR(EIO);
+            }
+            // It's EOF
+            return AVERROR_EOF;
+        }
+
+        // Copy the data from the newly allocated `read_data_ptr` into FFmpeg's
+        // `buf`
+        if (read_data_ptr) {
+            memcpy(buf, read_data_ptr, bytesRead);
+            afc_file_read_data_free(
+                read_data_ptr,
+                bytesRead); // Free the memory allocated by safeAfcFileRead
+        } else {
+            qWarning() << "AFC readPacket: read_data_ptr was null but "
+                          "bytesRead > 0. This is unexpected.";
+            return AVERROR(EIO);
+        }
+
+        ctx->currentPos += bytesRead;
+        return static_cast<int>(bytesRead);
     };
 
     // Custom seek function using AFC seek
@@ -198,7 +237,8 @@ QPixmap PhotoModel::generateVideoThumbnailFFmpeg(iDescriptorDevice *device,
             ctx->device, ctx->fileHandle, newPos, seekWhence);
 
         if (err) {
-            qDebug() << "AFC seek error:" << err->message;
+            qDebug() << "AFC seek error:" << err->message
+                     << "code:" << err->code;
             // idevice_error_free(err);
             return -1;
         }
@@ -806,11 +846,9 @@ QDateTime PhotoModel::extractDateTimeFromFile(const QString &filePath) const
     IdeviceFfiError *err = ServiceManager::safeAfcGetFileInfo(
         m_device, filePath.toUtf8().constData(), info);
     if (!err && info) {
-        uint64_t birthtime_ns = info->st_birthtime;
-        // Convert nanoseconds since epoch to QDateTime
-        // The timestamp appears to be in nanoseconds since Unix epoch
-        uint64_t seconds = birthtime_ns / 1000000000ULL;
-        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(seconds, Qt::UTC);
+        uint64_t creation_seconds = info->creation;
+        QDateTime dateTime =
+            QDateTime::fromSecsSinceEpoch(creation_seconds, Qt::UTC);
 
         // afc_file_info_free(info);
         if (dateTime.isValid()) {

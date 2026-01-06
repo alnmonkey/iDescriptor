@@ -60,7 +60,7 @@ ExportManager::~ExportManager()
 QUuid ExportManager::startExport(iDescriptorDevice *device,
                                  const QList<ExportItem> &items,
                                  const QString &destinationPath,
-                                 std::optional<afc_client_t> altAfc)
+                                 std::optional<AfcClientHandle *> altAfc)
 {
     if (!device || !device->mutex) {
         qWarning() << "Invalid device provided to ExportManager";
@@ -193,116 +193,115 @@ void ExportManager::executeExportJob(ExportJob *job)
 
     emit exportFinished(job->jobId, summary);
 }
-
-ExportResult ExportManager::exportSingleItem(iDescriptorDevice *device,
-                                             const ExportItem &item,
-                                             const QString &destinationDir,
-                                             std::optional<afc_client_t> altAfc,
-                                             std::atomic<bool> &cancelRequested,
-                                             const QUuid &jobId)
+// TODO: implement
+ExportResult ExportManager::exportSingleItem(
+    iDescriptorDevice *device, const ExportItem &item,
+    const QString &destinationDir, std::optional<AfcClientHandle *> altAfc,
+    std::atomic<bool> &cancelRequested, const QUuid &jobId)
 {
     ExportResult result;
     result.sourceFilePath = item.sourcePathOnDevice;
 
-    // Generate output path
-    QString outputPath = QDir(destinationDir).filePath(item.suggestedFileName);
-    outputPath = generateUniqueOutputPath(outputPath);
-    result.outputFilePath = outputPath;
+    // // Generate output path
+    // QString outputPath =
+    // QDir(destinationDir).filePath(item.suggestedFileName); outputPath =
+    // generateUniqueOutputPath(outputPath); result.outputFilePath = outputPath;
 
-    // Get file size first
-    char **info = nullptr;
-    afc_error_t infoResult = ServiceManager::safeAfcGetFileInfo(
-        device, item.sourcePathOnDevice.toUtf8().constData(), &info, altAfc);
+    // // Get file size first
+    // char **info = nullptr;
+    // afc_error_t infoResult = ServiceManager::safeAfcGetFileInfo(
+    //     device, item.sourcePathOnDevice.toUtf8().constData(), &info, altAfc);
 
-    qint64 totalFileSize = 0;
-    if (infoResult == AFC_E_SUCCESS && info) {
-        for (int i = 0; info[i]; i += 2) {
-            if (strcmp(info[i], "st_size") == 0) {
-                totalFileSize = QString::fromUtf8(info[i + 1]).toLongLong();
-                break;
-            }
-        }
-        afc_dictionary_free(info);
-    }
+    // qint64 totalFileSize = 0;
+    // if (infoResult == AFC_E_SUCCESS && info) {
+    //     for (int i = 0; info[i]; i += 2) {
+    //         if (strcmp(info[i], "st_size") == 0) {
+    //             totalFileSize = QString::fromUtf8(info[i + 1]).toLongLong();
+    //             break;
+    //         }
+    //     }
+    //     afc_dictionary_free(info);
+    // }
 
-    // Open file on device
-    uint64_t handle = 0;
-    afc_error_t openResult = ServiceManager::safeAfcFileOpen(
-        device, item.sourcePathOnDevice.toUtf8().constData(), AFC_FOPEN_RDONLY,
-        &handle, altAfc);
+    // // Open file on device
+    // uint64_t handle = 0;
+    // afc_error_t openResult = ServiceManager::safeAfcFileOpen(
+    //     device, item.sourcePathOnDevice.toUtf8().constData(),
+    //     AFC_FOPEN_RDONLY, &handle, altAfc);
 
-    if (openResult != AFC_E_SUCCESS) {
-        result.errorMessage =
-            QString("Failed to open file on device: %1 (AFC error: %2)")
-                .arg(item.sourcePathOnDevice)
-                .arg(static_cast<int>(openResult));
-        return result;
-    }
+    // if (openResult != AFC_E_SUCCESS) {
+    //     result.errorMessage =
+    //         QString("Failed to open file on device: %1 (AFC error: %2)")
+    //             .arg(item.sourcePathOnDevice)
+    //             .arg(static_cast<int>(openResult));
+    //     return result;
+    // }
 
-    // Open local output file
-    QFile outputFile(outputPath);
-    if (!outputFile.open(QIODevice::WriteOnly)) {
-        result.errorMessage = QString("Failed to create local file: %1 (%2)")
-                                  .arg(outputPath)
-                                  .arg(outputFile.errorString());
-        ServiceManager::safeAfcFileClose(device, handle, altAfc);
-        return result;
-    }
+    // // Open local output file
+    // QFile outputFile(outputPath);
+    // if (!outputFile.open(QIODevice::WriteOnly)) {
+    //     result.errorMessage = QString("Failed to create local file: %1 (%2)")
+    //                               .arg(outputPath)
+    //                               .arg(outputFile.errorString());
+    //     ServiceManager::safeAfcFileClose(device, handle, altAfc);
+    //     return result;
+    // }
 
-    char buffer[8192];
-    uint32_t bytesRead = 0;
-    qint64 totalBytes = 0;
+    // char buffer[8192];
+    // uint32_t bytesRead = 0;
+    // qint64 totalBytes = 0;
 
-    while (true) {
-        // Check for cancellation during file copy
-        if (cancelRequested.load()) {
-            outputFile.close();
-            outputFile.remove(); // Clean up partial file
-            ServiceManager::safeAfcFileClose(device, handle, altAfc);
-            result.errorMessage = "Export cancelled by user";
-            return result;
-        }
+    // while (true) {
+    //     // Check for cancellation during file copy
+    //     if (cancelRequested.load()) {
+    //         outputFile.close();
+    //         outputFile.remove(); // Clean up partial file
+    //         ServiceManager::safeAfcFileClose(device, handle, altAfc);
+    //         result.errorMessage = "Export cancelled by user";
+    //         return result;
+    //     }
 
-        afc_error_t readResult = ServiceManager::safeAfcFileRead(
-            device, handle, buffer, sizeof(buffer), &bytesRead, altAfc);
+    //     afc_error_t readResult = ServiceManager::safeAfcFileRead(
+    //         device, handle, buffer, sizeof(buffer), &bytesRead, altAfc);
 
-        if (readResult != AFC_E_SUCCESS || bytesRead == 0) {
-            break; // End of file or error
-        }
+    //     if (readResult != AFC_E_SUCCESS || bytesRead == 0) {
+    //         break; // End of file or error
+    //     }
 
-        qint64 bytesWritten = outputFile.write(buffer, bytesRead);
-        if (bytesWritten != bytesRead) {
-            result.errorMessage =
-                QString("Write error: only wrote %1 of %2 bytes")
-                    .arg(bytesWritten)
-                    .arg(bytesRead);
-            outputFile.close();
-            outputFile.remove(); // Clean up partial file
-            ServiceManager::safeAfcFileClose(device, handle, altAfc);
-            return result;
-        }
+    //     qint64 bytesWritten = outputFile.write(buffer, bytesRead);
+    //     if (bytesWritten != bytesRead) {
+    //         result.errorMessage =
+    //             QString("Write error: only wrote %1 of %2 bytes")
+    //                 .arg(bytesWritten)
+    //                 .arg(bytesRead);
+    //         outputFile.close();
+    //         outputFile.remove(); // Clean up partial file
+    //         ServiceManager::safeAfcFileClose(device, handle, altAfc);
+    //         return result;
+    //     }
 
-        totalBytes += bytesRead;
+    //     totalBytes += bytesRead;
 
-        // Emit progress update every 64KB or at end of file
-        if (totalBytes % (64 * 1024) == 0 || totalBytes == totalFileSize) {
-            emit fileTransferProgress(jobId, item.suggestedFileName, totalBytes,
-                                      totalFileSize);
-        }
-    }
+    //     // Emit progress update every 64KB or at end of file
+    //     if (totalBytes % (64 * 1024) == 0 || totalBytes == totalFileSize) {
+    //         emit fileTransferProgress(jobId, item.suggestedFileName,
+    //         totalBytes,
+    //                                   totalFileSize);
+    //     }
+    // }
 
-    // Clean up
-    outputFile.close();
-    ServiceManager::safeAfcFileClose(device, handle, altAfc);
+    // // Clean up
+    // outputFile.close();
+    // ServiceManager::safeAfcFileClose(device, handle, altAfc);
 
-    if (totalBytes == 0) {
-        result.errorMessage = "No data read from device file";
-        outputFile.remove(); // Clean up empty file
-        return result;
-    }
+    // if (totalBytes == 0) {
+    //     result.errorMessage = "No data read from device file";
+    //     outputFile.remove(); // Clean up empty file
+    //     return result;
+    // }
 
     result.success = true;
-    result.bytesTransferred = totalBytes;
+    // result.bytesTransferred = totalBytes;
     return result;
 }
 

@@ -72,7 +72,8 @@ AppDownloadBaseDialog::AppDownloadBaseDialog(const QString &appName,
 void AppDownloadBaseDialog::startDownloadProcess(const QString &bundleId,
                                                  const QString &outputDir,
                                                  int index,
-                                                 bool promptToOpenDir)
+                                                 bool promptToOpenDir,
+                                                 bool close)
 {
 
     if (bundleId.isEmpty()) {
@@ -86,12 +87,12 @@ void AppDownloadBaseDialog::startDownloadProcess(const QString &bundleId,
         m_actionButton->setEnabled(false);
 
     m_operationInProgress = true;
-    tryToDownload(bundleId, outputDir, promptToOpenDir);
+    tryToDownload(bundleId, outputDir, promptToOpenDir, close);
 }
 
 void AppDownloadBaseDialog::tryToDownload(const QString &bundleId,
                                           const QString &outputDir,
-                                          bool promptToOpenDir)
+                                          bool promptToOpenDir, bool close)
 {
     AppStoreManager *manager = AppStoreManager::sharedInstance();
     if (!manager) {
@@ -117,7 +118,7 @@ void AppDownloadBaseDialog::tryToDownload(const QString &bundleId,
 
     manager->downloadApp(
         bundleId, outputDir, "", acquireLicense,
-        [safeThis, promptToOpenDir, outputDir](int result) {
+        [safeThis, promptToOpenDir, outputDir, close](int result) {
             if (!safeThis) {
                 return;
             }
@@ -146,7 +147,8 @@ void AppDownloadBaseDialog::tryToDownload(const QString &bundleId,
                         }
                     }
                 }
-                safeThis->accept();
+                if (close)
+                    safeThis->accept();
             } else { // Failure
                 // 3 attempts
                 if (safeThis->m_tries < 3) {
@@ -166,7 +168,8 @@ void AppDownloadBaseDialog::tryToDownload(const QString &bundleId,
                             "in. Error code: %2")
                         .arg(safeThis->m_appName)
                         .arg(result));
-                safeThis->reject();
+                if (close)
+                    safeThis->reject();
             }
         },
         progressCallback);

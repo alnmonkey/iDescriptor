@@ -20,7 +20,7 @@
 #include "gallerywidget.h"
 // #include "exportmanager.h"
 #include "iDescriptor.h"
-// #include "mediapreviewdialog.h"
+#include "mediapreviewdialog.h"
 #include "photomodel.h"
 #include "servicemanager.h"
 #include <QComboBox>
@@ -134,7 +134,7 @@ void GalleryWidget::setupControlsLayout()
                               static_cast<int>(PhotoModel::ImagesOnly));
     m_filterComboBox->addItem("Videos Only",
                               static_cast<int>(PhotoModel::VideosOnly));
-    m_filterComboBox->setCurrentIndex(0);   // Default to All
+    m_filterComboBox->setCurrentIndex(2);   // Default to All
     m_filterComboBox->setMinimumWidth(100); // Ensure text fits
     m_filterComboBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
@@ -408,11 +408,11 @@ void GalleryWidget::setupPhotoGalleryView()
                 if (filePath.isEmpty())
                     return;
 
-                // qDebug() << "Opening preview for" << filePath;
-                // auto *previewDialog = new MediaPreviewDialog(
-                //     m_device, m_device->afcClient, filePath, this);
-                // previewDialog->setAttribute(Qt::WA_DeleteOnClose);
-                // previewDialog->show();
+                qDebug() << "Opening preview for" << filePath;
+                auto *previewDialog = new MediaPreviewDialog(
+                    m_device, m_device->afcClient, filePath, this);
+                previewDialog->setAttribute(Qt::WA_DeleteOnClose);
+                previewDialog->show();
             });
 
     connect(m_listView, &QListView::customContextMenuRequested, this,
@@ -627,21 +627,21 @@ void GalleryWidget::onPhotoContextMenu(const QPoint &pos)
 
     exportAction->setEnabled(m_listView->selectionModel()->hasSelection());
 
-    // connect(previewAction, &QAction::triggered, this, [this, index]() {
-    //     // Re-use the double-click logic
-    //     if (!index.isValid())
-    //         return;
+    connect(previewAction, &QAction::triggered, this, [this, index]() {
+        // Re-use the double-click logic
+        if (!index.isValid())
+            return;
 
-    //     QString filePath = m_model->data(index, Qt::UserRole).toString();
-    //     if (filePath.isEmpty())
-    //         return;
+        QString filePath = m_model->data(index, Qt::UserRole).toString();
+        if (filePath.isEmpty())
+            return;
 
-    //     qDebug() << "Opening preview for" << filePath;
-    //     auto *previewDialog = new MediaPreviewDialog(
-    //         m_device, m_device->afcClient, filePath, this);
-    //     previewDialog->setAttribute(Qt::WA_DeleteOnClose);
-    //     previewDialog->show();
-    // });
+        qDebug() << "Opening preview for" << filePath;
+        auto *previewDialog = new MediaPreviewDialog(
+            m_device, m_device->afcClient, filePath, this);
+        previewDialog->setAttribute(Qt::WA_DeleteOnClose);
+        previewDialog->show();
+    });
 
     connect(exportAction, &QAction::triggered, this,
             &GalleryWidget::onExportSelected);

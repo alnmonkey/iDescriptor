@@ -21,6 +21,7 @@
 #include "appcontext.h"
 #include "appdownloadbasedialog.h"
 #include "iDescriptor.h"
+#include "servicemanager.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
@@ -151,46 +152,59 @@ void AppInstallDialog::updateDeviceList()
 }
 
 void AppInstallDialog::performInstallation(const QString &ipaPath,
+                                           const QString &ipaName,
                                            const QString &deviceUdid)
 {
     m_statusLabel->setText("Installing app...");
 
     // Setup install watcher
-    m_installWatcher = new QFutureWatcher<int>(this);
-    connect(m_installWatcher, &QFutureWatcher<int>::finished, this, [this]() {
-        int result = m_installWatcher->result();
-        m_installWatcher->deleteLater();
-        m_installWatcher = nullptr;
+    m_installWatcher = new QFutureWatcher<IdeviceFfiError *>(this);
+    connect(
+        m_installWatcher, &QFutureWatcher<IdeviceFfiError *>::finished, this,
+        [this]() {
+            IdeviceFfiError *result = m_installWatcher->result();
+            m_installWatcher->deleteLater();
+            m_installWatcher = nullptr;
 
-        if (result == 0) {
-            m_statusLabel->setText("Installation completed successfully!");
-            m_statusLabel->setStyleSheet(
-                "font-size: 14px; color: #34C759; padding: 5px;");
-            QMessageBox::information(this, "Success",
-                                     "App installed successfully!");
-            accept();
-        } else {
-            m_statusLabel->setText("Installation failed");
-            m_statusLabel->setStyleSheet(
-                "font-size: 14px; color: #FF3B30; padding: 5px;");
-            QMessageBox::critical(
-                this, "Error",
-                QString("Installation failed with error code: %1").arg(result));
-        }
-    });
+            if (result == nullptr) {
+                m_statusLabel->setText("Installation completed successfully!");
+                m_statusLabel->setStyleSheet(
+                    "font-size: 14px; color: #34C759; padding: 5px;");
+                QMessageBox::information(this, "Success",
+                                         "App installed successfully!");
+                accept();
+            } else {
+                m_statusLabel->setText("Installation failed");
+                m_statusLabel->setStyleSheet(
+                    "font-size: 14px; color: #FF3B30; padding: 5px;");
+                QMessageBox::critical(
+                    this, "Error",
+                    QString(
+                        "Installation failed with message %1 and error code %2")
+                        .arg(QString::fromUtf8(result->message))
+                        .arg(result->code));
+                idevice_error_free(result);
+                reject();
+            }
+        });
 
     // Run installation in background thread
-    QFuture<int> future = QtConcurrent::run([ipaPath, deviceUdid]() -> int {
-        iDescriptorDevice *device =
-            AppContext::sharedInstance()->getDevice(deviceUdid.toStdString());
-        if (!device) {
-            return -1;
-        }
+    QFuture<IdeviceFfiError *> future = QtConcurrent::run(
+        [ipaPath, ipaName, deviceUdid]() -> IdeviceFfiError * {
+            iDescriptorDevice *device = AppContext::sharedInstance()->getDevice(
+                deviceUdid.toStdString());
+            if (!device) {
+                return nullptr;
+            }
 
-        instproxy_error_t ret = install_IPA(device->device, device->afcClient,
-                                            ipaPath.toStdString().c_str());
-        return static_cast<int>(ret);
-    });
+            IdeviceFfiError *err = ServiceManager::install_IPA(
+                device, ipaPath.toStdString().c_str(),
+                ipaName.toStdString().c_str());
+            if (err != nullptr) {
+                return err;
+            }
+            return nullptr;
+        });
 
     m_installWatcher->setFuture(future);
 }
@@ -229,43 +243,44 @@ void AppInstallDialog::onInstallClicked()
         return;
     }
 
-    startDownloadProcess(m_bundleId, m_tempDir->path(), buttonIndex, false);
-    connect(this, &AppDownloadBaseDialog::downloadFinished, this,
-            [this, selectedDevice](bool success) {
-                if (success) {
-                    qDebug() << "Download finished, starting installation...";
-                    /*
-                        FIXME: libipatool generates random id and appends that
-                       to the downloaded IPA filename, so we need to search for
-                       it.
-                    */
-                    // Find the actual downloaded IPA file
-                    QDir outDir(m_tempDir->path());
-                    QStringList filters;
-                    filters << m_bundleId + "*.ipa";
-                    QStringList matches =
-                        outDir.entryList(filters, QDir::Files, QDir::Time);
-                    if (matches.isEmpty()) {
-                        m_statusLabel->setText(
-                            "Download failed - IPA not found");
-                        m_statusLabel->setStyleSheet(
-                            "font-size: 14px; color: #FF3B30; padding: 5px;");
-                        QMessageBox::critical(
-                            this, "Error",
-                            QString("Downloaded IPA not found in %1")
-                                .arg(outDir.absolutePath()));
-                        return;
-                    }
-
-                    QString ipaFile = outDir.filePath(matches.first());
-                    performInstallation(ipaFile, selectedDevice);
-
-                } else {
-                    m_statusLabel->setText("Download failed");
+    startDownloadProcess(m_bundleId, m_tempDir->path(), buttonIndex, false,
+                         false);
+    connect(
+        this, &AppDownloadBaseDialog::downloadFinished, this,
+        [this, selectedDevice](bool success) {
+            if (success) {
+                qDebug() << "Download finished, starting installation...";
+                /*
+                    FIXME: libipatool generates random id and appends that
+                   to the downloaded IPA filename, so we need to search for
+                   it.
+                */
+                // Find the actual downloaded IPA file
+                QDir outDir(m_tempDir->path());
+                QStringList filters;
+                filters << m_bundleId + "*.ipa";
+                QStringList matches =
+                    outDir.entryList(filters, QDir::Files, QDir::Time);
+                if (matches.isEmpty()) {
+                    m_statusLabel->setText("Download failed - IPA not found");
                     m_statusLabel->setStyleSheet(
                         "font-size: 14px; color: #FF3B30; padding: 5px;");
+                    QMessageBox::critical(
+                        this, "Error",
+                        QString("Downloaded IPA not found in %1")
+                            .arg(outDir.absolutePath()));
+                    return;
                 }
-            });
+                qDebug() << "Found downloaded IPA:" << matches.first();
+                QString ipaFile = outDir.filePath(matches.first());
+                performInstallation(ipaFile, matches.first(), selectedDevice);
+
+            } else {
+                m_statusLabel->setText("Download failed");
+                m_statusLabel->setStyleSheet(
+                    "font-size: 14px; color: #FF3B30; padding: 5px;");
+            }
+        });
 }
 
 void AppInstallDialog::reject()

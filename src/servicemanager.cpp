@@ -29,22 +29,7 @@ ServiceManager::safeAfcReadDirectory(const iDescriptorDevice *device,
     return executeAfcClientOperation(
         device,
         [path, dirs, &count, device](AfcClientHandle *client) {
-            IdeviceFfiError *err = nullptr;
-            err = afc_list_directory(client, path, dirs, &count);
-            /*TODO -1 is unknown error*/
-            if (err && (err->code == -1 || err->code == -11)) {
-                qDebug() << "Reconnecting AFC client for path:" << path;
-                // afc_client_free(client);
-                // err = afc_client_connect(device->provider, &client);
-                err = afc_client_connect(
-                    device->provider,
-                    &const_cast<iDescriptorDevice *>(device)->afcClient);
-
-                err = afc_list_directory(
-                    const_cast<iDescriptorDevice *>(device)->afcClient, path,
-                    dirs, &count);
-            }
-            return err;
+            return afc_list_directory(client, path, dirs, &count);
         },
         altAfc);
 }
@@ -57,21 +42,7 @@ ServiceManager::safeAfcGetFileInfo(const iDescriptorDevice *device,
     return executeAfcClientOperation(
         device,
         [path, info, device](AfcClientHandle *client) {
-            IdeviceFfiError *err = nullptr;
-            err = afc_get_file_info(client, path, info);
-            /*TODO -1 is unknown error*/
-            if (err && err->code == -1) {
-                // afc_client_free(client);
-                // err = afc_client_connect(device->provider, &client);
-                err = afc_client_connect(
-                    device->provider,
-                    &const_cast<iDescriptorDevice *>(device)->afcClient);
-
-                err = afc_get_file_info(
-                    const_cast<iDescriptorDevice *>(device)->afcClient, path,
-                    info);
-            }
-            return err;
+            return afc_get_file_info(client, path, info);
         },
         altAfc);
 }
@@ -83,19 +54,7 @@ IdeviceFfiError *ServiceManager::safeAfcFileOpen(
     return executeAfcClientOperation(
         device,
         [path, mode, handle, device](AfcClientHandle *client) {
-            IdeviceFfiError *err = nullptr;
-            err = afc_file_open(client, path, mode, handle);
-            /*TODO -1 is unknown error*/
-            if (err && err->code == -1) {
-                // afc_client_free(client);
-                err = afc_client_connect(
-                    device->provider,
-                    &const_cast<iDescriptorDevice *>(device)->afcClient);
-                err = afc_file_open(
-                    const_cast<iDescriptorDevice *>(device)->afcClient, path,
-                    mode, handle);
-            }
-            return err;
+            return afc_file_open(client, path, mode, handle);
         },
         altAfc);
 }
@@ -140,11 +99,11 @@ ServiceManager::safeAfcFileSeek(const iDescriptorDevice *device,
                                 AfcFileHandle *handle, int64_t offset,
                                 int whence)
 {
-    off_t *newPos = nullptr;
+    off_t newPos;
     return executeAfcOperation(
         device,
-        [offset, whence, newPos](AfcFileHandle *handle) {
-            return afc_file_seek(handle, offset, whence, newPos);
+        [offset, whence, &newPos](AfcFileHandle *handle) {
+            return afc_file_seek(handle, offset, whence, &newPos);
         },
         handle);
 }
@@ -178,4 +137,61 @@ AFCFileTree ServiceManager::safeGetFileTree(const iDescriptorDevice *device,
         device, [path, device, checkDir]() -> AFCFileTree {
             return get_file_tree(device, checkDir, path);
         });
+}
+
+MountedImageInfo
+ServiceManager::getMountedImage(const iDescriptorDevice *device)
+{
+    return executeOperation<MountedImageInfo>(
+        device,
+        [device]() -> MountedImageInfo { return _get_mounted_image(device); });
+}
+
+IdeviceFfiError *ServiceManager::mountImage(const iDescriptorDevice *device,
+                                            const char *image_file,
+                                            const char *signature_file)
+{
+    return executeOperation<IdeviceFfiError *>(
+        device, [device, image_file, signature_file]() -> IdeviceFfiError * {
+            return mount_dev_image(device, image_file, signature_file);
+        });
+}
+
+void ServiceManager::getCableInfo(const iDescriptorDevice *device,
+                                  plist_t &response)
+{
+    executeOperation<void>(
+        device, [device, &response]() { _get_cable_info(device, response); });
+}
+
+IdeviceFfiError *ServiceManager::install_IPA(const iDescriptorDevice *device,
+                                             const char *ipa_path,
+                                             const char *file_name)
+{
+    return executeOperation<IdeviceFfiError *>(
+        device, [device, ipa_path, file_name]() -> IdeviceFfiError * {
+            return _install_IPA(device, ipa_path, file_name);
+        });
+}
+
+bool ServiceManager::enableWirelessConnections(const iDescriptorDevice *device)
+{
+    return executeOperation<bool>(device, [device]() -> bool {
+        plist_t value = plist_new_bool(true);
+        bool success = false;
+        IdeviceFfiError *err =
+            lockdownd_set_value(device->lockdown, "EnableWifiConnections",
+                                value, "com.apple.mobile.wireless_lockdown");
+
+        if (err != NULL) {
+            qDebug() << "Failed to enable wireless connections." << err->message
+                     << "Code:" << err->code;
+            idevice_error_free(err);
+        } else {
+            success = true;
+        }
+
+        plist_free(value);
+        return success;
+    });
 }

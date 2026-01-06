@@ -19,10 +19,10 @@
 
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
-// #include "detailwindow.h"
-// #include "ifusediskunmountbutton.h"
-// #include "ifusemanager.h"
-// #include "settingswidget.h"
+#include "detailwindow.h"
+#include "ifusediskunmountbutton.h"
+#include "ifusemanager.h"
+#include "settingswidget.h"
 
 #include "appswidget.h"
 #include "devicemanagerwidget.h"
@@ -42,7 +42,7 @@
 #include <unistd.h>
 
 #include "appcontext.h"
-// #include "settingsmanager.h"
+#include "settingsmanager.h"
 // #include "devicemonitor.h"
 #include "networkdevicemanager.h"
 #include "networkdeviceswidget.h"
@@ -52,9 +52,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 
-// #ifdef WIN32
-// #include "platform/windows/check_deps.h"
-// #endif
+#ifdef WIN32
+#include "platform/windows/check_deps.h"
+#endif
 
 using namespace IdeviceFFI;
 
@@ -171,32 +171,26 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::updateNoDevicesConnected);
 
     m_ZTabWidget->addTab(m_mainStackedWidget, "iDevice");
-    // auto *appsWidgetTab =
-    //     m_ZTabWidget->addTab(AppsWidget::sharedInstance(), "Apps");
-    // m_ZTabWidget->addTab(new ToolboxWidget(this), "Toolbox");
-    m_ZTabWidget->addTab(new QWidget(), "Apps"); // Placeholder for Apps tab
-    m_ZTabWidget->addTab(new QWidget(),
-                         "Toolbox"); // Placeholder for Toolbox tab
-    m_ZTabWidget->addTab(new QWidget(),
-                         "Jailbroken"); // Placeholder for Jailbroken tab
-
-    // auto *jailbrokenWidget = new JailbrokenWidget(this);
-    // m_ZTabWidget->addTab(jailbrokenWidget, "Jailbroken");
+    auto *appsWidgetTab =
+        m_ZTabWidget->addTab(AppsWidget::sharedInstance(), "Apps");
+    m_ZTabWidget->addTab(new ToolboxWidget(this), "Toolbox");
+    auto *jailbrokenWidget = new JailbrokenWidget(this);
+    m_ZTabWidget->addTab(jailbrokenWidget, "Jailbroken");
     m_ZTabWidget->finalizeStyles();
 
-    // connect(
-    //     appsWidgetTab, &ZTab::clicked, this,
-    //     [this](int index) { AppsWidget::sharedInstance()->init(); },
-    //     Qt::SingleShotConnection);
+    connect(
+        appsWidgetTab, &ZTab::clicked, this,
+        [this](int index) { AppsWidget::sharedInstance()->init(); },
+        Qt::SingleShotConnection);
 
-    // // settings button
-    // ZIconWidget *settingsButton = new ZIconWidget(
-    //     QIcon(":/resources/icons/MingcuteSettings7Line.png"), "Settings");
-    // settingsButton->setCursor(Qt::PointingHandCursor);
-    // settingsButton->setFixedSize(24, 24);
-    // connect(settingsButton, &ZIconWidget::clicked, this, [this]() {
-    //     SettingsManager::sharedInstance()->showSettingsDialog();
-    // });
+    // settings button
+    ZIconWidget *settingsButton = new ZIconWidget(
+        QIcon(":/resources/icons/MingcuteSettings7Line.png"), "Settings");
+    settingsButton->setCursor(Qt::PointingHandCursor);
+    settingsButton->setFixedSize(24, 24);
+    connect(settingsButton, &ZIconWidget::clicked, this, [this]() {
+        SettingsManager::sharedInstance()->showSettingsDialog();
+    });
 
     ZIconWidget *githubButton = new ZIconWidget(
         QIcon(":/resources/icons/MdiGithub.png"), "iDescriptor on GitHub");
@@ -218,30 +212,28 @@ MainWindow::MainWindow(QWidget *parent)
         "QLabel:hover { background-color : #13131319; }");
     ui->statusbar->addPermanentWidget(appVersionLabel);
     ui->statusbar->addPermanentWidget(githubButton);
-    // ui->statusbar->addPermanentWidget(settingsButton);
+    ui->statusbar->addPermanentWidget(settingsButton);
 
-    // #ifdef __linux__
-    //     QList<QString> mounted_iFusePaths = iFuseManager::getMountPoints();
+#ifdef __linux__
+    QList<QString> mounted_iFusePaths = iFuseManager::getMountPoints();
 
-    //     for (const QString &path : mounted_iFusePaths) {
-    //         auto *p = new iFuseDiskUnmountButton(path);
+    for (const QString &path : mounted_iFusePaths) {
+        auto *p = new iFuseDiskUnmountButton(path);
 
-    //         ui->statusbar->addPermanentWidget(p);
-    //         connect(p, &iFuseDiskUnmountButton::clicked, this, [this, p,
-    //         path]() {
-    //             bool ok = iFuseManager::linuxUnmount(path);
-    //             if (!ok) {
-    //                 QMessageBox::warning(nullptr, "Unmount Failed",
-    //                                      "Failed to unmount iFuse at " + path
-    //                                      +
-    //                                          ". Please try again.");
-    //                 return;
-    //             }
-    //             ui->statusbar->removeWidget(p);
-    //             p->deleteLater();
-    //         });
-    //     }
-    // #endif
+        ui->statusbar->addPermanentWidget(p);
+        connect(p, &iFuseDiskUnmountButton::clicked, this, [this, p, path]() {
+            bool ok = iFuseManager::linuxUnmount(path);
+            if (!ok) {
+                QMessageBox::warning(nullptr, "Unmount Failed",
+                                     "Failed to unmount iFuse at " + path +
+                                         ". Please try again.");
+                return;
+            }
+            ui->statusbar->removeWidget(p);
+            p->deleteLater();
+        });
+    }
+#endif
 
     // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     //     irecv_error_t res_recovery =
@@ -450,6 +442,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(NetworkDeviceManager::sharedInstance(),
             &NetworkDeviceManager::deviceAdded, this,
             [this](const NetworkDevice &device) {
+                // return; // FIXME: disable for now
                 const iDescriptorDevice *idevice =
                     AppContext::sharedInstance()->getDeviceByMacAddress(
                         device.macAddress);

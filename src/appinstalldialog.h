@@ -25,8 +25,9 @@
 #include <QDialog>
 #include <QFutureWatcher>
 #include <QLabel>
-#include <QTemporaryDir>
 #include <QNetworkAccessManager>
+#include <QTemporaryDir>
+#include "iDescriptor.h"
 
 class AppInstallDialog : public AppDownloadBaseDialog
 {
@@ -48,11 +49,12 @@ private:
     QComboBox *m_deviceCombo;
     QString m_bundleId;
     QLabel *m_statusLabel;
-    QFutureWatcher<int> *m_installWatcher;
+    QFutureWatcher<IdeviceFfiError *> *m_installWatcher;
     QTemporaryDir *m_tempDir = nullptr;
     QNetworkAccessManager *m_manager = nullptr;
     void updateDeviceList();
-    void performInstallation(const QString &ipaPath, const QString &deviceUdid);
+    void performInstallation(const QString &ipaPath, const QString &ipaName,
+                             const QString &deviceUdid);
 };
 
 #endif // APPINSTALLDIALOG_H

@@ -19,6 +19,7 @@
 
 #include "mainwindow.h"
 // #include "settingsmanager.h"
+#include "iDescriptor.h"
 #include <QApplication>
 #include <QDebug>
 #include <QDir>
@@ -36,7 +37,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName("iDescriptor");
     QCoreApplication::setApplicationName("iDescriptor");
     QCoreApplication::setApplicationVersion(APP_VERSION);
-
+    // idevice_init_logger(Debug, Disabled, NULL);
     // if (a.arguments().contains("--reset-settings")) {
     //     SettingsManager::sharedInstance()->clear();
     //     QMessageBox::information(nullptr, "Settings Reset",

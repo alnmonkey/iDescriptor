@@ -52,7 +52,8 @@ class MediaPreviewDialog : public QDialog
 
 public:
     explicit MediaPreviewDialog(iDescriptorDevice *device,
-                                afc_client_t afcClient, const QString &filePath,
+                                AfcClientHandle *afcClient,
+                                const QString &filePath,
                                 QWidget *parent = nullptr);
     ~MediaPreviewDialog();
 
@@ -145,7 +146,7 @@ private:
     bool m_isDraggingTimeline;
     qint64 m_videoDuration;
 
-    afc_client_t m_afcClient;
+    AfcClientHandle *m_afcClient;
 };
 
 #endif // MEDIAPREVIEWDIALOG_H

@@ -41,8 +41,6 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <libimobiledevice/afc.h>
-#include <libimobiledevice/house_arrest.h>
 
 // Custom App Tab Widget
 class AppTabWidget : public QGroupBox
@@ -134,8 +132,8 @@ private:
     QFutureWatcher<QVariantMap> *m_watcher;
     QFutureWatcher<QVariantMap> *m_containerWatcher;
     QSplitter *m_splitter;
-    house_arrest_client_t m_houseArrestClient = nullptr;
-    afc_client_t m_houseArrestAfcClient = nullptr;
+    // house_arrest_client_t m_houseArrestClient = nullptr;
+    // afc_client_t m_houseArrestAfcClient = nullptr;
     // App data storage
     QList<AppTabWidget *> m_appTabs;
     AppTabWidget *m_selectedTab = nullptr;

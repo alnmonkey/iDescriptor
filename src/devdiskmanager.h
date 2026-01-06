@@ -27,7 +27,6 @@
 #include <QNetworkRequest>
 #include <QObject>
 #include <QStringList>
-#include <libimobiledevice/mobile_image_mounter.h>
 
 class DevDiskManager : public QObject
 {
@@ -50,16 +49,15 @@ public:
 
     // Mount operations
 
-    mobile_image_mounter_error_t mountImage(const QString &version,
-                                            iDescriptorDevice *device);
+    bool mountImage(const QString &version, iDescriptorDevice *device);
     bool unmountImage();
+    std::pair<QString, QString> getPathsForVersion(const QString &version);
 
     // Signature comparison
     bool compareSignatures(const char *signature_file_path,
                            const char *mounted_sig, uint64_t mounted_sig_len);
 
     QByteArray getImageListData() const { return m_imageListJsonData; }
-    GetMountedImageResult getMountedImage(const char *udid);
     bool mountCompatibleImage(iDescriptorDevice *device);
     bool downloadCompatibleImage(iDescriptorDevice *device,
                                  std::function<void(bool)> callback);

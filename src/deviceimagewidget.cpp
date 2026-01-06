@@ -161,26 +161,12 @@ QString DeviceImageWidget::getMockupNameFromDisplayName(
 
 int DeviceImageWidget::getIosVersionFromDevice() const
 {
-    unsigned int version = m_device->deviceInfo.parsedDeviceVersion;
+    unsigned int version = m_device->deviceInfo.parsedDeviceVersion.major;
 
     if (version > 0) {
-        int majorVersion = (version >> 16) & 0xFF;
-        return majorVersion;
+        return version;
     }
 
-    // Fallback: parse from productVersion string
-    QString versionString =
-        QString::fromStdString(m_device->deviceInfo.productVersion);
-    QStringList parts = versionString.split('.');
-    if (!parts.isEmpty()) {
-        bool ok;
-        int majorVersion = parts.first().toInt(&ok);
-        if (ok) {
-            return majorVersion;
-        }
-    }
-
-    // return unknown version (will use ios26 wallpaper)
     return 0;
 }
 

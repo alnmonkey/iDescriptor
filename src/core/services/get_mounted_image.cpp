@@ -18,101 +18,30 @@
  */
 
 #include "../../iDescriptor.h"
-#include <stdlib.h>
-#define _GNU_SOURCE 1
-#define __USE_GNU 1
-#include <errno.h>
-#include <getopt.h>
-#include <inttypes.h>
-#include <libgen.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <time.h>
-#ifndef _WIN32
-#include <signal.h>
-#endif
 
-#include <QDebug>
-#include <libimobiledevice-glue/sha.h>
-#include <libimobiledevice-glue/utils.h>
-#include <libimobiledevice/afc.h>
-#include <libimobiledevice/libimobiledevice.h>
-#include <libimobiledevice/lockdown.h>
-#include <libimobiledevice/mobile_image_mounter.h>
-#include <libimobiledevice/notification_proxy.h>
-#include <libtatsu/tss.h>
-#include <plist/plist.h>
-#ifndef _WIN32
-#include <printf.h>
-#endif
-
-plist_t _get_mounted_image(const char *udid)
+MountedImageInfo _get_mounted_image(const iDescriptorDevice *device)
 {
-    mobile_image_mounter_client_t mim = NULL;
-    lockdownd_client_t lckd = NULL;
-    lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
-    afc_client_t afc = NULL;
-    lockdownd_service_descriptor_t service = NULL;
-    idevice_t device = NULL;
-
-    mobile_image_mounter_error_t err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
-    plist_t result = NULL;
-    size_t sig_length = 0;
-    const char *imagetype = "Developer";
-
-    if (IDEVICE_E_SUCCESS != idevice_new_with_options(&device, udid,
-
-                                                      IDEVICE_LOOKUP_USBMUX)) {
-        qDebug() << "ERROR: Could not create idevice!";
+    uint8_t *signature = NULL;
+    size_t signature_len = 0;
+    IdeviceFfiError *err = nullptr;
+    qDebug() << "_get_mounted_image";
+    if (err) {
+        qDebug() << "Failed to connect to image mounter:" << err->message;
         goto leave;
     }
 
-    if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
-                                   device, &lckd, TOOL_NAME))) {
-        qDebug() << "ERROR: Could not connect to lockdownd service!";
-        goto leave;
+    err = image_mounter_lookup_image(device->imageMounter,
+                                     DISK_IMAGE_TYPE_DEVELOPER, &signature,
+                                     &signature_len);
+    if (err) {
+        qDebug() << "Failed to lookup image:" << err->message
+                 << "Code:" << err->code;
     }
-
-    lockdownd_start_service(lckd, "com.apple.mobile.mobile_image_mounter",
-                            &service);
-
-    if (!service || service->port == 0) {
-        printf("ERROR: Could not start mobile_image_mounter service!\n");
-        goto leave;
-    }
-
-    if (mobile_image_mounter_new(device, service, &mim) !=
-        MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
-        printf("ERROR: Could not connect to mobile_image_mounter!\n");
-        goto leave;
-    }
-
-    if (!service || service->port == 0) {
-        qDebug() << "ERROR: Could not start mobile_image_mounter service!";
-        goto leave;
-    }
-
-    // will sometimes return MOBILE_IMAGE_MOUNTER_E_SUCCESS even if the device
-    // is locked - mostly on older devices
-    err = mobile_image_mounter_lookup_image(mim, imagetype, &result);
 
 leave:
-    if (mim) {
-        mobile_image_mounter_free(mim);
-    }
-    if (afc) {
-        afc_client_free(afc);
-    }
-    if (lckd) {
-        lockdownd_client_free(lckd);
-    }
-    if (device) {
-        idevice_free(device);
-    }
-
-    return result;
+    return {
+        .err = err,
+        .signature = signature,
+        .signature_len = signature_len,
+    };
 }
-
-// int main(){return 0;}

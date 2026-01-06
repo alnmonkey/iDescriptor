@@ -128,6 +128,18 @@ struct DeviceSelection {
     uint64_t ecid = 0;
     QString section = "Info";
 
+    bool valid() const
+    {
+        if (type == Normal) {
+            return !udid.empty();
+        } else if (type == Recovery) {
+            return ecid != 0;
+        } else if (type == Pending) {
+            return !udid.empty();
+        }
+        return false;
+    }
+
     DeviceSelection(const std::string &deviceUdid, const QString &nav = "")
         : type(Normal), udid(deviceUdid), section(nav)
     {

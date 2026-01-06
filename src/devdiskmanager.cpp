@@ -19,6 +19,7 @@
 
 #include "devdiskmanager.h"
 #include "iDescriptor.h"
+#include "servicemanager.h"
 #include "settingsmanager.h"
 #include <QApplication>
 #include <QDebug>
@@ -31,7 +32,6 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <libimobiledevice/mobile_image_mounter.h>
 
 DevDiskManager *DevDiskManager::sharedInstance()
 {
@@ -326,9 +326,10 @@ bool DevDiskManager::downloadCompatibleImage(iDescriptorDevice *device,
                                              std::function<void(bool)> callback)
 {
     QString path = SettingsManager::sharedInstance()->mkDevDiskImgPath();
-    unsigned int device_version = idevice_get_device_version(device->device);
-    unsigned int deviceMajorVersion = (device_version >> 16) & 0xFF;
-    unsigned int deviceMinorVersion = (device_version >> 8) & 0xFF;
+    unsigned int deviceMajorVersion =
+        device->deviceInfo.parsedDeviceVersion.major;
+    unsigned int deviceMinorVersion =
+        device->deviceInfo.parsedDeviceVersion.minor;
     qDebug() << "Device version:" << deviceMajorVersion << "."
              << deviceMinorVersion;
     QList<ImageInfo> images =
@@ -405,37 +406,36 @@ bool DevDiskManager::downloadCompatibleImage(iDescriptorDevice *device,
 bool DevDiskManager::mountCompatibleImage(iDescriptorDevice *device)
 {
     QString path = SettingsManager::sharedInstance()->mkDevDiskImgPath();
-    unsigned int device_version = idevice_get_device_version(device->device);
-    unsigned int deviceMajorVersion = (device_version >> 16) & 0xFF;
-    unsigned int deviceMinorVersion = (device_version >> 8) & 0xFF;
 
     QList<ImageInfo> images =
-        parseImageList(path, deviceMajorVersion, deviceMinorVersion, "", 0);
+        parseImageList(path, device->deviceInfo.parsedDeviceVersion.major,
+                       device->deviceInfo.parsedDeviceVersion.minor, "", 0);
 
+    return false;
     // 1. Try to mount an already downloaded compatible image
-    for (const ImageInfo &info : images) {
-        if (info.compatibility != ImageCompatibility::Compatible &&
-            info.compatibility != ImageCompatibility::MaybeCompatible) {
-            continue;
-        }
-        if (info.isDownloaded) {
-            qDebug() << "There is a compatible image already downloaded:"
-                     << info.version;
-            qDebug() << "Attempting to mount image version" << info.version
-                     << "on device:" << device->udid.c_str();
-            if (MOBILE_IMAGE_MOUNTER_E_SUCCESS ==
-                mountImage(info.version, device)) {
-                qDebug() << "Mounted existing image version" << info.version
-                         << "on device:" << device->udid.c_str();
-                return true;
-            } else {
-                qDebug() << "Failed to mount existing image version"
-                         << info.version
-                         << "on device:" << device->udid.c_str();
-                return false;
-            }
-        }
-    }
+    // for (const ImageInfo &info : images) {
+    //     if (info.compatibility != ImageCompatibility::Compatible &&
+    //         info.compatibility != ImageCompatibility::MaybeCompatible) {
+    //         continue;
+    //     }
+    //     if (info.isDownloaded) {
+    //         qDebug() << "There is a compatible image already downloaded:"
+    //                  << info.version;
+    //         qDebug() << "Attempting to mount image version" << info.version
+    //                  << "on device:" << device->udid.c_str();
+    //         if (MOBILE_IMAGE_MOUNTER_E_SUCCESS ==
+    //             mountImage(info.version, device)) {
+    //             qDebug() << "Mounted existing image version" << info.version
+    //                      << "on device:" << device->udid.c_str();
+    //             return true;
+    //         } else {
+    //             qDebug() << "Failed to mount existing image version"
+    //                      << info.version
+    //                      << "on device:" << device->udid.c_str();
+    //             return false;
+    //         }
+    //     }
+    // }
 
     // 2. If none are downloaded, download the newest compatible one
     for (const ImageInfo &info : images) {
@@ -492,19 +492,38 @@ bool DevDiskManager::mountCompatibleImage(iDescriptorDevice *device)
     return false;
 }
 
-mobile_image_mounter_error_t
-DevDiskManager::mountImage(const QString &version, iDescriptorDevice *device)
+bool DevDiskManager::mountImage(const QString &version,
+                                iDescriptorDevice *device)
 {
     const QString downloadPath =
         SettingsManager::sharedInstance()->devdiskimgpath();
     if (!isImageDownloaded(version, downloadPath)) {
-        return MOBILE_IMAGE_MOUNTER_E_INVALID_ARG;
+        return false;
     }
 
     QString versionPath = QDir(downloadPath).filePath(version);
-    return mount_dev_image(device->device,
-                           device->deviceInfo.parsedDeviceVersion,
-                           versionPath.toUtf8().constData());
+    return mount_dev_image(device,
+                           QDir(versionPath)
+                               .filePath("DeveloperDiskImage.dmg")
+                               .toUtf8()
+                               .constData(),
+                           QDir(versionPath)
+                               .filePath("DeveloperDiskImage.dmg.signature")
+                               .toUtf8()
+                               .constData());
+}
+
+std::pair<QString, QString>
+DevDiskManager::getPathsForVersion(const QString &version)
+{
+    const QString downloadPath =
+        SettingsManager::sharedInstance()->devdiskimgpath();
+    QString versionPath = QDir(downloadPath).filePath(version);
+    QString dmgPath = QDir(versionPath).filePath("DeveloperDiskImage.dmg");
+    QString sigPath =
+        QDir(versionPath).filePath("DeveloperDiskImage.dmg.signature");
+
+    return {dmgPath, sigPath};
 }
 
 void DevDiskManager::onDownloadProgress(qint64 bytesReceived, qint64 bytesTotal)
@@ -624,79 +643,4 @@ bool DevDiskManager::compareSignatures(const char *signature_file_path,
 
     free(local_sig);
     return matches;
-}
-
-/*
-    older devices return something like this:
-    {
-    "ImagePresent": true,
-    "ImageSignature": <7b16200b 2ead1830 a59809d1 51e9060b ... 8a 9844eb07
-   e0b8e0>, "Status": "Complete"
-    }
-*/
-GetMountedImageResult DevDiskManager::getMountedImage(const char *udid)
-{
-    /*
-        FIXME: _get_mounted_image can return MOBILE_IMAGE_MOUNTER_E_SUCCESS even
-        if the device is locked so we are going to go off of the result
-        dictionary
-    */
-    plist_t result = _get_mounted_image(udid);
-    plist_print(result);
-    const char *lockedErr = "DeviceLocked";
-
-    PlistNavigator r = PlistNavigator(result);
-
-    std::string error = r["Error"].getString();
-
-    if (!error.empty()) {
-        plist_free(result);
-        if (error == lockedErr) {
-            return GetMountedImageResult{
-                false, "", "Device is locked, please unlock it and try again."};
-        } else
-            return GetMountedImageResult{false, "", "Unknown error"};
-    }
-
-    // for older devices
-    bool image_present = r["ImagePresent"].getBool();
-
-    /* FIXME: returning a madeup sig because iDescriptorTool::MountDevImage
-     * depends on it in toolboxwidget.cpp we can read the actual signature from
-     * the device but it’s not really necessary since we
-     * just need to know if there is an image mounted or
-     *  not also we would need to check the ios version
-     * to know whether to treat ImageSignature as plist array or data
-     */
-    if (image_present) {
-        plist_free(result);
-        return GetMountedImageResult{true, "FIXME",
-                                     "There is already an image mounted."};
-    }
-
-    plist_t sig_array_node = r["ImageSignature"].getNode();
-
-    if (sig_array_node == NULL) {
-        plist_free(result);
-        return GetMountedImageResult{true, "", "No disk image mounted"};
-    }
-
-    char *mounted_sig = nullptr;
-    uint64_t mounted_sig_len = 0;
-    // get the signature
-    if (sig_array_node && plist_get_node_type(sig_array_node) == PLIST_ARRAY &&
-        plist_array_get_size(sig_array_node) > 0) {
-        plist_t sig_data_node = plist_array_get_item(sig_array_node, 0);
-        if (sig_data_node && plist_get_node_type(sig_data_node) == PLIST_DATA) {
-            plist_get_data_val(sig_data_node, &mounted_sig, &mounted_sig_len);
-        }
-    }
-    std::string mounted_sig_str(mounted_sig ? mounted_sig : "");
-    free(mounted_sig);
-    plist_free(result);
-    if (mounted_sig_str.empty()) {
-        return GetMountedImageResult{
-            true, "", "No disk image mounted (No signature found)"};
-    }
-    return GetMountedImageResult{true, mounted_sig_str, "Success"};
 }

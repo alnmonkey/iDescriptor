@@ -45,7 +45,7 @@
 #include <QVariant>
 
 AfcExplorerWidget::AfcExplorerWidget(iDescriptorDevice *device, bool favEnabled,
-                                     afc_client_t afcClient, QString root,
+                                     AfcClientHandle *afcClient, QString root,
                                      QWidget *parent)
     : QWidget(parent), m_device(device), m_favEnabled(favEnabled),
       m_afc(afcClient), m_errorMessage("Failed to load directory"), m_root(root)
@@ -373,6 +373,7 @@ void AfcExplorerWidget::exportSelectedFile(QListWidgetItem *item,
     // Save to selected directory
     QString savePath = directory + "/" + fileName;
 
+    // FIXME: this should be async
     int result = exportFileToPath(m_afc, devicePath.toStdString().c_str(),
                                   savePath.toStdString().c_str());
 
@@ -401,34 +402,81 @@ void AfcExplorerWidget::exportSelectedFile(QListWidgetItem *item,
     even though we are using safe wrappers,
     we better move this to services
 */
-int AfcExplorerWidget::exportFileToPath(afc_client_t afc,
+// FIXME: this should be async
+// use connect to signals/slots to notify progress
+// create a progress dialog to show progress
+// dont do this on the main thread
+int AfcExplorerWidget::exportFileToPath(AfcClientHandle *afc,
                                         const char *device_path,
                                         const char *local_path)
 {
-    uint64_t handle = 0;
-    if (ServiceManager::safeAfcFileOpen(m_device, device_path, AFC_FOPEN_RDONLY,
-                                        &handle, m_afc) != AFC_E_SUCCESS) {
-        qDebug() << "Failed to open file on device:" << device_path;
+    AfcFileHandle *afcHandle = nullptr;
+    IdeviceFfiError *err_open = ServiceManager::safeAfcFileOpen(
+        m_device, device_path, AfcRdOnly, &afcHandle);
+    if (err_open != nullptr) {
+        qDebug() << "Failed to open file on device:" << device_path
+                 << "Error Code:" << err_open->code
+                 << "Message:" << err_open->message;
+        idevice_error_free(err_open);
         return -1;
     }
+
     FILE *out = fopen(local_path, "wb");
     if (!out) {
         qDebug() << "Failed to open local file:" << local_path;
-        afc_file_close(afc, handle);
+        IdeviceFfiError *err_close =
+            ServiceManager::safeAfcFileClose(m_device, afcHandle);
+        if (err_close != nullptr) {
+            idevice_error_free(err_close);
+        }
         return -1;
     }
 
-    char buffer[4096];
-    uint32_t bytes_read = 0;
-    while (ServiceManager::safeAfcFileRead(m_device, handle, buffer,
-                                           sizeof(buffer), &bytes_read,
-                                           m_afc) == AFC_E_SUCCESS &&
-           bytes_read > 0) {
-        fwrite(buffer, 1, bytes_read, out);
+    const size_t CHUNK_SIZE = 256 * 1024; // 256KB chunks
+    uint8_t *chunkData = nullptr;
+    size_t bytesRead = 0;
+
+    // Read file in chunks
+    while (true) {
+        IdeviceFfiError *read_err = ServiceManager::safeAfcFileRead(
+            m_device, afcHandle, &chunkData, CHUNK_SIZE, &bytesRead);
+
+        if (read_err != nullptr) {
+            qDebug() << "Error reading file:" << read_err->message;
+            idevice_error_free(read_err);
+            break;
+        }
+
+        if (bytesRead == 0) {
+            // End of file reached
+            break;
+        }
+
+        // Write chunk to local file
+        size_t written = fwrite(chunkData, 1, bytesRead, out);
+
+        // Free the memory allocated by afc_file_read
+        afc_file_read_data_free(chunkData, bytesRead);
+        chunkData = nullptr;
+
+        if (written != bytesRead) {
+            qDebug() << "Failed to write all bytes to local file";
+            fclose(out);
+            ServiceManager::safeAfcFileClose(m_device, afcHandle);
+            return -1;
+        }
     }
 
     fclose(out);
-    ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
+
+    IdeviceFfiError *err_close =
+        ServiceManager::safeAfcFileClose(m_device, afcHandle);
+    if (err_close != nullptr) {
+        qDebug() << "Failed to close AFC file:" << err_close->message;
+        idevice_error_free(err_close);
+        return -1;
+    }
+
     return 0;
 }
 
@@ -464,39 +512,40 @@ void AfcExplorerWidget::onImportClicked()
 /*
     FIXME : move to services
 */
-int AfcExplorerWidget::importFileToDevice(afc_client_t afc,
+int AfcExplorerWidget::importFileToDevice(AfcClientHandle *afc,
                                           const char *device_path,
                                           const char *local_path)
 {
     QFile in(local_path);
-    if (!in.open(QIODevice::ReadOnly)) {
-        qDebug() << "Failed to open local file for import:" << local_path;
-        return -1;
-    }
+    // if (!in.open(QIODevice::ReadOnly)) {
+    //     qDebug() << "Failed to open local file for import:" << local_path;
+    //     return -1;
+    // }
 
-    uint64_t handle = 0;
-    if (ServiceManager::safeAfcFileOpen(m_device, device_path, AFC_FOPEN_WRONLY,
-                                        &handle, m_afc) != AFC_E_SUCCESS) {
-        qDebug() << "Failed to open file on device for writing:" << device_path;
-        return -1;
-    }
+    // uint64_t handle = 0;
+    // if (ServiceManager::safeAfcFileOpen(m_device, device_path,
+    // AFC_FOPEN_WRONLY,
+    //                                     &handle, m_afc) != AFC_E_SUCCESS) {
+    //     qDebug() << "Failed to open file on device for writing:" <<
+    //     device_path; return -1;
+    // }
 
-    char buffer[4096];
-    qint64 bytesRead;
-    while ((bytesRead = in.read(buffer, sizeof(buffer))) > 0) {
-        uint32_t bytesWritten = 0;
-        if (ServiceManager::safeAfcFileWrite(
-                m_device, handle, buffer, static_cast<uint32_t>(bytesRead),
-                &bytesWritten, m_afc) != AFC_E_SUCCESS ||
-            bytesWritten != bytesRead) {
-            qDebug() << "Failed to write to device file:" << device_path;
-            ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
-            in.close();
-            return -1;
-        }
-    }
+    // char buffer[4096];
+    // qint64 bytesRead;
+    // while ((bytesRead = in.read(buffer, sizeof(buffer))) > 0) {
+    //     uint32_t bytesWritten = 0;
+    //     if (ServiceManager::safeAfcFileWrite(
+    //             m_device, handle, buffer, static_cast<uint32_t>(bytesRead),
+    //             &bytesWritten, m_afc) != AFC_E_SUCCESS ||
+    //         bytesWritten != bytesRead) {
+    //         qDebug() << "Failed to write to device file:" << device_path;
+    //         ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
+    //         in.close();
+    //         return -1;
+    //     }
+    // }
 
-    ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
+    // ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
     in.close();
     return 0;
 }

@@ -97,9 +97,8 @@ void DevDiskImageHelper::start()
     m_loadingIndicator->start();
     showStatus("Please wait...");
 
-    unsigned int device_version = idevice_get_device_version(m_device->device);
-    unsigned int deviceMajorVersion = (device_version >> 16) & 0xFF;
-    unsigned int deviceMinorVersion = (device_version >> 8) & 0xFF;
+    unsigned int deviceMajorVersion =
+        m_device->deviceInfo.parsedDeviceVersion.major;
 
     // FIXME:we dont have developer disk images for ios 6 and below
     if (deviceMajorVersion > 5) {
@@ -124,23 +123,22 @@ void DevDiskImageHelper::start()
 
 void DevDiskImageHelper::checkAndMount()
 {
-    GetMountedImageResult result =
-        DevDiskManager::sharedInstance()->getMountedImage(
-            m_device->udid.c_str());
-    qDebug() << "checkAndMount result:" << result.success
-             << result.message.c_str() << QString::fromStdString(result.sig);
-    if (!result.success) {
-        showRetryUI(QString::fromStdString(result.message));
-        return;
-    }
+    // GetMountedImageResult result =
+    //     DevDiskManager::sharedInstance()->getMountedImage(m_device);
+    // qDebug() << "checkAndMount result:" << result.success
+    //          << result.message.c_str() << QString::fromStdString(result.sig);
+    // if (!result.success) {
+    //     showRetryUI(QString::fromStdString(result.message));
+    //     return;
+    // }
 
-    // If image is already mounted
-    if (!result.sig.empty()) {
-        finishWithSuccess();
-        return;
-    }
+    // // If image is already mounted
+    // if (!result.sig.empty()) {
+    //     finishWithSuccess();
+    //     return;
+    // }
 
-    onMountButtonClicked();
+    // onMountButtonClicked();
 }
 
 void DevDiskImageHelper::onMountButtonClicked()
@@ -151,9 +149,10 @@ void DevDiskImageHelper::onMountButtonClicked()
     m_isMounting = true;
 
     // Check if we need to download first
-    unsigned int device_version = idevice_get_device_version(m_device->device);
-    unsigned int deviceMajorVersion = (device_version >> 16) & 0xFF;
-    unsigned int deviceMinorVersion = (device_version >> 8) & 0xFF;
+    unsigned int deviceMajorVersion =
+        m_device->deviceInfo.parsedDeviceVersion.major;
+    unsigned int deviceMinorVersion =
+        m_device->deviceInfo.parsedDeviceVersion.minor;
 
     QList<ImageInfo> images = DevDiskManager::sharedInstance()->parseImageList(
         path, deviceMajorVersion, deviceMinorVersion, "", 0);
@@ -174,27 +173,28 @@ void DevDiskImageHelper::onMountButtonClicked()
     }
 
     if (hasDownloadedImage) {
-        // Mount directly
-        showStatus("Mounting developer disk image...");
+        // // Mount directly
+        // showStatus("Mounting developer disk image...");
 
-        mobile_image_mounter_error_t err =
-            DevDiskManager::sharedInstance()->mountImage(versionToMount,
-                                                         m_device);
+        // mobile_image_mounter_error_t err =
+        //     DevDiskManager::sharedInstance()->mountImage(versionToMount,
+        //                                                  m_device);
 
-        m_isMounting = false;
-        if (err == MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
-            showStatus("Developer disk image mounted successfully");
-            finishWithSuccess();
-        } else if (err == MOBILE_IMAGE_MOUNTER_E_DEVICE_LOCKED) {
-            showRetryUI(
-                "Device is locked. Please unlock your device and try again.");
-        } else {
-            showRetryUI("Failed to mount developer disk image.\n"
-                        "Please ensure:\n"
-                        "• Device is unlocked\n"
-                        "• Using a genuine cable\n"
-                        "• Developer mode is enabled (iOS 16+)");
-        }
+        // m_isMounting = false;
+        // if (err == MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
+        //     showStatus("Developer disk image mounted successfully");
+        //     finishWithSuccess();
+        // } else if (err == MOBILE_IMAGE_MOUNTER_E_DEVICE_LOCKED) {
+        //     showRetryUI(
+        //         "Device is locked. Please unlock your device and try
+        //         again.");
+        // } else {
+        //     showRetryUI("Failed to mount developer disk image.\n"
+        //                 "Please ensure:\n"
+        //                 "• Device is unlocked\n"
+        //                 "• Using a genuine cable\n"
+        //                 "• Developer mode is enabled (iOS 16+)");
+        // }
     } else {
         // Need to download first
         showStatus(
@@ -237,20 +237,21 @@ void DevDiskImageHelper::onImageDownloadFinished(const QString &version,
     // Download successful, now mount
     showStatus("Download complete. Mounting...");
 
-    mobile_image_mounter_error_t err =
-        DevDiskManager::sharedInstance()->mountImage(version, m_device);
+    // mobile_image_mounter_error_t err =
+    //     DevDiskManager::sharedInstance()->mountImage(version, m_device);
 
-    if (err == MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
-        showStatus("Developer disk image mounted successfully");
-        finishWithSuccess();
-    } else if (err == MOBILE_IMAGE_MOUNTER_E_DEVICE_LOCKED) {
-        showRetryUI(
-            "Device is locked. Please unlock your device and try again.");
-    } else {
-        showRetryUI(
-            "Failed to mount developer disk image.\n"
-            "Please ensure the device is unlocked and using a genuine cable.");
-    }
+    // if (err == MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
+    //     showStatus("Developer disk image mounted successfully");
+    //     finishWithSuccess();
+    // } else if (err == MOBILE_IMAGE_MOUNTER_E_DEVICE_LOCKED) {
+    //     showRetryUI(
+    //         "Device is locked. Please unlock your device and try again.");
+    // } else {
+    //     showRetryUI(
+    //         "Failed to mount developer disk image.\n"
+    //         "Please ensure the device is unlocked and using a genuine
+    //         cable.");
+    // }
 }
 
 void DevDiskImageHelper::showRetryUI(const QString &errorMessage)
