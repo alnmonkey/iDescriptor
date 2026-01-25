@@ -162,7 +162,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_ZTabWidget->addTab(m_mainStackedWidget, "iDevice");
     auto *appsWidgetTab =
         m_ZTabWidget->addTab(AppsWidget::sharedInstance(), "Apps");
-    m_ZTabWidget->addTab(new ToolboxWidget(this), "Toolbox");
+    m_ZTabWidget->addTab(ToolboxWidget::sharedInstance(), "Toolbox");
 
     auto *jailbrokenWidget = new JailbrokenWidget(this);
     m_ZTabWidget->addTab(jailbrokenWidget, "Jailbroken");

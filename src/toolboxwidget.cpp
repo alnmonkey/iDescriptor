@@ -79,6 +79,12 @@ bool enterRecoveryMode(iDescriptorDevice *device)
     }
 }
 
+ToolboxWidget *ToolboxWidget::sharedInstance()
+{
+    static ToolboxWidget *instance = new ToolboxWidget();
+    return instance;
+}
+
 ToolboxWidget::ToolboxWidget(QWidget *parent) : QWidget{parent}
 {
     setupUI();
@@ -428,17 +434,6 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool, bool requiresDevice)
             m_airplayWindow = new AirPlayWindow();
             connect(m_airplayWindow, &QObject::destroyed, this,
                     [this]() { m_airplayWindow = nullptr; });
-            connect(m_airplayWindow, &AirPlayWindow::restartRequested, this,
-                    [this]() {
-                        if (m_airplayWindow) {
-                            m_airplayWindow->close();
-                        }
-                        m_airplayWindow = new AirPlayWindow();
-                        m_airplayWindow->setAttribute(Qt::WA_DeleteOnClose);
-                        m_airplayWindow->setWindowFlag(Qt::Window);
-                        m_airplayWindow->resize(400, 300);
-                        m_airplayWindow->show();
-                    });
             m_airplayWindow->setAttribute(Qt::WA_DeleteOnClose);
             m_airplayWindow->setWindowFlag(Qt::Window);
             m_airplayWindow->resize(400, 300);
@@ -645,4 +640,24 @@ void ToolboxWidget::_enterRecoveryMode(iDescriptorDevice *device)
         _msgBox.setText("Failed to enter recovery mode.");
     }
     _msgBox.exec();
+}
+
+void ToolboxWidget::restartAirPlayWindow()
+{
+    if (!m_airplayWindow) {
+        onToolboxClicked(iDescriptorTool::Airplayer, false);
+        return;
+    }
+
+    connect(
+        m_airplayWindow, &QObject::destroyed, this,
+        [this]() {
+            // give some time for cleanup
+            QTimer::singleShot(100, this, [this]() {
+                onToolboxClicked(iDescriptorTool::Airplayer, false);
+            });
+        },
+        Qt::SingleShotConnection);
+
+    m_airplayWindow->close();
 }

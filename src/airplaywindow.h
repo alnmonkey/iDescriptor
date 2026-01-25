@@ -26,7 +26,6 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -34,7 +33,6 @@
 #include <QMediaPlayer>
 #include <QMutex>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QStackedWidget>
 #include <QThread>
 #include <QTimer>
@@ -89,7 +87,7 @@ public:
 private:
     void setupUI();
 
-    QSpinBox *m_fpsSpinBox;
+    QComboBox *m_fpsComboBox;
     AirPlaySettings m_settings;
 };
 
@@ -109,9 +107,6 @@ private slots:
 #ifdef __linux__
     void onV4L2CheckboxToggled(bool enabled);
 #endif
-
-signals:
-    void restartRequested();
 
 private:
     void setupUI();

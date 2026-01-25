@@ -55,6 +55,8 @@
 #include <uxplay/renderers/video_renderer.h>
 #include <uxplay/uxplay.h>
 
+#include "toolboxwidget.h"
+
 AirPlaySettings::AirPlaySettings()
     : fps(SettingsManager::sharedInstance()->airplayFps())
 {
@@ -66,6 +68,9 @@ QStringList AirPlaySettings::toArgs() const
 
     // FPS
     args << "-fps" << QString::number(fps);
+
+    // Allow new connections to take over
+    args << "-nohold";
 
     return args;
 }
@@ -86,12 +91,23 @@ void AirPlaySettingsDialog::setupUI()
     QGroupBox *videoGroup = new QGroupBox("Video Settings");
     QFormLayout *videoLayout = new QFormLayout(videoGroup);
 
-    m_fpsSpinBox = new QSpinBox();
-    m_fpsSpinBox->setRange(1, 255);
-    m_fpsSpinBox->setValue(SettingsManager::sharedInstance()->airplayFps());
-    m_fpsSpinBox->setToolTip("Set maximum allowed streaming framerate");
-    videoLayout->addRow("Max FPS:", m_fpsSpinBox);
+    // FPS Layout
+    QVBoxLayout *fpsLayout = new QVBoxLayout();
+    m_fpsComboBox = new QComboBox();
+    m_fpsComboBox->addItems({"24", "30", "60", "120"});
+    m_fpsComboBox->setCurrentText(
+        QString::number(SettingsManager::sharedInstance()->airplayFps()));
+    m_fpsComboBox->setToolTip("Set maximum allowed streaming framerate");
 
+    QLabel *fpsFootnote =
+        new QLabel("Note: Older devices may not support higher framerates. If "
+                   "you are experiencing issues, set this to 30 FPS or lower.");
+    fpsFootnote->setWordWrap(true);
+    fpsFootnote->setStyleSheet("color: #666; font-size: 12px;");
+    fpsLayout->addWidget(m_fpsComboBox);
+    fpsLayout->addWidget(fpsFootnote);
+
+    videoLayout->addRow("Max FPS:", fpsLayout);
     mainLayout->addWidget(videoGroup);
 
     // Buttons
@@ -105,7 +121,7 @@ void AirPlaySettingsDialog::setupUI()
 AirPlaySettings AirPlaySettingsDialog::getSettings() const
 {
     AirPlaySettings settings;
-    settings.fps = m_fpsSpinBox->value();
+    settings.fps = m_fpsComboBox->currentText().toInt();
     return settings;
 }
 
@@ -218,7 +234,7 @@ void AirPlayWindow::setupTutorialVideo()
                                          QSizePolicy::Expanding);
 
     m_tutorialPlayer->setVideoOutput(m_tutorialVideoWidget);
-    m_tutorialPlayer->setSource(QUrl("qrc:/resources/airplayer-tutorial.mp4"));
+    m_tutorialPlayer->setSource(QUrl("qrc:/resources/airplay-tutorial.mp4"));
     m_tutorialVideoWidget->setAspectRatioMode(
         Qt::AspectRatioMode::KeepAspectRatioByExpanding);
     m_tutorialVideoWidget->setStyleSheet(
@@ -273,7 +289,7 @@ void AirPlayWindow::showSettingsDialog()
         QMessageBox::information(this, "Settings Saved",
                                  "AirPlay will be restarted to apply the new "
                                  "settings.");
-        emit restartRequested();
+        ToolboxWidget::sharedInstance()->restartAirPlayWindow();
     }
 }
 

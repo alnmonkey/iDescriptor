@@ -47,6 +47,8 @@ public:
     static void restartDevice(iDescriptorDevice *device);
     static void shutdownDevice(iDescriptorDevice *device);
     static void _enterRecoveryMode(iDescriptorDevice *device);
+    static ToolboxWidget *sharedInstance();
+    void restartAirPlayWindow();
 private slots:
     void onDeviceSelectionChanged();
     void onToolboxClicked(iDescriptorTool tool, bool requiresDevice);
