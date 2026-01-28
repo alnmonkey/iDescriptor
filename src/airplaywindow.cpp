@@ -55,6 +55,8 @@
 #include <uxplay/renderers/video_renderer.h>
 #include <uxplay/uxplay.h>
 
+#include "diagnosedialog.h"
+#include "platform/windows/check_deps.h"
 #include "toolboxwidget.h"
 
 AirPlaySettings::AirPlaySettings()
@@ -69,9 +71,8 @@ QStringList AirPlaySettings::toArgs() const
     // FPS
     args << "-fps" << QString::number(fps);
 
-    // FIXME: causes seg fault on Windows ?
     // Allow new connections to take over
-    // args << "-nohold";
+    args << "-nohold";
 
     return args;
 }
@@ -139,7 +140,27 @@ AirPlayWindow::AirPlayWindow(QWidget *parent)
       m_serverThread(nullptr), m_serverRunning(false), m_clientConnected(false)
 {
     setupUI();
+    setMinimumSize(800, 600);
+    QTimer::singleShot(0, this, [this]() {
+        /* HACK: qt ignores resize() calls so let's workaround */
+        setMinimumSize(0, 0);
+    });
 
+/* FIXME: this can be handled better, add linux support */
+#ifdef WIN32
+    bool bonjour = IsBonjourServiceInstalled();
+    if (!bonjour) {
+        QMessageBox::warning(
+            this, "Bonjour Service Not Installed",
+            "Bonjour service is not installed on your system. Please install "
+            "it to enable AirPlay functionality.");
+
+        DiagnoseDialog *diagnoseDialog = new DiagnoseDialog();
+        diagnoseDialog->show();
+        QTimer::singleShot(0, this, &AirPlayWindow::close);
+        return;
+    }
+#endif
     QTimer::singleShot(500, this, &AirPlayWindow::startAirPlayServer);
 }
 
@@ -154,8 +175,6 @@ AirPlayWindow::~AirPlayWindow()
 void AirPlayWindow::setupUI()
 {
     setWindowTitle("AirPlay Receiver - iDescriptor");
-    setMinimumSize(800, 600);
-    resize(1000, 700);
 
     // Create stacked widget
     m_stackedWidget = new QStackedWidget(this);
@@ -163,7 +182,7 @@ void AirPlayWindow::setupUI()
 
     m_tutorialWidget = new QWidget();
     m_tutorialLayout = new QVBoxLayout(m_tutorialWidget);
-    m_tutorialLayout->setContentsMargins(40, 40, 40, 40);
+    m_tutorialLayout->setContentsMargins(0, 0, 0, 0);
     m_tutorialLayout->setSpacing(20);
 
     m_loadingIndicator = new QProcessIndicator();
@@ -173,7 +192,7 @@ void AirPlayWindow::setupUI()
 
     QHBoxLayout *loadingLayout = new QHBoxLayout();
     m_loadingLabel = new QLabel("Starting AirPlay Server...");
-
+    loadingLayout->setContentsMargins(0, 40, 0, 0);
     loadingLayout->addStretch();
     loadingLayout->addWidget(m_loadingLabel);
     loadingLayout->addSpacing(5);
@@ -211,7 +230,6 @@ void AirPlayWindow::setupUI()
 
     // Video display
     m_videoLabel = new QLabel();
-    m_videoLabel->setMinimumSize(640, 480);
     m_videoLabel->setAlignment(Qt::AlignCenter);
     m_videoLabel->setScaledContents(false);
     streamingLayout->addWidget(m_videoLabel, 1);

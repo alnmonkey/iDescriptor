@@ -136,9 +136,8 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    const QSize minSize(900, 600);
-    setMinimumSize(minSize);
-    resize(minSize);
+    setMinimumSize(MIN_MAIN_WINDOW_SIZE);
+    resize(MIN_MAIN_WINDOW_SIZE);
     m_ZTabWidget = new ZTabWidget(this);
     m_ZTabWidget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
 

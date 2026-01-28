@@ -45,6 +45,7 @@
 #define COLOR_RED QColor(255, 0, 0)      // Red
 #define COLOR_BLUE QColor("#2b5693")
 #define COLOR_ACCENT_BLUE QColor("#0b5ed7")
+#define MIN_MAIN_WINDOW_SIZE QSize(900, 600)
 
 class ResponsiveGraphicsView : public QGraphicsView
 {
