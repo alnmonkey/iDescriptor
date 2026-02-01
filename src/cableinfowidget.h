@@ -21,6 +21,7 @@
 #define CABLEINFOWIDGET_H
 
 #include "iDescriptor.h"
+#include "zloadingwidget.h"
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -29,7 +30,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <plist/plist.h>
 
 class CableInfoWidget : public QWidget
 {
@@ -74,6 +74,8 @@ private:
     QLabel *m_descriptionLabel;
     QGroupBox *m_infoWidget;
     QGridLayout *m_infoLayout;
+    ZLoadingWidget *m_loadingWidget;
+    QLabel *m_errorLabel;
 
     // Data
     iDescriptorDevice *m_device;

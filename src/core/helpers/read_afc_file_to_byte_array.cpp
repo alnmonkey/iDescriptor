@@ -18,75 +18,77 @@
  */
 
 #include "../../iDescriptor.h"
+#include "../../servicemanager.h"
 #include <QByteArray>
 #include <QDebug>
 
-QByteArray read_afc_file_to_byte_array(afc_client_t afcClient, const char *path)
+QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
+                                       const char *path)
 {
-    uint64_t fd_handle = 0;
-    afc_error_t fd_err =
-        afc_file_open(afcClient, path, AFC_FOPEN_RDONLY, &fd_handle);
+    AfcFileHandle *handle = nullptr;
+    IdeviceFfiError *err_open = // Use distinct variable name
+        ServiceManager::safeAfcFileOpen(device, path, AfcRdOnly, &handle);
 
-    if (fd_err != AFC_E_SUCCESS) {
-        qDebug() << "Could not open file" << path << "Error:" << fd_err;
+    if (err_open) {
+        qDebug() << "Could not open file" << path
+                 << "Error:" << err_open->message;
+        idevice_error_free(err_open); // Free the error object
         return QByteArray();
     }
 
-    // TODO:Maybe use afc_get_file_info_plist instead?
-    char **info = NULL;
-    afc_get_file_info(afcClient, path, &info);
-    uint64_t fileSize = 0;
-    if (info) {
-        for (int i = 0; info[i]; i += 2) {
-            if (strcmp(info[i], "st_size") == 0) {
-                fileSize = std::stoull(info[i + 1]);
-                break;
-            }
-        }
-        afc_dictionary_free(info);
-    }
+    AfcFileInfo info = {};
+    IdeviceFfiError *err_info = // Use distinct variable name
+        ServiceManager::safeAfcGetFileInfo(device, path, &info);
 
+    if (err_info) {
+        qDebug() << "Could not get file info for file" << path
+                 << "Error:" << err_info->message;
+        idevice_error_free(err_info); // Free the error object
+        ServiceManager::safeAfcFileClose(device, handle); // Close handle
+        return QByteArray();
+    }
+    // Note: afc_file_info_free will be called later if the function returns
+    // successfully or when returning early after the file size check.
+
+    qDebug() << "File size of" << path << "is" << info.size;
+    size_t fileSize = info.size;
     if (fileSize == 0) {
-        afc_file_close(afcClient, fd_handle);
+        ServiceManager::safeAfcFileClose(device, handle);
+        afc_file_info_free(&info); // Free internal strings of info
         return QByteArray();
     }
 
     QByteArray buffer;
-    buffer.resize(fileSize);
+    buffer.reserve(fileSize);
 
-    uint64_t totalBytesRead = 0;
-    const uint32_t CHUNK_SIZE = 1024 * 1024; // Read in 1MB chunks
-    char *p = buffer.data();
+    uint8_t *chunkData = nullptr;
+    size_t bytesRead = 0;
+    IdeviceFfiError *read_err = ServiceManager::safeAfcFileRead(
+        device, handle, &chunkData, fileSize, &bytesRead);
 
-    while (totalBytesRead < fileSize) {
-        uint32_t bytesToRead =
-            std::min((uint64_t)CHUNK_SIZE, fileSize - totalBytesRead);
-        uint32_t bytesReadThisChunk = 0;
-        afc_error_t read_err =
-            afc_file_read(afcClient, fd_handle, p + totalBytesRead, bytesToRead,
-                          &bytesReadThisChunk);
-
-        if (read_err != AFC_E_SUCCESS) {
-            qDebug() << "AFC Error: Read failed for file" << path
-                     << "Error:" << read_err;
-            afc_file_close(afcClient, fd_handle);
-            return QByteArray();
-        }
-
-        if (bytesReadThisChunk == 0) {
-            // Premature end of file
-            break;
-        }
-        totalBytesRead += bytesReadThisChunk;
+    if (read_err) {
+        qDebug() << "AFC Error: Read failed for file" << path
+                 << "Error:" << read_err->message;
+        idevice_error_free(read_err);
+        ServiceManager::safeAfcFileClose(device, handle);
+        afc_file_info_free(&info); // Free internal strings of info
+        return QByteArray();
     }
 
-    afc_file_close(afcClient, fd_handle);
+    // Only append and free `chunkData` if `afc_file_read` was successful
+    buffer.append(reinterpret_cast<const char *>(chunkData), bytesRead);
+    afc_file_read_data_free(chunkData,
+                            bytesRead); // Free memory owned by Rust FFI
 
-    if (totalBytesRead != fileSize) {
+    ServiceManager::safeAfcFileClose(device, handle);
+
+    if (bytesRead != fileSize) {
         qDebug() << "AFC Error: Read mismatch for file" << path
-                 << "Read:" << totalBytesRead << "Expected:" << fileSize;
-        return QByteArray(); // Read failed
+                 << "Read:" << bytesRead << "Expected:" << fileSize;
+        afc_file_info_free(&info); // Free internal strings of info
+        return QByteArray();       // Read failed
     }
 
+    afc_file_info_free(&info); // Free internal strings of info on success path
     return buffer;
 }

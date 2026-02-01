@@ -44,13 +44,13 @@ protected:
     void reject() override;
     void startDownloadProcess(const QString &bundleId,
                               const QString &workingDir, int index,
-                              bool promptToOpenDir = true);
+                              bool promptToOpenDir = true, bool close = false);
     void checkDownloadProgress(const QString &logFilePath,
                                const QString &appName,
                                const QString &outputDir);
     void addProgressBar(int index);
     void tryToDownload(const QString &bundleId, const QString &outputDir,
-                       bool promptToOpenDir);
+                       bool promptToOpenDir, bool close = false);
     QProgressBar *m_progressBar;
     QTimer *m_progressTimer;
     QProcess *m_downloadProcess;

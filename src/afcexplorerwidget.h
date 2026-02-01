@@ -38,7 +38,6 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <libimobiledevice/afc.h>
 
 class ExportManager;
 class ExportProgressDialog;
@@ -49,7 +48,7 @@ class AfcExplorerWidget : public QWidget
 public:
     explicit AfcExplorerWidget(iDescriptorDevice *device = nullptr,
                                bool favEnabled = false,
-                               afc_client_t afcClient = nullptr,
+                               AfcClientHandle *afcClient = nullptr,
                                QString root = "/", QWidget *parent = nullptr);
     void navigateToPath(const QString &path);
     void goHome();
@@ -90,7 +89,7 @@ private:
     ZIconWidget *m_enterButton;
     iDescriptorDevice *m_device;
     bool m_favEnabled;
-    afc_client_t m_afc;
+    AfcClientHandle *m_afc;
     QString m_errorMessage;
     QString m_root;
 
@@ -111,9 +110,9 @@ private:
     void setupContextMenu();
     void exportSelectedFile(QListWidgetItem *item);
     void exportSelectedFile(QListWidgetItem *item, const QString &directory);
-    int exportFileToPath(afc_client_t afc, const char *device_path,
+    int exportFileToPath(AfcClientHandle *afc, const char *device_path,
                          const char *local_path);
-    int importFileToDevice(afc_client_t afc, const char *device_path,
+    int importFileToDevice(AfcClientHandle *afc, const char *device_path,
                            const char *local_path);
     void updateNavStyles();
     void updateButtonStates();

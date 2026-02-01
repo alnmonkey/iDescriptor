@@ -18,6 +18,9 @@
  */
 
 #include "mediapreviewdialog.h"
+#include "appcontext.h"
+#include "iDescriptor-ui.h"
+#include "imageloader.h"
 #include "mediastreamermanager.h"
 #include "photomodel.h"
 #include <QApplication>
@@ -43,13 +46,9 @@
 #include <QWheelEvent>
 #include <QtConcurrent/QtConcurrent>
 #include <QtGlobal>
-#include "appcontext.h"
-#include "iDescriptor-ui.h"
-
-
 
 MediaPreviewDialog::MediaPreviewDialog(iDescriptorDevice *device,
-                                       afc_client_t afcClient,
+                                       AfcClientHandle *afcClient,
                                        const QString &filePath, QWidget *parent)
     : QDialog(parent), m_device(device), m_filePath(filePath),
       m_isVideo(isVideoFile(filePath)), m_mainLayout(nullptr),
@@ -76,11 +75,12 @@ MediaPreviewDialog::MediaPreviewDialog(iDescriptorDevice *device,
 
     setupUI();
     loadMedia();
-    connect(AppContext::sharedInstance(), &AppContext::deviceRemoved, this, [this](const std::string &udid) {
-        if (udid == m_device->udid) {
-            close();
-        }
-    });
+    connect(AppContext::sharedInstance(), &AppContext::deviceRemoved, this,
+            [this](const std::string &udid) {
+                if (udid == m_device->udid) {
+                    close();
+                }
+            });
 }
 
 MediaPreviewDialog::~MediaPreviewDialog()
@@ -212,7 +212,7 @@ void MediaPreviewDialog::loadMedia()
 void MediaPreviewDialog::loadImage()
 {
     auto future = QtConcurrent::run(
-        [this]() { return PhotoModel::loadImage(m_device, m_filePath); });
+        [this]() { return ImageLoader::loadImage(m_device, m_filePath); });
 
     auto *watcher = new QFutureWatcher<QPixmap>(this);
     connect(watcher, &QFutureWatcher<QPixmap>::finished, this,

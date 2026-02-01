@@ -18,14 +18,21 @@
  */
 
 #include "devicemenuwidget.h"
+#include "Toast.h"
+#include "cableinfowidget.h"
+#include "devdiskimageswidget.h"
 #include "iDescriptor.h"
+#include "livescreenwidget.h"
 #include "qprocessindicator.h"
+#include "querymobilegestaltwidget.h"
+#include "servicemanager.h"
+#include "virtuallocationwidget.h"
 #include <QDebug>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
 DeviceMenuWidget::DeviceMenuWidget(iDescriptorDevice *device, QWidget *parent)
-    : QWidget{parent}, device(device)
+    : QWidget{parent}, m_device(device)
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     setContentsMargins(0, 0, 0, 0);
@@ -54,10 +61,10 @@ void DeviceMenuWidget::init()
 {
 
     // Create and add widgets to the stacked widget
-    m_deviceInfoWidget = new DeviceInfoWidget(device, this);
-    m_installedAppsWidget = new InstalledAppsWidget(device, this);
-    m_galleryWidget = new GalleryWidget(device, this);
-    m_fileExplorerWidget = new FileExplorerWidget(device, this);
+    m_deviceInfoWidget = new DeviceInfoWidget(m_device, this);
+    m_installedAppsWidget = new InstalledAppsWidget(m_device, this);
+    m_galleryWidget = new GalleryWidget(m_device, this);
+    m_fileExplorerWidget = new FileExplorerWidget(m_device, this);
 
     // Set minimum heights
     m_galleryWidget->setMinimumHeight(300);
@@ -74,8 +81,8 @@ void DeviceMenuWidget::init()
     // Connect to current changed signal for lazy loading
     connect(stackedWidget, &QStackedWidget::currentChanged, this,
             [this](int index) {
-                if (index == 2) { // Gallery tab
-                    qDebug() << "Switched to Gallery tab";
+                if (stackedWidget->widget(index) ==
+                    m_galleryWidget) { // Gallery tab
                     m_galleryWidget->load();
                 }
             });
@@ -83,6 +90,34 @@ void DeviceMenuWidget::init()
     QWidget *loadingWidget = stackedWidget->widget(0);
     stackedWidget->removeWidget(loadingWidget);
     loadingWidget->deleteLater();
+
+    if (m_device->deviceInfo.parsedDeviceVersion.major < 13) {
+        Toast *toast = new Toast(this);
+        toast->setAttribute(Qt::WA_DeleteOnClose);
+        toast->setDuration(8000); // Hide after 8 seconds
+        toast->setTitle("Not wireless compatible");
+        toast->setText("This device is not wireless compatible.");
+        toast->setPosition(ToastPosition::BOTTOM_MIDDLE);
+        toast->show();
+    } else {
+        if (m_device->deviceInfo.isWireless)
+            return;
+        bool enabled = ServiceManager::enableWirelessConnections(m_device);
+        Toast *toast = new Toast(this);
+        toast->setAttribute(Qt::WA_DeleteOnClose);
+        toast->setDuration(8000); // Hide after 8 seconds
+        toast->setPosition(ToastPosition::BOTTOM_MIDDLE);
+        if (enabled) {
+            toast->setTitle("Wireless connections enabled");
+            toast->setText(
+                "You can now use wireless connections with this device.");
+        } else {
+            toast->setTitle("Failed to enable wireless connections");
+            toast->setText(
+                "Could not enable wireless connections for this device.");
+        }
+        toast->show();
+    }
 }
 
 void DeviceMenuWidget::switchToTab(const QString &tabName)
@@ -92,6 +127,7 @@ void DeviceMenuWidget::switchToTab(const QString &tabName)
     } else if (tabName == "Apps") {
         stackedWidget->setCurrentWidget(m_installedAppsWidget);
     } else if (tabName == "Gallery") {
+        qDebug() << "Switching to Gallery tab";
         stackedWidget->setCurrentWidget(m_galleryWidget);
     } else if (tabName == "Files") {
         stackedWidget->setCurrentWidget(m_fileExplorerWidget);

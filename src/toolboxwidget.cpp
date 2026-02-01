@@ -44,47 +44,6 @@ struct iDescriptorToolWidget {
     QString iconName;
 };
 
-bool enterRecoveryMode(iDescriptorDevice *device)
-{
-    lockdownd_client_t client = NULL;
-    lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
-    idevice_error_t ret = IDEVICE_E_UNKNOWN_ERROR;
-
-    if (LOCKDOWN_E_SUCCESS !=
-        (ldret = lockdownd_client_new(device->device, &client, APP_LABEL))) {
-        printf("ERROR: Could not connect to lockdownd: %s (%d)\n",
-               lockdownd_strerror(ldret), ldret);
-        return false;
-    }
-
-    ldret = lockdownd_enter_recovery(client);
-    if (ldret == LOCKDOWN_E_SESSION_INACTIVE) {
-        lockdownd_client_free(client);
-        client = NULL;
-        if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
-                                       device->device, &client, APP_LABEL))) {
-            printf("ERROR: Could not connect to lockdownd: %s (%d)\n",
-                   lockdownd_strerror(ldret), ldret);
-            return false;
-        }
-        ldret = lockdownd_enter_recovery(client);
-    }
-    lockdownd_client_free(client);
-    if (ldret != LOCKDOWN_E_SUCCESS) {
-        printf("Failed to enter recovery mode.\n");
-        return false;
-    } else {
-        printf("Device is successfully switching to recovery mode.\n");
-        return true;
-    }
-}
-
-ToolboxWidget *ToolboxWidget::sharedInstance()
-{
-    static ToolboxWidget *instance = new ToolboxWidget();
-    return instance;
-}
-
 ToolboxWidget::ToolboxWidget(QWidget *parent) : QWidget{parent}
 {
     setupUI();
@@ -339,7 +298,8 @@ void ToolboxWidget::updateDeviceList()
                 QString::fromStdString(device->udid).left(8) + "...";
             m_deviceCombo->addItem(
                 QString::fromStdString(device->deviceInfo.productType) + " / " +
-                    shortUdid,
+                    shortUdid +
+                    (device->deviceInfo.isWireless ? " (Wi-Fi)" : ""),
                 QString::fromStdString(device->udid));
         }
     }
@@ -348,6 +308,14 @@ void ToolboxWidget::updateDeviceList()
         AppContext::sharedInstance()->getCurrentDeviceSelection());
 
     m_deviceCombo->blockSignals(false);
+
+    if (m_deviceCombo->count() > 0 && m_deviceCombo->currentIndex() >= 0) {
+        QString currentUdid = m_deviceCombo->currentData().toString();
+        if (!currentUdid.isEmpty()) {
+            m_uuid = currentUdid.toStdString();
+            qDebug() << "[toolboxwidget] Initialized m_uuid to:" << currentUdid;
+        }
+    }
 }
 
 void ToolboxWidget::updateToolboxStates()
@@ -381,6 +349,8 @@ void ToolboxWidget::updateUI()
 void ToolboxWidget::onDeviceSelectionChanged()
 {
     QString selectedUdid = m_deviceCombo->currentData().toString();
+
+    // Clear m_uuid if no valid selection
     if (selectedUdid.isEmpty()) {
         m_uuid.clear();
         return;
@@ -396,7 +366,7 @@ void ToolboxWidget::onDeviceSelectionChanged()
     }
 
     m_uuid = selectedUdid.toStdString();
-
+    qDebug() << "[toolboxwidget] Selected device UDID:" << selectedUdid;
     // Update the selected device in main menu
     AppContext::sharedInstance()->setCurrentDeviceSelection(
         DeviceSelection(selectedUdid.toStdString()));
@@ -404,7 +374,7 @@ void ToolboxWidget::onDeviceSelectionChanged()
 
 void ToolboxWidget::onCurrentDeviceChanged(const DeviceSelection &selection)
 {
-    if (selection.type == DeviceSelection::Normal) {
+    if (selection.valid() && selection.type == DeviceSelection::Normal) {
         int index =
             m_deviceCombo->findData(QString::fromStdString(selection.udid));
         if (index != -1) {
@@ -415,19 +385,22 @@ void ToolboxWidget::onCurrentDeviceChanged(const DeviceSelection &selection)
 
             m_uuid = selection.udid;
         }
+    } else {
+        // Clear m_uuid when selection is invalid
+        m_uuid.clear();
     }
 }
 
-void ToolboxWidget::onToolboxClicked(iDescriptorTool tool, bool requiresDevice)
+void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
 {
+    // final check to make sure device is connected if required
     iDescriptorDevice *device = AppContext::sharedInstance()->getDevice(m_uuid);
-    if (!device && requiresDevice) {
-        QMessageBox::warning(
-            this, "Device Disconnected ?",
-            "Device just disconnected, please select a device.");
+    if (!device && m_requiresDevice[m_toolboxes.indexOf(sender())]) {
+        QMessageBox::warning(this, "Device Disconnected ?",
+                             "Please select a device to use this tool.");
         return;
     }
-
+    qDebug() << "idevice exists:" << (device != nullptr) << m_uuid.c_str();
     switch (tool) {
     case iDescriptorTool::Airplayer: {
         if (!m_airplayWindow) {
@@ -450,7 +423,16 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool, bool requiresDevice)
         liveScreen->show();
     } break;
     case iDescriptorTool::RecoveryMode: {
-        _enterRecoveryMode(device);
+        // Handle entering recovery mode
+        // bool success = _enterRecoveryMode(device);
+        // QMessageBox msgBox;
+        // msgBox.setWindowTitle("Recovery Mode");
+        // if (success) {
+        //     msgBox.setText("Successfully entered recovery mode.");
+        // } else {
+        //     msgBox.setText("Failed to enter recovery mode.");
+        // }
+        // msgBox.exec();
     } break;
     case iDescriptorTool::MountDevImage: {
         DevDiskImageHelper *devDiskImageHelper =
@@ -581,10 +563,17 @@ void ToolboxWidget::restartDevice(iDescriptorDevice *device)
         return;
     }
 
-    if (!(restart(device->udid)))
-        warn("Failed to restart device");
-    else {
-        warn("Device will restart once unplugged", "Success");
+    // FIXME: move to servicemanager
+    auto res = device->diagRelay->restart();
+
+    if (res.is_err()) {
+        QMessageBox::warning(
+            nullptr, "Restart Failed",
+            "Failed to restart device: " +
+                QString::fromStdString(res.unwrap_err().message));
+    } else {
+        QMessageBox::information(nullptr, "Restart Initiated",
+                                 "Device will restart once unplugged.");
         qDebug() << "Restarting device";
     }
 }
@@ -605,12 +594,17 @@ void ToolboxWidget::shutdownDevice(iDescriptorDevice *device)
         return;
     }
 
-    if (!(shutdown(device->device)))
-        // TODO: warn is a safe wrapper for QMessageBox but do we actually need
-        // it ?
-        warn("Failed to shutdown device");
-    else {
-        warn("Device will shutdown once unplugged", "Success");
+    // FIXME: move to servicemanager
+    auto res = device->diagRelay->shutdown();
+
+    if (res.is_err()) {
+        QMessageBox::warning(
+            nullptr, "Shutdown Failed",
+            "Failed to shutdown device: " +
+                QString::fromStdString(res.unwrap_err().message));
+    } else {
+        QMessageBox::information(nullptr, "Shutdown Initiated",
+                                 "Device will shutdown once unplugged.");
         qDebug() << "Shutting down device";
     }
 }
@@ -631,33 +625,16 @@ void ToolboxWidget::_enterRecoveryMode(iDescriptorDevice *device)
         return;
     }
 
-    bool success = enterRecoveryMode(device);
-    QMessageBox _msgBox;
-    _msgBox.setWindowTitle("Recovery Mode");
-    if (success) {
-        _msgBox.setText("Successfully entered recovery mode.");
-    } else {
-        _msgBox.setText("Failed to enter recovery mode.");
-    }
-    _msgBox.exec();
-}
-
-void ToolboxWidget::restartAirPlayWindow()
-{
-    if (!m_airplayWindow) {
-        onToolboxClicked(iDescriptorTool::Airplayer, false);
-        return;
-    }
-
-    connect(
-        m_airplayWindow, &QObject::destroyed, this,
-        [this]() {
-            // give some time for cleanup
-            QTimer::singleShot(100, this, [this]() {
-                onToolboxClicked(iDescriptorTool::Airplayer, false);
-            });
-        },
-        Qt::SingleShotConnection);
-
-    m_airplayWindow->close();
+    // auto res = device->diagRelay->enterRecovery();
+    // if (res.is_err()) {
+    //     QMessageBox::warning(
+    //         nullptr, "Enter Recovery Mode Failed",
+    //         "Failed to enter recovery mode: " +
+    //             QString::fromStdString(res.unwrap_err().message));
+    // } else {
+    //     QMessageBox::information(nullptr, "Enter Recovery Mode Initiated",
+    //                              "Device will enter recovery mode once
+    //                              unplugged.");
+    //     qDebug() << "Entering recovery mode";
+    // }
 }

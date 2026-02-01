@@ -25,7 +25,6 @@
 #include <QMutex>
 #include <QTcpServer>
 #include <QUrl>
-#include <libimobiledevice/afc.h>
 
 QT_BEGIN_NAMESPACE
 class QTcpSocket;
@@ -48,8 +47,9 @@ class MediaStreamer : public QTcpServer
     Q_OBJECT
 
 public:
-    explicit MediaStreamer(iDescriptorDevice *device, afc_client_t afcClient,
-                           const QString &filePath, QObject *parent = nullptr);
+    explicit MediaStreamer(iDescriptorDevice *device,
+                           AfcClientHandle *afcClient, const QString &filePath,
+                           QObject *parent = nullptr);
     ~MediaStreamer();
 
     /**
@@ -88,7 +88,7 @@ private:
         qint64 startByte;
         qint64 endByte;
         qint64 bytesRemaining;
-        uint64_t afcHandle;
+        AfcFileHandle *afcHandle;
     };
 
     HttpRequest parseHttpRequest(const QByteArray &requestData);
@@ -114,7 +114,7 @@ private:
     QList<QTcpSocket *> m_activeConnections;
     QMutex m_connectionsMutex;
 
-    afc_client_t m_afcClient;
+    AfcClientHandle *m_afcClient;
 };
 
 #endif // MEDIASTREAMER_H

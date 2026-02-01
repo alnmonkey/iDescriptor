@@ -86,7 +86,7 @@ private:
     QPushButton *m_check_mountedButton;
     QProcessIndicator *m_processIndicator;
 
-    iDescriptorDevice *m_currentDevice;
+    QString m_currentDeviceUdid;
     QStringList m_compatibleVersions;
     QStringList m_otherVersions;
 

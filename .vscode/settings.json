@@ -203,7 +203,9 @@
     "qabstractbutton": "cpp",
     "qtnetwork": "cpp",
     "qtcore": "cpp",
-    "qbluetoothdevicediscoveryagent": "cpp",
-    "qbluetoothuuid": "cpp"
+    "csetjmp": "cpp",
+    "qthread": "cpp",
+    "qregularexpression": "cpp",
+    "qnetworkaccessmanager": "cpp"
   }
 }

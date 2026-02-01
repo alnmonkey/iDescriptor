@@ -20,35 +20,26 @@
 #include "../../iDescriptor.h"
 #include "plist/plist.h"
 #include <QDebug>
-#include <libimobiledevice/diagnostics_relay.h>
 #include <string>
 
-void get_battery_info(std::string productType, idevice_t idevice,
-                      bool is_iphone, plist_t &diagnostics)
+// FIXME: return bool
+void get_battery_info(DiagnosticsRelay *diag_client, plist_t &diagnostics)
 {
-    diagnostics_relay_client_t diagnostics_client = nullptr;
-    try {
+    qDebug() << "Fetching battery info via DiagnosticsRelay";
+    auto ioreg_result = diag_client->ioregistry(
+        IdeviceFFI::None,                                // current_plane
+        IdeviceFFI::None,                                // entry_name
+        IdeviceFFI::Some(std::string("IOPMPowerSource")) // entry_class
+    );
 
-        if (diagnostics_relay_client_start_service(idevice, &diagnostics_client,
-                                                   nullptr) !=
-            DIAGNOSTICS_RELAY_E_SUCCESS) {
-            qDebug() << "Failed to start diagnostics relay service.";
-            return;
-        }
+    if (!ioreg_result.is_ok()) {
+        qDebug() << "Failed to query IORegistry:"
+                 << ioreg_result.unwrap_err().message.c_str();
+        return;
+    }
 
-        if (diagnostics_relay_query_ioregistry_entry(
-                diagnostics_client, nullptr, "IOPMPowerSource", &diagnostics) !=
-                DIAGNOSTICS_RELAY_E_SUCCESS &&
-            !diagnostics) {
-
-            qDebug()
-                << "Failed to query diagnostics relay for AppleARMPMUCharger.";
-            if (diagnostics_client)
-                diagnostics_relay_client_free(diagnostics_client);
-        }
-    } catch (const std::exception &e) {
-        if (diagnostics_client)
-            diagnostics_relay_client_free(diagnostics_client);
-        qDebug() << "Exception in get_battery_info: " << e.what();
+    auto plist_opt = std::move(ioreg_result).unwrap();
+    if (plist_opt.is_some()) {
+        diagnostics = std::move(plist_opt).unwrap();
     }
 }

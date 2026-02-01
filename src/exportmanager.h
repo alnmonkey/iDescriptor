@@ -20,6 +20,7 @@
 #ifndef EXPORTMANAGER_H
 #define EXPORTMANAGER_H
 
+#include "exportmanagerthread.h"
 #include "iDescriptor.h"
 #include <QFuture>
 #include <QFutureWatcher>
@@ -35,35 +36,6 @@
 // Forward declaration
 class ExportProgressDialog;
 
-struct ExportItem {
-    QString sourcePathOnDevice;
-    QString suggestedFileName;
-
-    ExportItem() = default;
-    ExportItem(const QString &sourcePath, const QString &fileName)
-        : sourcePathOnDevice(sourcePath), suggestedFileName(fileName)
-    {
-    }
-};
-
-struct ExportResult {
-    QString sourceFilePath;
-    QString outputFilePath;
-    bool success = false;
-    QString errorMessage;
-    qint64 bytesTransferred = 0;
-};
-
-struct ExportJobSummary {
-    QUuid jobId;
-    int totalItems = 0;
-    int successfulItems = 0;
-    int failedItems = 0;
-    qint64 totalBytesTransferred = 0;
-    QString destinationPath;
-    bool wasCancelled = false;
-};
-
 class ExportManager : public QObject
 {
     Q_OBJECT
@@ -78,14 +50,17 @@ public:
 
     QUuid startExport(iDescriptorDevice *device, const QList<ExportItem> &items,
                       const QString &destinationPath,
-                      std::optional<afc_client_t> altAfc = std::nullopt);
+                      std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
     void cancelExport(const QUuid &jobId);
 
     bool isExporting() const;
 
     bool isJobRunning(const QUuid &jobId) const;
+    static QString generateUniqueOutputPath(const QString &basePath);
 
+    // todo: should we delete this in ~ExportManager?
+    ExportManagerThread *m_exportThread = new ExportManagerThread(this);
 signals:
 
     void exportStarted(const QUuid &jobId, int totalItems,
@@ -108,27 +83,7 @@ private:
     explicit ExportManager(QObject *parent = nullptr);
     ~ExportManager();
 
-    struct ExportJob {
-        QUuid jobId;
-        iDescriptorDevice *device = nullptr;
-        QList<ExportItem> items;
-        QString destinationPath;
-        std::optional<afc_client_t> altAfc;
-        std::atomic<bool> cancelRequested{false};
-        QFuture<void> future;
-        QFutureWatcher<void> *watcher = nullptr;
-    };
-
     void executeExportJob(ExportJob *job);
-
-    ExportResult exportSingleItem(iDescriptorDevice *device,
-                                  const ExportItem &item,
-                                  const QString &destinationDir,
-                                  std::optional<afc_client_t> altAfc,
-                                  std::atomic<bool> &cancelRequested,
-                                  const QUuid &jobId);
-
-    QString generateUniqueOutputPath(const QString &basePath) const;
 
     QString extractFileName(const QString &devicePath) const;
 

@@ -1,3 +1,9 @@
+# THIS BRANCH IS UNDER DEVELOPMENT
+
+## Migrating to new backend -> https://github.com/jkcoxson/idevice
+
+## Only builds on Linux for now
+
 <p align="center" style="text-align: center">
   <img src="./resources/icons/app-icon/icon.png" width="25%"><br/>
 </p>
@@ -112,7 +118,7 @@ make sure to do "sudo pacman -Syu" otherwise it's not going to find libimobilede
 | Feature                     | Status               | Notes                                         |
 | --------------------------- | -------------------- | --------------------------------------------- |
 | USB Connection              | ✅ Implemented       | Fully supported on Windows, macOS, and Linux. |
-| Wireless Connection (Wi‑Fi) | ⚠️ To be implemented | -                                             |
+| Wireless Connection (Wi‑Fi) | ⚠️ Under development | -                                             |
 
 ### Tools
 

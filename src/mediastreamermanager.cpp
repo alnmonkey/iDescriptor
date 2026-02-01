@@ -31,7 +31,7 @@ MediaStreamerManager *MediaStreamerManager::sharedInstance()
 }
 
 QUrl MediaStreamerManager::getStreamUrl(iDescriptorDevice *device,
-                                        afc_client_t afcClient,
+                                        AfcClientHandle *afcClient,
                                         const QString &filePath)
 {
     QMutexLocker locker(&m_streamersMutex);

@@ -22,6 +22,7 @@
 
 #include "iDescriptor.h"
 #include "photomodel.h"
+#include "zloadingwidget.h"
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -57,11 +58,11 @@ private slots:
     void onBackToAlbums();
 
 private:
-    void setupUI();
+    void reload();
     void setupControlsLayout();
     void setupAlbumSelectionView();
     void setupPhotoGalleryView();
-    void loadAlbumList();
+    void loadAlbumList(const AFCFileTree &dcimTree);
     void setControlsEnabled(bool enabled);
     QString selectExportDirectory();
     QIcon loadAlbumThumbnail(const QString &albumPath);
@@ -76,8 +77,9 @@ private:
     // UI components
     QVBoxLayout *m_mainLayout;
     QHBoxLayout *m_controlsLayout;
-    QStackedWidget *m_stackedWidget;
-
+    ZLoadingWidget *m_loadingWidget;
+    QPushButton *m_retryButton;
+    QPushButton *m_importButton;
     // Album selection view
     QWidget *m_albumSelectionWidget;
     QListView *m_albumListView;

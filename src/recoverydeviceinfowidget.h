@@ -27,7 +27,7 @@ class RecoveryDeviceInfoWidget : public QWidget
 
     Q_OBJECT
 public:
-    explicit RecoveryDeviceInfoWidget(const iDescriptorRecoveryDevice *info,
+    explicit RecoveryDeviceInfoWidget(const void *info,
                                       QWidget *parent = nullptr);
     uint64_t ecid; // Assuming ecid is unique for each device
 signals:

@@ -39,7 +39,7 @@ public:
 
 private:
     QStackedWidget *stackedWidget; // Pointer to the stacked widget
-    iDescriptorDevice *device;     // Pointer to the iDescriptor device
+    iDescriptorDevice *m_device;   // Pointer to the iDescriptor device
     DeviceInfoWidget *m_deviceInfoWidget;
     InstalledAppsWidget *m_installedAppsWidget;
     GalleryWidget *m_galleryWidget;

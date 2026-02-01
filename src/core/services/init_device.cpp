@@ -19,15 +19,19 @@
 
 #include "../../devicedatabase.h"
 #include "../../iDescriptor.h"
-#include "../../servicemanager.h"
+// #include "../../servicemanager.h"
+#include "../../appcontext.h"
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "libirecovery.h"
 #endif
+#include "../../heartbeat.h"
 #include <QDebug>
-#include <libimobiledevice/diagnostics_relay.h>
-#include <libimobiledevice/libimobiledevice.h>
-#include <libimobiledevice/lockdown.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sstream>
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 std::string safeGetXML(const char *key, pugi::xml_node dict)
 {
@@ -150,7 +154,8 @@ void parseDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d)
 }
 
 DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
-                          afc_client_t &afcClient,
+                          AfcClientHandle *afcClient,
+                          DiagnosticsRelay *diagRelay,
                           iDescriptorInitDeviceResult &result)
 {
     pugi::xml_node dict = doc.child("plist").child("dict");
@@ -194,29 +199,39 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     d.bluetoothAddress = safeGet("BluetoothAddress");
     d.firmwareVersion = safeGet("FirmwareVersion");
     d.productVersion = safeGet("ProductVersion");
+    d.wifiMacAddress = safeGet("WiFiAddress");
 
     QString q_version = QString::fromStdString(d.productVersion);
     QStringList parts = q_version.split('.');
 
-    int major = (parts.length() > 0) ? parts[0].toInt() : 0;
-    int minor = (parts.length() > 1) ? parts[1].toInt() : 0;
-    int patch = (parts.length() > 2) ? parts[2].toInt() : 0;
+    unsigned int major = (parts.length() > 0) ? parts[0].toInt() : 0;
+    unsigned int minor = (parts.length() > 1) ? parts[1].toInt() : 0;
+    unsigned int patch = (parts.length() > 2) ? parts[2].toInt() : 0;
 
-    d.parsedDeviceVersion = IDEVICE_DEVICE_VERSION(major, minor, patch);
+    d.parsedDeviceVersion =
+        DeviceVersion{.major = major, .minor = minor, .patch = patch};
 
     /*DiskInfo*/
     try {
-        d.diskInfo.totalDiskCapacity =
-            std::stoull(safeGet("TotalDiskCapacity"));
-        d.diskInfo.totalDataCapacity =
-            std::stoull(safeGet("TotalDataCapacity"));
-        d.diskInfo.totalSystemCapacity =
-            std::stoull(safeGet("TotalSystemCapacity"));
+        auto safeParseU64 = [&](const char *key) -> uint64_t {
+            std::string s = safeGet(key);
+            if (s.empty())
+                return 0;
+            try {
+                return std::stoull(s);
+            } catch (...) {
+                qDebug() << "Failed to parse key to uint64_t:" << key
+                         << "value:" << QString::fromStdString(s);
+                return 0;
+            }
+        };
+        d.diskInfo.totalDiskCapacity = safeParseU64("TotalDiskCapacity");
+        d.diskInfo.totalDataCapacity = safeParseU64("TotalDataCapacity");
+        d.diskInfo.totalSystemCapacity = safeParseU64("TotalSystemCapacity");
         /*
             For some reason this is way inaccrutate for iOS 17 and up
         */
-        d.diskInfo.totalDataAvailable =
-            std::stoull(safeGet("TotalDataAvailable"));
+        d.diskInfo.totalDataAvailable = safeParseU64("TotalDataAvailable");
 
         try {
             /*
@@ -226,13 +241,21 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
             // "FSTotalBytes: 63966400512"
             // "FSFreeBytes: 2867101696"
             // "FSBlockSize: 4096"
-            char **info = NULL;
-            afc_get_device_info(afcClient, &info);
-            if (info && info[6]) {
-                d.diskInfo.totalDataAvailable =
-                    std::stoull(std::string(info[5]));
+            // FIXME: it's too slow on older devices?
+            AfcDeviceInfo *info = new AfcDeviceInfo();
+            qDebug() << "afc_get_device_info...";
+            IdeviceFfiError *err = afc_get_device_info(afcClient, info);
+            if (err) {
+                qDebug() << "AFC get device info error code: " << err->message;
+                return d;
             }
-            afc_dictionary_free(info);
+            if (info) {
+
+                qDebug() << "AFC Disk Info" << info->free_bytes;
+                d.diskInfo.totalDataAvailable = info->free_bytes;
+            }
+            // FIXME: free
+            afc_device_info_free(info);
         } catch (const std::exception &e) {
             qDebug() << "Error parsing disk info: " << e.what();
         }
@@ -281,14 +304,14 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
 
     /*BatteryInfo*/
     plist_t diagnostics = nullptr;
-    get_battery_info(rawProductType, result.device, d.is_iPhone, diagnostics);
+    get_battery_info(diagRelay, diagnostics);
 
     if (!diagnostics) {
         qDebug() << "Failed to get diagnostics plist.";
         return d;
     }
     try {
-        PlistNavigator ioreg = PlistNavigator(diagnostics)["IORegistry"];
+        PlistNavigator ioreg = PlistNavigator(diagnostics);
 
         // old devices do not have "BatteryData"
         d.oldDevice = !ioreg["BatteryData"];
@@ -300,7 +323,7 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
         }
 
         bool newerThaniPhone8 =
-            is_product_type_newer(rawProductType, std::string("iPhone8,1"));
+            iDescriptor::Utils::isProductTypeNewer(rawProductType, "iPhone8,1");
 
         uint64_t cycleCount = ioreg["BatteryData"]["CycleCount"].getUInt();
 
@@ -329,6 +352,7 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
         d.batteryInfo.serialNumber = !batterySerialNumber.empty()
                                          ? batterySerialNumber
                                          : "Error retrieving serial number";
+        qDebug() << "Cycle count: " << cycleCount;
         parseDeviceBattery(ioreg, d);
         plist_free(diagnostics);
         diagnostics = nullptr;
@@ -340,156 +364,280 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     }
 }
 
-iDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
+iDescriptorInitDeviceResult
+init_idescriptor_device(const QString &udid,
+                        const WirelessInitArgs &wirelessArgs)
 {
-    qDebug() << "Initializing iDescriptor device with UDID: "
-             << QString::fromUtf8(udid);
+    const bool isWireless =
+        !wirelessArgs.ip.isEmpty() && !wirelessArgs.pairing_file.isEmpty();
+    qDebug() << "Initializing iDescriptor device with UDID: " << udid
+             << (isWireless ? "over wireless" : "over USB");
+
     iDescriptorInitDeviceResult result = {};
 
-    // 1. Initialize all resource handles to nullptr
-    idevice_t device = nullptr;
-    lockdownd_client_t client = nullptr;
-    lockdownd_service_descriptor_t lockdownService = nullptr;
-    afc_client_t afcClient = nullptr;
-    afc_client_t afc2Client = nullptr;
+    UsbmuxdConnectionHandle *usbmuxd_conn = nullptr;
+    UsbmuxdAddrHandle *addr_handle = nullptr;
+    IdeviceProviderHandle *provider = nullptr;
+    LockdowndClientHandle *lockdown = nullptr;
+    IdeviceSocketHandle *socket = nullptr;
+    AfcClientHandle *afc_client = nullptr;
+    AfcClientHandle *afc2_client = nullptr;
     pugi::xml_document infoXml;
+    uint32_t actual_device_id = 0;
+    IdevicePairingFile *pairing_file = nullptr;
+    IdeviceHandle *deviceHandle = nullptr;
+    HeartbeatClientHandle *heartbeat = nullptr;
+    HeartbeatThread *heartbeatThread = nullptr;
+    ImageMounterHandle *image_mounter = nullptr;
+    DiagnosticsRelayClientHandle *diagnostics_relay = nullptr;
+    LocationSimulationHandle *location_simulation = nullptr;
+    plist_t val = nullptr;
 
-    idevice_error_t ret =
-        idevice_new_with_options(&device, udid, IDEVICE_LOOKUP_USBMUX);
+    IdeviceFfiError *err =
+        idevice_usbmuxd_new_default_connection(0, &usbmuxd_conn);
+    if (err) {
+        if (!isWireless) {
+            qDebug() << "Failed to connect to usbmuxd";
+            goto cleanup;
+        }
+    }
 
-    if (ret != IDEVICE_E_SUCCESS) {
-        qDebug() << "Failed to connect to device: " << ret;
-        // result.error is not set here as idevice_error_t is different
+    err = idevice_usbmuxd_default_addr_new(&addr_handle);
+    if (err) {
+        qDebug() << "Failed to create address handle";
         goto cleanup;
     }
 
-    lockdownd_error_t ldret;
-    if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
-                                   device, &client, APP_LABEL))) {
-        result.error = ldret;
-        qDebug() << "Failed to create lockdown client: " << ldret;
-        goto cleanup;
-    }
+    if (isWireless) {
+        // Create IPv4 sockaddr
+        struct sockaddr_in addr_in;
+        memset(&addr_in, 0, sizeof(addr_in));
+        addr_in.sin_family = AF_INET;
+        addr_in.sin_port = htons(0);
+        inet_pton(AF_INET, wirelessArgs.ip.toUtf8().constData(),
+                  &addr_in.sin_addr);
+        qDebug() << "Reading pairing file from" << wirelessArgs.pairing_file
+                 << "for udid" << udid;
+        err = idevice_pairing_file_read(
+            wirelessArgs.pairing_file.toUtf8().constData(), &pairing_file);
+        if (err) {
+            qDebug() << "Failed to read pairing file";
+            goto cleanup;
+        }
 
-    if (LOCKDOWN_E_SUCCESS !=
-        (ldret = lockdownd_start_service(client, "com.apple.afc",
-                                         &lockdownService))) {
-        result.error = ldret;
-        qDebug() << "Failed to start AFC service: " << ldret;
-        goto cleanup;
-    }
+        err = idevice_tcp_provider_new(
+            (const idevice_sockaddr *)&addr_in,
+            const_cast<IdevicePairingFile *>(pairing_file), APP_LABEL,
+            &provider);
+        if (err) {
+            qDebug() << "Failed to create wireless provider";
+            goto cleanup;
+        }
+        err = heartbeat_connect(provider, &heartbeat);
+        if (err) {
+            qDebug() << "Failed to start Heartbeat service";
+            goto cleanup;
+        }
+        // udid is mac address here for wireless
+        heartbeatThread = new HeartbeatThread(heartbeat, udid);
+        heartbeatThread->start();
 
-    if (afc_client_new(device, lockdownService, &afcClient) != AFC_E_SUCCESS) {
-        qDebug() << "Failed to create AFC client.";
+        while (!heartbeatThread->initialCompleted()) {
+            sleep(1);
+        }
 
-        goto cleanup;
-    }
-
-    // AFC2 is optional, so we don't goto cleanup on failure
-    afc_error_t afc2_err;
-    if ((afc2_err = afc2_client_new(device, &afc2Client)) != AFC_E_SUCCESS) {
-        qDebug() << "AFC2 client not available. Error:" << afc2_err;
-        afc2Client = nullptr;
     } else {
-        qDebug() << "AFC2 client created successfully.";
+
+        UsbmuxdDeviceHandle **devices;
+        int device_count;
+        err =
+            idevice_usbmuxd_get_devices(usbmuxd_conn, &devices, &device_count);
+
+        // Find by UDID and get its device_id
+        for (size_t i = 0; i < device_count; i++) {
+            const char *device_udid =
+                idevice_usbmuxd_device_get_udid(devices[i]);
+            if (strcmp(device_udid, udid.toUtf8().constData()) == 0) {
+                actual_device_id =
+                    idevice_usbmuxd_device_get_device_id(devices[i]);
+                break;
+            }
+        }
+
+        // 3. Create provider for the device (actual function name)
+        err = usbmuxd_provider_new(addr_handle, 0, udid.toUtf8().constData(),
+                                   actual_device_id, APP_LABEL, &provider);
     }
 
-    get_device_info_xml(udid, client, device, infoXml);
-
-    if (infoXml.empty()) {
-        qDebug() << "Failed to retrieve device info XML for UDID: "
-                 << QString::fromUtf8(udid);
+    if (err) {
+        qDebug() << "Failed to create provider";
         goto cleanup;
     }
 
-    // If we got this far, the core initialization is successful
+    err = lockdownd_connect(provider, &lockdown);
+    if (err) {
+        qDebug() << "Failed to connect to lockdown";
+        goto cleanup;
+    }
+
+    err = idevice_provider_get_pairing_file(provider, &pairing_file);
+    if (err) {
+        qDebug() << "Failed to get pairing file";
+        goto cleanup;
+    }
+
+    err = lockdownd_start_session(lockdown, pairing_file);
+    if (err) {
+        qDebug() << "Failed to start lockdown session";
+        goto cleanup;
+    }
+
+    if (err) {
+        qDebug() << "Failed to connect to Heartbeat client";
+        goto cleanup;
+    }
+
+    err = afc_client_connect(provider, &afc_client);
+    if (err) {
+        qDebug() << "Failed to create AFC client";
+        goto cleanup;
+    }
+
+    err = image_mounter_connect(provider, &image_mounter);
+    if (err) {
+        qDebug() << "Failed to create Image Mounter client";
+        goto cleanup;
+    }
+
+    err = diagnostics_relay_client_connect(provider, &diagnostics_relay);
+
+    if (err) {
+        qDebug() << "Failed to create Diagnostics Relay client";
+        goto cleanup;
+    }
+
+    err = afc2_client_connect(provider, &afc2_client);
+    if (err) {
+        qDebug() << "Failed to create AFC2 client";
+        // dont cleanup here, afc2 is optional
+    }
+
+    // FIXME: will probably not work on iOS 17 and above
+    // requires dev image disk
+    // err = location_simulation_connect(provider, &location_simulation);
+    // if (err) {
+    //     qDebug() << "Failed to create Location Simulation client";
+    //     goto cleanup;
+    // }
+    get_device_info_xml(udid.toUtf8().constData(), lockdown, infoXml);
+
+    lockdownd_get_value(lockdown, "EnableWifiConnections",
+                        "com.apple.mobile.wireless_lockdown", &val);
+    if (val)
+        plist_print(val);
+
+    result.provider = provider;
     result.success = true;
-    result.device = device;
-    result.afcClient = afcClient;
-    result.afc2Client = afc2Client;
-    fullDeviceInfo(infoXml, afcClient, result);
-
+    result.afcClient = afc_client;
+    result.afc2Client = afc2_client;
+    result.lockdown = lockdown;
+    // TODO:remove, not really required to get some stuff going so it can be
+    // optional
+    result.imageMounter = image_mounter;
+    result.diagRelay = std::make_shared<DiagnosticsRelay>(
+        DiagnosticsRelay::adopt(diagnostics_relay));
+    result.locationSimulation = location_simulation;
+    result.heartbeatThread = heartbeatThread;
+    // TODO cache pairing file path
+    result.deviceInfo.isWireless = isWireless;
+    fullDeviceInfo(infoXml, afc_client, result.diagRelay.get(), result);
+    ::QObject::connect(heartbeatThread, &HeartbeatThread::heartbeatFailed,
+                       AppContext::sharedInstance(),
+                       &AppContext::heartbeatFailed);
+    ::QObject::connect(heartbeatThread, &HeartbeatThread::heartbeatThreadExited,
+                       AppContext::sharedInstance(), &AppContext::removeDevice);
 cleanup:
-    if (lockdownService) {
-        lockdownd_service_descriptor_free(lockdownService);
-    }
-    if (client) {
-        lockdownd_client_free(client);
-    }
-
-    // free on error
+    // Cleanup on error
+    // FIXME: implement proper cleanup
+    // one of them causes a crash here, needs investigation
     if (!result.success) {
-        if (afc2Client) {
-            afc_client_free(afc2Client);
-        }
-        if (afcClient) {
-            afc_client_free(afcClient);
-        }
-        if (device) {
-            idevice_free(device);
-        }
+        qDebug() << "Initialization failed, cleaning up resources."
+                 << err->message;
+        // if (afc2_client)
+        //     afc_client_free(afc2_client);
+        // if (afc_client)
+        //     afc_client_free(afc_client);
+        // if (lockdown)
+        //     lockdownd_client_free(lockdown);
+        // if (provider)
+        //     idevice_provider_free(provider);
+        // if (addr_handle)
+        //     idevice_usbmuxd_addr_free(addr_handle);
+        // if (usbmuxd_conn)
+        //     idevice_usbmuxd_connection_free(usbmuxd_conn);
     }
 
     return result;
 }
-#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
-iDescriptorInitDeviceResultRecovery
-init_idescriptor_recovery_device(uint64_t ecid)
-{
-    qDebug() << "Initializing iDescriptor recovery device with ECID: " << ecid;
-    iDescriptorInitDeviceResultRecovery result = {};
 
-    irecv_client_t client = nullptr;
-    const irecv_device_info *deviceInfo = nullptr;
-    irecv_device_t device = nullptr;
-    const DeviceDatabaseInfo *info = nullptr;
+// #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
+// iDescriptorInitDeviceResultRecovery
+// init_idescriptor_recovery_device(uint64_t ecid)
+// {
+//     qDebug() << "Initializing iDescriptor recovery device with ECID: " <<
+//     ecid; iDescriptorInitDeviceResultRecovery result = {};
 
-    irecv_error_t ret = irecv_open_with_ecid_and_attempts(
-        &client, ecid, RECOVERY_CLIENT_CONNECTION_TRIES);
+//     irecv_client_t client = nullptr;
+//     const irecv_device_info *deviceInfo = nullptr;
+//     irecv_device_t device = nullptr;
+//     const DeviceDatabaseInfo *info = nullptr;
 
-    if (ret != IRECV_E_SUCCESS) {
-        qDebug() << "Failed to open recovery client with ECID:" << ecid
-                 << "Error:" << ret;
-        result.error = ret;
-        goto cleanup;
-    }
+//     irecv_error_t ret = irecv_open_with_ecid_and_attempts(
+//         &client, ecid, RECOVERY_CLIENT_CONNECTION_TRIES);
 
-    ret = irecv_get_mode(client, (int *)&result.mode);
-    if (ret != IRECV_E_SUCCESS) {
-        qDebug() << "Failed to get recovery mode. Error:" << ret;
-        result.error = ret;
-        goto cleanup;
-    }
+//     if (ret != IRECV_E_SUCCESS) {
+//         qDebug() << "Failed to open recovery client with ECID:" << ecid
+//                  << "Error:" << ret;
+//         result.error = ret;
+//         goto cleanup;
+//     }
 
-    deviceInfo = irecv_get_device_info(client);
-    if (!deviceInfo) {
-        qDebug() << "Failed to get device info from recovery client";
-        result.error = IRECV_E_UNKNOWN_ERROR;
-        goto cleanup;
-    }
+//     ret = irecv_get_mode(client, (int *)&result.mode);
+//     if (ret != IRECV_E_SUCCESS) {
+//         qDebug() << "Failed to get recovery mode. Error:" << ret;
+//         result.error = ret;
+//         goto cleanup;
+//     }
 
-    if (irecv_devices_get_device_by_client(client, &device) ==
-            IRECV_E_SUCCESS &&
-        device && device->hardware_model) {
-        qDebug() << "Recovery device hardware_model: "
-                 << device->hardware_model;
-        info =
-            DeviceDatabase::findByHwModel(std::string(device->hardware_model));
-    } else {
-        qDebug() << "Could not resolve hardware_model from client.";
-    }
+//     deviceInfo = irecv_get_device_info(client);
+//     if (!deviceInfo) {
+//         qDebug() << "Failed to get device info from recovery client";
+//         result.error = IRECV_E_UNKNOWN_ERROR;
+//         goto cleanup;
+//     }
 
-    result.displayName =
-        info ? (info->displayName ? info->displayName : info->marketingName)
-             : "Unknown Device";
-    result.deviceInfo = *deviceInfo;
-    result.success = true;
+//     if (irecv_devices_get_device_by_client(client, &device) ==
+//             IRECV_E_SUCCESS &&
+//         device && device->hardware_model) {
+//         qDebug() << "Recovery device hardware_model: "
+//                  << device->hardware_model;
+//         info =
+//             DeviceDatabase::findByHwModel(std::string(device->hardware_model));
+//     } else {
+//         qDebug() << "Could not resolve hardware_model from client.";
+//     }
 
-cleanup:
-    if (client) {
-        irecv_close(client);
-    }
+//     result.displayName =
+//         info ? (info->displayName ? info->displayName : info->marketingName)
+//              : "Unknown Device";
+//     result.deviceInfo = *deviceInfo;
+//     result.success = true;
 
-    return result;
-}
-#endif // ENABLE_RECOVERY_DEVICE_SUPPORT
+// cleanup:
+//     if (client) {
+//         irecv_close(client);
+//     }
+
+//     return result;
+// }
+// #endif // ENABLE_RECOVERY_DEVICE_SUPPORT
