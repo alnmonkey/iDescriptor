@@ -323,7 +323,7 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
         }
 
         bool newerThaniPhone8 =
-            is_product_type_newer(rawProductType, std::string("iPhone8,1"));
+            iDescriptor::Utils::isProductTypeNewer(rawProductType, "iPhone8,1");
 
         uint64_t cycleCount = ioreg["BatteryData"]["CycleCount"].getUInt();
 
