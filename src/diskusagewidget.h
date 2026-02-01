@@ -65,25 +65,27 @@ private:
     QVBoxLayout *m_dataLayout;
     QWidget *m_diskBarContainer;
     QHBoxLayout *m_diskBarLayout;
-/*FIXME: NSPopover bug */ 
+    /*FIXME: NSPopover bug */
     // #ifdef Q_OS_MAC
-//     DiskUsageBar *m_systemBar;
-//     DiskUsageBar *m_appsBar;
-//     DiskUsageBar *m_mediaBar;
-//     DiskUsageBar *m_othersBar;
-//     DiskUsageBar *m_freeBar;
-// #else
+    //     DiskUsageBar *m_systemBar;
+    //     DiskUsageBar *m_appsBar;
+    //     DiskUsageBar *m_mediaBar;
+    //     DiskUsageBar *m_othersBar;
+    //     DiskUsageBar *m_freeBar;
+    // #else
     QWidget *m_systemBar;
     QWidget *m_appsBar;
     QWidget *m_mediaBar;
     QWidget *m_othersBar;
     QWidget *m_freeBar;
-// #endif
+    QWidget *m_galleryBar;
+    // #endif
 
     QHBoxLayout *m_legendLayout;
     QLabel *m_systemLabel;
     QLabel *m_appsLabel;
     QLabel *m_mediaLabel;
+    QLabel *m_galleryLabel;
     QLabel *m_othersLabel;
     QLabel *m_freeLabel;
 
@@ -93,6 +95,7 @@ private:
     uint64_t m_mediaUsage;
     uint64_t m_othersUsage;
     uint64_t m_freeSpace;
+    uint64_t m_galleryUsage;
 };
 
 #endif // DISKUSAGEWIDGET_H

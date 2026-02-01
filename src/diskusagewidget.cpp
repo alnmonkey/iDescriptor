@@ -20,12 +20,18 @@
 #include "diskusagewidget.h"
 #include "diskusagebar.h"
 #include "iDescriptor.h"
+#include "servicemanager.h"
+extern "C" {
+#include <sqlite3.h>
+}
 
 #include <QApplication>
 #include <QDebug>
 #include <QFutureWatcher>
 #include <QVariantMap>
 #include <QtConcurrent/QtConcurrent>
+
+using namespace iDescriptor;
 
 DiskUsageWidget::DiskUsageWidget(iDescriptorDevice *device, QWidget *parent)
     : QWidget(parent), m_device(device), m_state(Loading), m_totalCapacity(0),
@@ -92,7 +98,7 @@ void DiskUsageWidget::setupUI()
     m_diskBarLayout->setSpacing(0);
 
     /*
-        FIXME: There is bug with qt, related to NSPopover on macOS
+        FIXME: There is a bug with qt, related to NSPopover on macOS
         need to revisit this when we find a fix
     */
     // #ifdef Q_OS_MAC
@@ -122,14 +128,18 @@ void DiskUsageWidget::setupUI()
     m_systemBar = new QWidget();
     m_appsBar = new QWidget();
     m_mediaBar = new QWidget();
+    m_galleryBar = new QWidget();
     m_othersBar = new QWidget();
     m_freeBar = new QWidget();
+
     // required for tooltips to have default styling
     m_systemBar->setObjectName("systemBar");
     m_appsBar->setObjectName("appsBar");
     m_mediaBar->setObjectName("mediaBar");
+    m_galleryBar->setObjectName("galleryBar");
     m_othersBar->setObjectName("othersBar");
     m_freeBar->setObjectName("freeBar");
+
     // Set colors
     m_systemBar->setStyleSheet(
         "QWidget#systemBar { background-color: #a1384d; border: 1px solid"
@@ -140,6 +150,9 @@ void DiskUsageWidget::setupUI()
         "#63b4da; padding: 0; margin: 0; }");
     m_mediaBar->setStyleSheet("QWidget#mediaBar { background-color: #2ECC71; "
                               "border: none; padding: 0; margin: 0; }");
+    m_galleryBar->setStyleSheet(
+        "QWidget#galleryBar { background-color: #9b59b6; border: 1px solid "
+        "#8e44ad; padding: 0; margin: 0; }");
     m_othersBar->setStyleSheet(
         "QWidget#othersBar { background-color: #a28729; border: 1px solid "
         "#c4a32d; padding: 0; margin: 0; }");
@@ -152,12 +165,14 @@ void DiskUsageWidget::setupUI()
     m_systemBar->setContentsMargins(0, 0, 0, 0);
     m_appsBar->setContentsMargins(0, 0, 0, 0);
     m_mediaBar->setContentsMargins(0, 0, 0, 0);
+    m_galleryBar->setContentsMargins(0, 0, 0, 0);
     m_othersBar->setContentsMargins(0, 0, 0, 0);
     m_freeBar->setContentsMargins(0, 0, 0, 0);
 
     m_diskBarLayout->addWidget(m_systemBar);
     m_diskBarLayout->addWidget(m_appsBar);
     m_diskBarLayout->addWidget(m_mediaBar);
+    m_diskBarLayout->addWidget(m_galleryBar);
     m_diskBarLayout->addWidget(m_othersBar);
     m_diskBarLayout->addWidget(m_freeBar);
 
@@ -174,6 +189,7 @@ void DiskUsageWidget::setupUI()
     m_systemLabel = new QLabel("System", m_legendWidget);
     m_appsLabel = new QLabel("Apps", m_legendWidget);
     m_mediaLabel = new QLabel("Media", m_legendWidget);
+    m_galleryLabel = new QLabel("Gallery", m_legendWidget);
     m_othersLabel = new QLabel("Others", m_legendWidget);
     m_freeLabel = new QLabel("Free", m_legendWidget);
 
@@ -182,15 +198,23 @@ void DiskUsageWidget::setupUI()
     m_systemLabel->setStyleSheet(labelStyle);
     m_appsLabel->setStyleSheet(labelStyle);
     m_mediaLabel->setStyleSheet(labelStyle);
+    m_galleryLabel->setStyleSheet(labelStyle);
     m_othersLabel->setStyleSheet(labelStyle);
     m_freeLabel->setStyleSheet(labelStyle);
 
+    // FIXME:switch to zloadingwidget and remove unnecessary stretches when
+    // m_galleryLabel is invisible
     m_legendLayout->addWidget(m_systemLabel);
-    m_legendLayout->addWidget(m_appsLabel);
-    m_legendLayout->addWidget(m_mediaLabel);
-    m_legendLayout->addWidget(m_othersLabel);
-    m_legendLayout->addWidget(m_freeLabel);
     m_legendLayout->addStretch();
+    m_legendLayout->addWidget(m_appsLabel);
+    m_legendLayout->addStretch();
+    m_legendLayout->addWidget(m_mediaLabel);
+    m_legendLayout->addStretch();
+    m_legendLayout->addWidget(m_galleryLabel);
+    m_legendLayout->addStretch();
+    m_legendLayout->addWidget(m_othersLabel);
+    m_legendLayout->addStretch();
+    m_legendLayout->addWidget(m_freeLabel);
 
     // Add the legend widget (not the layout) to the data layout
     m_dataLayout->addWidget(m_legendWidget);
@@ -235,6 +259,8 @@ void DiskUsageWidget::updateUI()
         (int)((double)m_systemUsage / m_totalCapacity * totalWidth);
     int appsWidth = (int)((double)m_appsUsage / m_totalCapacity * totalWidth);
     int mediaWidth = (int)((double)m_mediaUsage / m_totalCapacity * totalWidth);
+    int galleryWidth =
+        (int)((double)m_galleryUsage / m_totalCapacity * totalWidth);
     int othersWidth =
         (int)((double)m_othersUsage / m_totalCapacity * totalWidth);
     int freeWidth = (int)((double)m_freeSpace / m_totalCapacity * totalWidth);
@@ -250,10 +276,13 @@ void DiskUsageWidget::updateUI()
         othersWidth = 1;
     if (m_freeSpace > 0 && freeWidth == 0)
         freeWidth = 1;
+    if (m_galleryUsage > 0 && galleryWidth == 0)
+        galleryWidth = 1;
 
     m_diskBarLayout->setStretchFactor(m_systemBar, systemWidth);
     m_diskBarLayout->setStretchFactor(m_appsBar, appsWidth);
     m_diskBarLayout->setStretchFactor(m_mediaBar, mediaWidth);
+    m_diskBarLayout->setStretchFactor(m_galleryBar, galleryWidth);
     m_diskBarLayout->setStretchFactor(m_othersBar, othersWidth);
     m_diskBarLayout->setStretchFactor(m_freeBar, freeWidth);
 
@@ -267,53 +296,47 @@ void DiskUsageWidget::updateUI()
     m_mediaBar->setVisible(m_mediaUsage > 0);
     m_mediaLabel->setVisible(m_mediaUsage > 0);
 
+    m_galleryBar->setVisible(m_galleryUsage > 0);
+    m_galleryLabel->setVisible(m_galleryUsage > 0);
+
     m_othersBar->setVisible(m_othersUsage > 0);
     m_othersLabel->setVisible(m_othersUsage > 0);
 
     m_freeBar->setVisible(m_freeSpace > 0);
     m_freeLabel->setVisible(m_freeSpace > 0);
 
-    // Format sizes for display
-    auto formatSize = [](uint64_t bytes) -> QString {
-        const char *units[] = {"B", "KB", "MB", "GB", "TB"};
-        int unitIndex = 0;
-        double size = bytes;
-
-        while (size >= 1024 && unitIndex < 4) {
-            size /= 1024;
-            unitIndex++;
-        }
-
-        return QString("%1 %2")
-            .arg(QString::number(size, 'f', 1))
-            .arg(units[unitIndex]);
-    };
-
     // Update legend labels with sizes
     m_systemLabel->setText(
-        QString("System (%1)").arg(formatSize(m_systemUsage)));
-    m_appsLabel->setText(QString("Apps (%1)").arg(formatSize(m_appsUsage)));
-    m_mediaLabel->setText(QString("Media (%1)").arg(formatSize(m_mediaUsage)));
+        QString("System (%1)").arg(Utils::formatSize(m_systemUsage)));
+    m_appsLabel->setText(
+        QString("Apps (%1)").arg(Utils::formatSize(m_appsUsage)));
+    m_mediaLabel->setText(
+        QString("Media (%1)").arg(Utils::formatSize(m_mediaUsage)));
     m_othersLabel->setText(
-        QString("Others (%1)").arg(formatSize(m_othersUsage)));
-    m_freeLabel->setText(QString("Free (%1)").arg(formatSize(m_freeSpace)));
+        QString("Others (%1)").arg(Utils::formatSize(m_othersUsage)));
+    m_freeLabel->setText(
+        QString("Free (%1)").arg(Utils::formatSize(m_freeSpace)));
+    m_galleryLabel->setText(
+        QString("Gallery (%1)").arg(Utils::formatSize(m_galleryUsage)));
 
     qDebug() << "Disk Usage Updated:"
              << "System:" << m_systemUsage << "Apps:" << m_appsUsage
              << "Media:" << m_mediaUsage << "Others:" << m_othersUsage
-             << "Free:" << m_freeSpace;
+             << "Gallery:" << m_galleryUsage << "Free:" << m_freeSpace;
 
     // Set stretch factors and ensure minimum visibility
     int systemStretch = std::max(
         1, (int)(m_systemUsage / 1000000)); // Convert to MB for stretch
     int appsStretch = std::max(1, (int)(m_appsUsage / 1000000));
     int mediaStretch = std::max(1, (int)(m_mediaUsage / 1000000));
+    int galleryStretch = std::max(1, (int)(m_galleryUsage / 1000000));
     int othersStretch = std::max(1, (int)(m_othersUsage / 1000000));
     int freeStretch = std::max(1, (int)(m_freeSpace / 1000000));
 
     m_diskBarLayout->setStretchFactor(m_systemBar, systemStretch);
     m_diskBarLayout->setStretchFactor(m_appsBar, appsStretch);
     m_diskBarLayout->setStretchFactor(m_mediaBar, mediaStretch);
+    m_diskBarLayout->setStretchFactor(m_galleryBar, galleryStretch);
     m_diskBarLayout->setStretchFactor(m_othersBar, othersStretch);
     m_diskBarLayout->setStretchFactor(m_freeBar, freeStretch);
 
@@ -335,36 +358,34 @@ void DiskUsageWidget::updateUI()
     // #else
     m_systemBar->setToolTip(
         QString("System: %1 (%2%)")
-            .arg(formatSize(m_systemUsage))
+            .arg(Utils::formatSize(m_systemUsage))
             .arg(QString::number((double)m_systemUsage / m_totalCapacity * 100,
                                  'f', 1)));
     m_appsBar->setToolTip(
         QString("Apps: %1 (%2%)")
-            .arg(formatSize(m_appsUsage))
+            .arg(Utils::formatSize(m_appsUsage))
             .arg(QString::number((double)m_appsUsage / m_totalCapacity * 100,
                                  'f', 1)));
     m_mediaBar->setToolTip(
         QString("Media: %1 (%2%)")
-            .arg(formatSize(m_mediaUsage))
+            .arg(Utils::formatSize(m_mediaUsage))
             .arg(QString::number((double)m_mediaUsage / m_totalCapacity * 100,
+                                 'f', 1)));
+    m_galleryBar->setToolTip(
+        QString("Gallery: %1 (%2%)")
+            .arg(Utils::formatSize(m_galleryUsage))
+            .arg(QString::number((double)m_galleryUsage / m_totalCapacity * 100,
                                  'f', 1)));
     m_othersBar->setToolTip(
         QString("Others: %1 (%2%)")
-            .arg(formatSize(m_othersUsage))
+            .arg(Utils::formatSize(m_othersUsage))
             .arg(QString::number((double)m_othersUsage / m_totalCapacity * 100,
                                  'f', 1)));
     m_freeBar->setToolTip(
         QString("Free: %1 (%2%)")
-            .arg(formatSize(m_freeSpace))
+            .arg(Utils::formatSize(m_freeSpace))
             .arg(QString::number((double)m_freeSpace / m_totalCapacity * 100,
                                  'f', 1)));
-
-    // Hide segments with zero usage
-    // m_systemBar->setVisible(m_systemUsage > 0);
-    // m_appsBar->setVisible(m_appsUsage > 0);
-    // m_mediaBar->setVisible(m_mediaUsage > 0);
-    // m_othersBar->setVisible(m_othersUsage > 0);
-    // m_freeBar->setVisible(m_freeSpace > 0);
 }
 void DiskUsageWidget::fetchData()
 {
@@ -382,9 +403,10 @@ void DiskUsageWidget::fetchData()
                     m_appsUsage = result["appsUsage"].toULongLong();
                     m_mediaUsage = result["mediaUsage"].toULongLong();
                     m_freeSpace = result["freeSpace"].toULongLong();
+                    m_galleryUsage = result["galleryUsage"].toULongLong();
 
-                    uint64_t usedKnown =
-                        m_systemUsage + m_appsUsage + m_mediaUsage;
+                    uint64_t usedKnown = m_systemUsage + m_appsUsage +
+                                         m_mediaUsage + m_galleryUsage;
                     if (m_totalCapacity > (m_freeSpace + usedKnown)) {
                         m_othersUsage =
                             m_totalCapacity - m_freeSpace - usedKnown;
@@ -457,7 +479,7 @@ void DiskUsageWidget::fetchData()
             }
         }
         result["appsUsage"] = QVariant::fromValue(totalAppsSpace);
-        plist_free(client_opts); // client_opts is consumed by browse, but
+        plist_free(client_opts);
 
         // Media usage
         uint64_t mediaSpace = 0;
@@ -473,6 +495,117 @@ void DiskUsageWidget::fetchData()
         }
         result["mediaUsage"] = QVariant::fromValue(mediaSpace);
 
+        /*
+        on older devices if Photos.sqlite is high in size and the device is
+        connected wirelessly it takes ~5 minutes to read the entire file maybe
+        skip on wireless connections on old devices (iPhone 6s in this case)?
+        */
+        if (m_device->deviceInfo.is_iPhone && m_device->deviceInfo.isWireless &&
+            !iDescriptor::Utils::isProductTypeNewer(
+                m_device->deviceInfo.rawProductType, "iPhone8,4")) {
+            qDebug() << "Skipping gallery usage calculation on older "
+                        "wireless device.";
+            result["galleryUsage"] = QVariant::fromValue(uint64_t(0));
+            return result;
+        }
+
+        const size_t CHUNK_SIZE = 256 * 1024;
+        uint8_t *db_data = nullptr;
+        size_t db_size = 0;
+        size_t total_size = 0;
+
+        AfcFileHandle *afcHandle = nullptr;
+        err = ServiceManager::safeAfcFileOpen(
+            m_device, "/PhotoData/Photos.sqlite", AfcRdOnly, &afcHandle);
+
+        if (err != nullptr) {
+            qDebug() << "Failed to open Photos.sqlite on device:"
+                     << "Error Code:" << err->code
+                     << "Message:" << err->message;
+            idevice_error_free(err);
+            result["galleryUsage"] = QVariant::fromValue(uint64_t(0));
+            return result;
+        }
+
+        while (true) {
+            uint8_t *chunk = nullptr;
+            size_t chunk_size = 0;
+
+            IdeviceFfiError *read_err = ServiceManager::safeAfcFileRead(
+                m_device, afcHandle, &chunk, CHUNK_SIZE, &chunk_size);
+
+            if (read_err != nullptr) {
+                idevice_error_free(read_err);
+                break;
+            }
+
+            if (chunk_size == 0) {
+                break; // EOF
+            }
+
+            db_data = (uint8_t *)realloc(db_data, total_size + chunk_size);
+            memcpy(db_data + total_size, chunk, chunk_size);
+            total_size += chunk_size;
+        }
+        ServiceManager::safeAfcFileClose(m_device, afcHandle);
+        qDebug() << "Total Photos.sqlite size read:" << total_size;
+
+        // HACK: File is in WAL mode (byte 18 == 0x02).
+        // we must change it to Legacy mode (0x01) or SQLite will fail to open
+        // it.
+        if (total_size > 20 && db_data[18] == 0x02) {
+            db_data[18] = 0x01;
+            db_data[19] = 0x01;
+        }
+
+        sqlite3 *db;
+        sqlite3_open(":memory:", &db);
+
+        int rc = sqlite3_deserialize(db, "main", db_data, total_size,
+                                     total_size, SQLITE_DESERIALIZE_READONLY);
+
+        if (rc != SQLITE_OK) {
+            qDebug() << "sqlite3_deserialize failed:" << sqlite3_errmsg(db);
+            sqlite3_close(db);
+            if (db_data)
+                free(db_data);
+            return result;
+        }
+
+        const char *sql = "SELECT SUM(ZORIGINALFILESIZE) "
+                          "FROM ZADDITIONALASSETATTRIBUTES;";
+
+        sqlite3_stmt *stmt = nullptr;
+
+        rc = sqlite3_prepare_v2(db, sql,
+                                -1, // read until NULL terminator
+                                &stmt, nullptr);
+
+        if (rc != SQLITE_OK) {
+            qDebug() << "Failed to prepare statement:" << sqlite3_errmsg(db);
+            result["galleryUsage"] = QVariant::fromValue(uint64_t(0));
+            if (stmt)
+                sqlite3_finalize(stmt);
+            sqlite3_close(db);
+            if (db_data)
+                idevice_data_free(db_data, total_size);
+            return result;
+        }
+
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_ROW) {
+            qDebug() << "Size" << sqlite3_column_int64(stmt, 0);
+            result["galleryUsage"] =
+                QVariant::fromValue(sqlite3_column_int64(stmt, 0));
+        } else if (rc != SQLITE_DONE) {
+            result["galleryUsage"] = QVariant::fromValue(uint64_t(0));
+            qDebug() << "sqlite3_step failed:" << sqlite3_errmsg(db);
+        }
+        if (stmt)
+            sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        if (db_data)
+            free(db_data);
         return result;
     });
     watcher->setFuture(future);
