@@ -153,7 +153,9 @@ void GalleryWidget::setupControlsLayout()
     m_exportAllButton = new QPushButton("Export All");
 
     // Back button
-    m_backButton = new QPushButton("← Back to Albums");
+    m_backButton = new QPushButton("←");
+    m_backButton->setToolTip("Back to Albums");
+    m_backButton->setMaximumWidth(30);
     m_backButton->hide(); // Hidden initially
 
     // Connect signals
@@ -491,8 +493,8 @@ void GalleryWidget::onAlbumSelected(const QString &albumPath)
                 });
     }
 
-    connect(m_model, &PhotoModel::thumbnailNeedsToBeLoaded, m_model,
-            &PhotoModel::requestThumbnail, Qt::QueuedConnection);
+    // connect(m_model, &PhotoModel::thumbnailNeedsToBeLoaded, m_model,
+    //         &PhotoModel::requestThumbnail, Qt::QueuedConnection);
     // Set album path and load photos
     m_model->setAlbumPath(albumPath);
 
@@ -506,8 +508,8 @@ void GalleryWidget::onAlbumSelected(const QString &albumPath)
 void GalleryWidget::onBackToAlbums()
 {
     if (m_model) {
-        disconnect(m_model, &PhotoModel::thumbnailNeedsToBeLoaded, m_model,
-                   &PhotoModel::requestThumbnail);
+        // disconnect(m_model, &PhotoModel::thumbnailNeedsToBeLoaded, m_model,
+        //            &PhotoModel::requestThumbnail);
     }
 
     // Switch back to album selection view

@@ -570,5 +570,5 @@ std::string DeviceDatabase::parseRegionInfo(const std::string &code)
     if (code == "C/A")
         return "Canada (English, French)";
 
-    return "Unknown Region (" + code + ")";
+    return code;
 }

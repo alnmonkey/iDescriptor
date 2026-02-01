@@ -66,6 +66,7 @@
 #define IDEVICE_DEVICE_VERSION(maj, min, patch)                                \
     ((((maj) & 0xFF) << 16) | (((min) & 0xFF) << 8) | ((patch) & 0xFF))
 #include "devicemonitor.h"
+#include "iDescriptor-utils.h"
 
 #define DeviceLockedMountErrorCode -21
 #define NotFoundErrorCode -14
@@ -475,53 +476,6 @@ struct ImageInfo {
     bool isMounted = false;
 };
 
-// /**
-//  * @brief Compare two iPhone product types to determine which is newer
-//  * @param productType First iPhone product type (e.g., "iPhone8,1")
-//  * @param otherProductType Second iPhone product type (e.g., "iPhone7,2")
-//  * @return true if productType is newer than otherProductType, false
-//  otherwise
-//  *
-//  * Examples:
-//  * - compare_product_type("iPhone8,1", "iPhone7,2") returns true
-//  * - compare_product_type("iPhone6,1", "iPhone8,1") returns false
-//  * - compare_product_type("iPhone8,2", "iPhone8,1") returns true
-//  */
-// bool compare_product_type(std::string productType,
-//                           std::string otherProductType);
-
-// /**
-//  * @brief Check if two iPhone product types are exactly equal
-//  * @param productType First iPhone product type
-//  * @param otherProductType Second iPhone product type
-//  * @return true if both product types are identical
-//  */
-// bool are_product_types_equal(const std::string &productType,
-//                              const std::string &otherProductType);
-
-// /**
-//  * @brief Check if first product type is newer than second
-//  * @param productType First iPhone product type
-//  * @param otherProductType Second iPhone product type
-//  * @return true if productType is newer than otherProductType
-//  */
-bool is_product_type_newer(const std::string &productType,
-                           const std::string &otherProductType);
-
-// /**
-//  * @brief Check if first product type is older than second
-//  * @param productType First iPhone product type
-//  * @param otherProductType Second iPhone product type
-//  * @return true if productType is older than otherProductType
-//  */
-// bool is_product_type_older(const std::string &productType,
-//                            const std::string &otherProductType);
-
-// bool query_mobile_gestalt(iDescriptorDevice *id_device, const QStringList
-// &keys,
-//                           uint32_t &xml_size, char *&xml_data);
-// ;
-
 // std::string safeGetXML(const char *key, pugi::xml_node dict);
 
 void get_battery_info(DiagnosticsRelay *diagRelay, plist_t &diagnostics);
@@ -532,8 +486,6 @@ void get_battery_info(DiagnosticsRelay *diagRelay, plist_t &diagnostics);
 void fetchAppIconFromApple(QNetworkAccessManager *manager,
                            const QString &bundleId,
                            std::function<void(const QPixmap &)> callback);
-
-// afc_error_t afc2_client_new(idevice_t device, afc_client_t *afc);
 
 void _get_cable_info(const iDescriptorDevice *device, plist_t &response);
 

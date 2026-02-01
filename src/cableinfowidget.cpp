@@ -229,7 +229,8 @@ void CableInfoWidget::updateUI()
 
     if (!m_cableInfo.isConnected) {
         m_errorLabel->setText(
-            "Device does not seem to be connected to any cable.");
+            QString("%1 does not seem to be connected to any cable.")
+                .arg(m_device->deviceInfo.productType));
         m_loadingWidget->showError();
         return;
     }

@@ -274,7 +274,6 @@ IdeviceFfiError *ServiceManager::exportFileToPath(
             IdeviceFfiError *read_err = nullptr;
             // Read file in chunks
             while (true) {
-                std::this_thread::sleep_for(std::chrono::seconds(2));
                 // Check for cancellation
                 if (cancelRequested && cancelRequested->load()) {
                     fclose(out);
