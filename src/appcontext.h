@@ -59,9 +59,11 @@ private:
     DeviceSelection m_currentSelection = DeviceSelection("");
     QMap<QString, QString> m_pairingFileCache;
     void cachePairedDevices();
+    void emitNoPairingFileForWirelessDevice(const QString &udid);
 signals:
     void deviceAdded(iDescriptorDevice *device);
-    void deviceRemoved(const std::string &udid, const std::string &macAddress);
+    void deviceRemoved(const std::string &udid, const std::string &macAddress,
+                       const std::string &ipAddress, bool wasWireless);
     void devicePaired(iDescriptorDevice *device);
     void devicePasswordProtected(const QString &udid);
     // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
@@ -70,6 +72,10 @@ signals:
     // #endif
     void devicePairPending(const QString &udid);
     void devicePairingExpired(const QString &udid);
+    // only fired on wireless devices when we have no pairing file for them
+    void noPairingFileForWirelessDevice(const QString &macAddress);
+    void initFailed(const QString &udid);
+
     void systemSleepStarting();
     void systemWakeup();
     /*
@@ -86,7 +92,8 @@ public slots:
     void removeDevice(QString udid);
     void addDevice(QString udid,
                    DeviceMonitorThread::IdeviceConnectionType connType,
-                   AddType addType, QString wifiMacAddress = QString());
+                   AddType addType, QString wifiMacAddress = QString(),
+                   QString ipAddress = QString());
     void heartbeatFailed(const QString &macAddress, int tries);
     // void heartbeatThreadExited(const QString &macAddress);
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT

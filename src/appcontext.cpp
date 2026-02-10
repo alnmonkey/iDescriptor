@@ -48,9 +48,10 @@ void AppContext::cachePairedDevices()
 {
 
 /*
- does not work on macOS because we cannot read /var/db/lockdown without root perm
+ does not work on macOS because we cannot read /var/db/lockdown without root
+ perm
 */
-#ifndef __APPLE__ 
+#ifndef __APPLE__
     QDir lockdowndir(LOCKDOWN_PATH);
     if (!lockdowndir.exists()) {
         return;
@@ -176,7 +177,8 @@ void AppContext::cachePairedDevices()
 
 void AppContext::addDevice(QString udid,
                            DeviceMonitorThread::IdeviceConnectionType conn_type,
-                           AddType addType, QString wifiMacAddress)
+                           AddType addType, QString wifiMacAddress,
+                           QString ipAddress)
 {
 
     try {
@@ -184,73 +186,43 @@ void AppContext::addDevice(QString udid,
         auto initResult = std::make_shared<iDescriptorInitDeviceResult>();
         QFuture<void> future = QtConcurrent::run([this, udid, conn_type,
                                                   addType, wifiMacAddress,
-                                                  initResult]() {
+                                                  ipAddress, initResult]() {
             if (addType == AddType::UpgradeToWireless) {
-                // udid is mac address here
+                qDebug() << "AddType::UpgradeToWireless";
+                // FIXME: udid is actually macAddress here
                 const QString _pairingFilePath = getCachedPairingFile(udid);
 
                 if (_pairingFilePath.isEmpty()) {
                     qDebug() << "Cannot upgrade to wireless, no cached pairing "
                                 "file for"
                              << udid;
+                    emitNoPairingFileForWirelessDevice(udid);
                     return;
                 }
 
-                QList<NetworkDevice> networkDevices =
-                    NetworkDeviceManager::sharedInstance()
-                        ->m_networkProvider->getNetworkDevices();
+                *initResult = init_idescriptor_device(
+                    udid, {ipAddress, _pairingFilePath});
 
-                auto it = std::find_if(
-                    networkDevices.constBegin(), networkDevices.constEnd(),
-                    [wifiMacAddress](const NetworkDevice &device) {
-                        return device.macAddress.compare(
-                                   wifiMacAddress, Qt::CaseInsensitive) == 0;
-                    });
-
-                if (it != networkDevices.constEnd()) {
-
-                    *initResult = init_idescriptor_device(
-                        udid, {it->address, _pairingFilePath});
-                } else {
-                    qDebug() << "No network device found with MAC address:"
-                             << wifiMacAddress;
-                    return;
-                }
             } else if (addType == AddType::Wireless) {
-                // FIXME: its not udid here its macAddress
+                qDebug() << "AddType::Wireless";
+                // FIXME: udid is actually macAddress here
                 const QString _pairingFilePath = getCachedPairingFile(udid);
 
                 if (_pairingFilePath.isEmpty()) {
                     qDebug() << "Cannot upgrade to wireless, no cached pairing "
                                 "file for"
                              << udid;
+                    emitNoPairingFileForWirelessDevice(udid);
                     return;
                 }
 
-                QList<NetworkDevice> networkDevices =
-                    NetworkDeviceManager::sharedInstance()
-                        ->m_networkProvider->getNetworkDevices();
+                *initResult = init_idescriptor_device(
+                    udid, {ipAddress, _pairingFilePath});
 
-                // todo : retry logic if not found
-                auto it = std::find_if(
-                    networkDevices.constBegin(), networkDevices.constEnd(),
-                    [wifiMacAddress](const NetworkDevice &device) {
-                        return device.macAddress.compare(
-                                   wifiMacAddress, Qt::CaseInsensitive) == 0;
-                    });
-
-                if (it != networkDevices.constEnd()) {
-                    *initResult = init_idescriptor_device(
-                        udid, {it->address, _pairingFilePath});
-                } else {
-                    qDebug() << "No network device found with MAC address:"
-                             << wifiMacAddress;
-                    return;
-                }
             }
 
             else {
-
+                qDebug() << "AddType::Regular";
                 *initResult = init_idescriptor_device(udid, {nullptr, nullptr});
             }
         });
@@ -266,6 +238,7 @@ void AppContext::addDevice(QString udid,
                     if (!initResult->success) {
                         qDebug() << "Failed to initialize device with UDID: "
                                  << udid;
+                        emit initFailed(udid);
                         return;
                     }
                     // if (!initResult.success) {
@@ -405,11 +378,14 @@ void AppContext::removeDevice(QString _udid)
     iDescriptorDevice *device = m_devices[udid];
     m_devices.remove(udid);
 
-    emit deviceRemoved(udid, device->deviceInfo.wifiMacAddress);
+    emit deviceRemoved(udid, device->deviceInfo.wifiMacAddress,
+                       device->deviceInfo.ipAddress,
+                       device->deviceInfo.isWireless);
     emit deviceChange();
 
     std::lock_guard<std::recursive_mutex> lock(device->mutex);
 
+    // FIXME: implement proper cleanup
     if (device->afcClient)
         afc_client_free(device->afcClient);
     if (device->afc2Client)
@@ -506,9 +482,12 @@ void AppContext::addRecoveryDevice(uint64_t ecid)
 
 AppContext::~AppContext()
 {
-    // FIXME: mutex?
+    // FIXME: deviceRemoved can trigger, new devices being added while we are
+    // trying to clean up
     for (auto device : m_devices) {
-        emit deviceRemoved(device->udid, device->deviceInfo.wifiMacAddress);
+        emit deviceRemoved(device->udid, device->deviceInfo.wifiMacAddress,
+                           device->deviceInfo.ipAddress,
+                           device->deviceInfo.isWireless);
         if (device->afcClient)
             afc_client_free(device->afcClient);
         if (device->afc2Client)
@@ -624,4 +603,10 @@ void AppContext::tryToConnectToNetworkDevice(const QString &macAddress)
     } else {
         qDebug() << "No network device found with MAC address:" << macAddress;
     }
+}
+
+// this is required because cannot emit signals from qfuture
+void AppContext::emitNoPairingFileForWirelessDevice(const QString &udid)
+{
+    emit noPairingFileForWirelessDevice(udid);
 }
