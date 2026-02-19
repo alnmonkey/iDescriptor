@@ -197,28 +197,27 @@ void DeviceManagerWidget::addDevice(iDescriptorDevice *device)
 // }
 // #endif
 
-void DeviceManagerWidget::addPendingDevice(const QString &udid, bool locked)
+void DeviceManagerWidget::addPendingDevice(const QString &uniq, bool locked)
 {
-    // qDebug() << "Adding pending device:" << udid;
-    // if (m_pendingDeviceWidgets.contains(udid.toStdString()) && !locked) {
-    //     qDebug() << "Pending device already exists, moving to next state:"
-    //              << udid;
-    //     m_pendingDeviceWidgets[udid.toStdString()].first->next();
-    //     return;
-    // } else if (m_pendingDeviceWidgets.contains(udid.toStdString()) && locked)
-    // {
-    //     // Already exists and still locked, do nothing
-    //     qDebug()
-    //         << "Pending device already exists and is locked, doing nothing:"
-    //         << udid;
-    //     return;
-    // }
+    qDebug() << "Adding pending device:" << uniq;
+    if (m_pendingDeviceWidgets.contains(uniq.toStdString()) && !locked) {
+        qDebug() << "Pending device already exists, moving to next state:"
+                 << uniq;
+        m_pendingDeviceWidgets[uniq.toStdString()].first->next();
+        return;
+    } else if (m_pendingDeviceWidgets.contains(uniq.toStdString()) && locked) {
+        // Already exists and still locked, do nothing
+        qDebug()
+            << "Pending device already exists and is locked, doing nothing:"
+            << uniq;
+        return;
+    }
 
-    // qDebug() << "Created pending widget for:" << udid << "Locked:" << locked;
-    // DevicePendingWidget *pendingWidget = new DevicePendingWidget(locked,
-    // this); m_stackedWidget->addWidget(pendingWidget);
-    // m_pendingDeviceWidgets[udid.toStdString()] =
-    //     std::pair{pendingWidget, m_sidebar->addPendingDevice(udid)};
+    qDebug() << "Created pending widget for:" << uniq << "Locked:" << locked;
+    DevicePendingWidget *pendingWidget = new DevicePendingWidget(locked, this);
+    m_stackedWidget->addWidget(pendingWidget);
+    m_pendingDeviceWidgets[uniq.toStdString()] =
+        std::pair{pendingWidget, m_sidebar->addPendingDevice(uniq)};
 }
 
 void DeviceManagerWidget::removePendingDevice(const QString &udid)

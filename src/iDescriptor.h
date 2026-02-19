@@ -72,6 +72,8 @@
 #define DeviceLockedMountErrorCode -21
 #define NotFoundErrorCode -14
 #define ServiceNotFoundErrorCode -15
+#define PairingDialogResponsePending -28
+
 #define DISK_IMAGE_TYPE_DEVELOPER "Developer"
 
 #define HEARTBEAT_RETRY_LIMIT 2
@@ -224,24 +226,20 @@ struct iDescriptorDevice {
     AfcClientHandle *afc2Client;
     LockdowndClientHandle *lockdown;
     mutable std::recursive_mutex mutex;
-    ImageMounterHandle *imageMounter;
     std::shared_ptr<DiagnosticsRelay> diagRelay;
-    LocationSimulationHandle *locationSimulation;
     // nullptr on USB devices
     QThread *heartbeatThread;
 };
 
 struct iDescriptorInitDeviceResult {
     bool success = false;
-    IdeviceFfiError error;
+    IdeviceFfiError *error;
     IdeviceProviderHandle *provider;
     DeviceInfo deviceInfo;
     AfcClientHandle *afcClient;
     AfcClientHandle *afc2Client;
     LockdowndClientHandle *lockdown;
-    ImageMounterHandle *imageMounter;
     std::shared_ptr<DiagnosticsRelay> diagRelay;
-    LocationSimulationHandle *locationSimulation;
     QThread *heartbeatThread;
 };
 // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
@@ -438,9 +436,9 @@ struct WirelessInitArgs {
     const QString ip;
     const QString pairing_file;
 };
-iDescriptorInitDeviceResult
-init_idescriptor_device(const QString &udid,
-                        const WirelessInitArgs &wirelessArgs = {"", ""});
+void init_idescriptor_device(const iDescriptor::Uniq &uniq,
+                             iDescriptorInitDeviceResult &result,
+                             const WirelessInitArgs &wirelessArgs = {"", ""});
 
 // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 // iDescriptorInitDeviceResultRecovery

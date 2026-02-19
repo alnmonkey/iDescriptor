@@ -38,7 +38,7 @@ public:
     void cachePairingFile(const QString &udid, const QString &pairingFilePath);
     const QString getCachedPairingFile(const QString &udid) const;
 
-    void tryToConnectToNetworkDevice(const QString &macAddress);
+    void tryToConnectToNetworkDevice(const NetworkDevice &device);
     // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     //     QList<iDescriptorRecoveryDevice *> getAllRecoveryDevices();
     // #endif
@@ -91,7 +91,7 @@ signals:
     void deviceHeartbeatFailed(const QString &macAddress, int tries);
 public slots:
     void removeDevice(QString udid);
-    void addDevice(QString udid,
+    void addDevice(iDescriptor::Uniq udid,
                    DeviceMonitorThread::IdeviceConnectionType connType,
                    AddType addType, QString wifiMacAddress = QString(),
                    QString ipAddress = QString());

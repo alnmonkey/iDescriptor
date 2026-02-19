@@ -21,24 +21,33 @@
 
 MountedImageInfo _get_mounted_image(const iDescriptorDevice *device)
 {
+    qDebug() << "_get_mounted_image";
+
     uint8_t *signature = NULL;
     size_t signature_len = 0;
     IdeviceFfiError *err = nullptr;
-    qDebug() << "_get_mounted_image";
+    ImageMounterHandle *image_mounter = nullptr;
+    err = image_mounter_connect(device->provider, &image_mounter);
+    if (err) {
+        qDebug() << "Failed to create Image Mounter client";
+        goto leave;
+    }
     if (err) {
         qDebug() << "Failed to connect to image mounter:" << err->message;
         goto leave;
     }
 
-    err = image_mounter_lookup_image(device->imageMounter,
-                                     DISK_IMAGE_TYPE_DEVELOPER, &signature,
-                                     &signature_len);
+    err = image_mounter_lookup_image(image_mounter, DISK_IMAGE_TYPE_DEVELOPER,
+                                     &signature, &signature_len);
     if (err) {
         qDebug() << "Failed to lookup image:" << err->message
                  << "Code:" << err->code;
     }
 
 leave:
+    if (image_mounter)
+        image_mounter_free(image_mounter);
+
     return {
         .err = err,
         .signature = signature,

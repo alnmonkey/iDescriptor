@@ -29,7 +29,7 @@ IdeviceFfiError *mount_dev_image(const iDescriptorDevice *device,
                                  const char *signature_file)
 {
 
-    if (!device || !device->provider || !device->imageMounter) {
+    if (!device || !device->provider) {
         qDebug()
             << "Error: Invalid device or provider passed to mount_dev_image";
         return new IdeviceFfiError{// FIXME: whats the code ?
@@ -43,7 +43,10 @@ IdeviceFfiError *mount_dev_image(const iDescriptorDevice *device,
     uint8_t *signature_data = nullptr;
     IdeviceFfiError *err = nullptr;
 
+    ImageMounterHandle *image_mounter = nullptr;
+    err = image_mounter_connect(device->provider, &image_mounter);
     if (err) {
+        qDebug() << "Failed to create Image Mounter client";
         goto cleanup;
     }
 
@@ -56,9 +59,9 @@ IdeviceFfiError *mount_dev_image(const iDescriptorDevice *device,
                                   .message = "Failed to read signature file"};
         goto cleanup;
     } else {
-        err = image_mounter_mount_developer(device->imageMounter, image_data,
-                                            image_len, signature_data,
-                                            signature_len);
+        err =
+            image_mounter_mount_developer(image_mounter, image_data, image_len,
+                                          signature_data, signature_len);
         if (err == NULL) {
             printf("Developer image mounted successfully\n");
         } else {
@@ -69,6 +72,8 @@ IdeviceFfiError *mount_dev_image(const iDescriptorDevice *device,
     }
 
 cleanup:
+    if (image_mounter)
+        image_mounter_free(image_mounter);
 
     if (image_data)
         free(image_data);

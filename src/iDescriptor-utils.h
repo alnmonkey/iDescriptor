@@ -39,6 +39,34 @@ struct ProductTypeVersion {
 
 namespace iDescriptor
 {
+/*
+    Uniq is just a wrapper to get rid of mac and udid hell
+*/
+class Uniq
+{
+public:
+    Uniq(const QString &uniq, bool isMac = false)
+    {
+        m_uniq = uniq;
+        m_isMac = isMac;
+    };
+
+    Uniq(const std::string &uniq, bool isMac = false)
+    {
+        m_uniq = QString::fromStdString(uniq);
+        m_isMac = isMac;
+    };
+
+    bool isMac() const { return m_isMac; };
+    bool isUdid() const { return !m_isMac; }
+    const QString &get() const { return m_uniq; }
+    operator QString() const { return m_uniq; }
+
+private:
+    QString m_uniq;
+    bool m_isMac;
+};
+
 class Utils
 {
 private:

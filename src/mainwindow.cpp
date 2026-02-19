@@ -364,11 +364,12 @@ MainWindow::MainWindow(QWidget *parent)
                 if (conn_type == DeviceMonitorThread::CONNECTION_NETWORK) {
                     return;
                 }
-                qDebug() << "Device added: " << udid;
+                qDebug() << "Device event received: " << udid;
 
                 QMetaObject::invokeMethod(
                     AppContext::sharedInstance(), "addDevice",
-                    Qt::QueuedConnection, Q_ARG(QString, udid),
+                    Qt::QueuedConnection,
+                    Q_ARG(iDescriptor::Uniq, iDescriptor::Uniq(udid)),
                     Q_ARG(
                         DeviceMonitorThread::IdeviceConnectionType,
                         static_cast<DeviceMonitorThread::IdeviceConnectionType>(
@@ -414,24 +415,27 @@ MainWindow::MainWindow(QWidget *parent)
     // ═══════════════════════════════════════════════════════════════════════
     //  Upgrade to wireless when a "WIRED" device is removed
     // ═══════════════════════════════════════════════════════════════════════
-    connect(AppContext::sharedInstance(), &AppContext::deviceRemoved, this,
-            [](const std::string &udid, const std::string &wifiMacAddress,
-               const std::string &ipAddress, bool wasWireless) {
-                if (wasWireless)
-                    return;
-                qDebug() << "Upgrading device to wireless connection for UDID"
-                         << QString::fromStdString(udid);
-                QMetaObject::invokeMethod(
-                    AppContext::sharedInstance(), "addDevice",
-                    Qt::QueuedConnection,
-                    Q_ARG(QString, QString::fromStdString(udid)),
-                    Q_ARG(DeviceMonitorThread::IdeviceConnectionType,
-                          DeviceMonitorThread::CONNECTION_NETWORK),
-                    Q_ARG(AddType, AddType::UpgradeToWireless),
-                    Q_ARG(QString, QString::fromStdString(wifiMacAddress)),
-                    Q_ARG(QString, QString::fromStdString(ipAddress)));
-            });
+    connect(
+        AppContext::sharedInstance(), &AppContext::deviceRemoved, this,
+        [](const std::string &udid, const std::string &wifiMacAddress,
+           const std::string &ipAddress, bool wasWireless) {
+            if (wasWireless)
+                return;
+            qDebug() << "Upgrading device to wireless connection for UDID"
+                     << QString::fromStdString(udid);
+            QMetaObject::invokeMethod(
+                AppContext::sharedInstance(), "addDevice", Qt::QueuedConnection,
+                Q_ARG(iDescriptor::Uniq, iDescriptor::Uniq(udid, wasWireless)),
+                Q_ARG(DeviceMonitorThread::IdeviceConnectionType,
+                      DeviceMonitorThread::CONNECTION_NETWORK),
+                Q_ARG(AddType, AddType::UpgradeToWireless),
+                Q_ARG(QString, QString::fromStdString(wifiMacAddress)),
+                Q_ARG(QString, QString::fromStdString(ipAddress)));
+        });
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Add a wireless device
+    // ═══════════════════════════════════════════════════════════════════════
     connect(NetworkDeviceManager::sharedInstance(),
             &NetworkDeviceManager::deviceAdded, this,
             [this](const NetworkDevice &device) {
@@ -455,7 +459,8 @@ MainWindow::MainWindow(QWidget *parent)
 
                 QMetaObject::invokeMethod(
                     AppContext::sharedInstance(), "addDevice",
-                    Qt::QueuedConnection, Q_ARG(QString, device.macAddress),
+                    Q_ARG(iDescriptor::Uniq,
+                          iDescriptor::Uniq(device.macAddress, true)),
                     Q_ARG(DeviceMonitorThread::IdeviceConnectionType,
                           DeviceMonitorThread::CONNECTION_NETWORK),
                     Q_ARG(AddType, AddType::Wireless),
@@ -496,7 +501,7 @@ void MainWindow::createMenus()
 
 void MainWindow::updateNoDevicesConnected()
 {
-    qDebug() << "Is there no devices connected? "
+    qDebug() << "No devices connected? "
              << AppContext::sharedInstance()->noDevicesConnected();
     if (AppContext::sharedInstance()->noDevicesConnected()) {
 

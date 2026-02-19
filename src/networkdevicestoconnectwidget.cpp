@@ -85,8 +85,7 @@ NetworkDeviceCard::NetworkDeviceCard(const NetworkDevice &device,
     connect(m_connectButton, &QPushButton::clicked, this, [this, device]() {
         m_connectButton->setText("Connecting...");
         m_connectButton->setEnabled(false);
-        AppContext::sharedInstance()->tryToConnectToNetworkDevice(
-            device.macAddress);
+        AppContext::sharedInstance()->tryToConnectToNetworkDevice(device);
     });
     infoLayout->addWidget(m_connectButton);
     infoLayout->addSpacing(5);
@@ -207,7 +206,7 @@ void NetworkDevicesToConnectWidget::setupUI()
     // Scroll area
     m_scrollArea = new QScrollArea();
     m_scrollArea->setWidgetResizable(true);
-    m_scrollArea->setMinimumHeight(200);
+    m_scrollArea->setMinimumHeight(400);
     m_scrollArea->setMaximumHeight(400);
     m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
