@@ -185,7 +185,7 @@ AirPlayWidget::~AirPlayWidget()
 void AirPlayWidget::setupUI()
 {
     setWindowTitle("AirPlay - iDescriptor");
-
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
     m_stackedWidget = new QStackedWidget(this);
 
     m_tutorialWidget = new QWidget();
@@ -248,8 +248,7 @@ void AirPlayWidget::setupUI()
 
     // Start with tutorial widget
     m_stackedWidget->setCurrentWidget(m_tutorialWidget);
-    layout()->addWidget(m_stackedWidget);
-
+    mainLayout->addWidget(m_stackedWidget);
 #ifdef __linux__
     m_v4l2_enabled = false; // Disable V4L2 by default
 #endif
