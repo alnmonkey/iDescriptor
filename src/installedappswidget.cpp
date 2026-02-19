@@ -433,10 +433,10 @@ void InstalledAppsWidget::onAppsDataReady()
         qDebug() << "Error connecting to SpringBoard services:"
                  << QString::fromUtf8(err->message);
     } else {
-    /*
-     FIXME:springboard_services_connect takes time
-     MOVE EVERYTHING INTO QTCONCURRENT SO IT DOESN'T BLOCK UI
-    */
+        /*
+         FIXME:springboard_services_connect takes time
+         MOVE EVERYTHING INTO QTCONCURRENT SO IT DOESN'T BLOCK UI
+        */
         qDebug() << "Successfully connected to SpringBoard services.";
     }
 
@@ -624,7 +624,9 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
                              << QString::fromUtf8(err->message);
                     result["error"] = QString("Error vending documents: %1")
                                           .arg(QString::fromUtf8(err->message));
-                    house_arrest_client_free(houseArrestClient);
+                    // FIXME:Crashes here, needs investigation
+                    // can houseArrestClient be nullptr here?
+                    // house_arrest_client_free(houseArrestClient);
                     return result;
                 }
 
