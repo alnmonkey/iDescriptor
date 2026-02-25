@@ -158,18 +158,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     for (const QString &path : mounted_iFusePaths) {
         auto *p = new iFuseDiskUnmountButton(path);
 
-        statusbar->addWidget(p);
-        connect(p, &iFuseDiskUnmountButton::clicked, this, [this, p, path]() {
-            bool ok = iFuseManager::linuxUnmount(path);
-            if (!ok) {
-                QMessageBox::warning(nullptr, "Unmount Failed",
-                                     "Failed to unmount iFuse at " + path +
-                                         ". Please try again.");
-                return;
-            }
-            statusbar->removeWidget(p);
-            p->deleteLater();
-        });
+        statusLayout->addWidget(p);
+        connect(p, &iFuseDiskUnmountButton::clicked, this,
+                [this, p, path, statusLayout]() {
+                    bool ok = iFuseManager::linuxUnmount(path);
+                    if (!ok) {
+                        QMessageBox::warning(nullptr, "Unmount Failed",
+                                             "Failed to unmount iFuse at " +
+                                                 path + ". Please try again.");
+                        return;
+                    }
+                    statusLayout->removeWidget(p);
+                    p->deleteLater();
+                });
     }
 #endif
 
