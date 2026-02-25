@@ -10,8 +10,12 @@ set(PACKAGE_MANAGER_HINT "" CACHE STRING "Name of package manager(s) used to man
 option(PACKAGE_MANAGER_MANAGED "Build as package manager managed version (auto updates will be handled by the package manager)" OFF)
 option(DEPLOY "Deploy the application (WIN32 only)" ON)
 
+if (APPLE)
 find_program(CARGO_EXECUTABLE cargo REQUIRED PATHS /usr/local/bin)
 set(ENV{PATH} "$ENV{HOME}/.cargo/bin:/usr/local/bin:$ENV{PATH}")
+else()
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
+endif()
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
