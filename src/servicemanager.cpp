@@ -341,7 +341,33 @@ ServiceManager::takeScreenshot(const iDescriptorDevice *device,
         });
 }
 
-// requires iOS 17+
+IdeviceFfiError *
+ServiceManager::revealDeveloperModeOptionInUI(const iDescriptorDevice *device)
+{
+    return executeOperation<IdeviceFfiError *>(
+        device, [device]() -> IdeviceFfiError * {
+            AmfiClientHandle *amfi = nullptr;
+            IdeviceFfiError *err = amfi_connect(device->provider, &amfi);
+            if (err != NULL) {
+                qDebug() << "Failed to connect to AMFI service:" << err->message
+                         << "Code:" << err->code;
+                return err;
+            }
+
+            err = amfi_reveal_developer_mode_option_in_ui(amfi);
+            if (err != NULL) {
+                qDebug() << "Failed to reveal developer mode option in UI."
+                         << err->message << "Code:" << err->code;
+            } else {
+                qDebug() << "Developer mode option revealed in UI.";
+            }
+
+            amfi_client_free(amfi);
+            return err;
+        });
+}
+
+// requires iOS 17+ and no passcode set on device
 IdeviceFfiError *ServiceManager::enableDevMode(const iDescriptorDevice *device)
 {
     return executeOperation<IdeviceFfiError *>(
@@ -356,13 +382,6 @@ IdeviceFfiError *ServiceManager::enableDevMode(const iDescriptorDevice *device)
                     return err;
                 }
                 qDebug() << "Developer mode option revealed in UI.";
-                // // Enable developer mode (triggers reboot)
-                err = amfi_accept_developer_mode(amfi);
-                if (err != NULL) {
-                    qDebug() << "Failed to accept developer mode."
-                             << err->message << "Code:" << err->code;
-                    return err;
-                }
 
                 err = amfi_enable_developer_mode(amfi);
 
@@ -371,8 +390,23 @@ IdeviceFfiError *ServiceManager::enableDevMode(const iDescriptorDevice *device)
                              << err->message << "Code:" << err->code;
                     return err;
                 }
+
+                amfi_client_free(amfi);
+                err = amfi_connect(device->provider, &amfi);
+                if (err != NULL) {
+                    qDebug()
+                        << "Failed to reconnect:" << err->message << err->code;
+                    return err;
+                }
+
+                err = amfi_accept_developer_mode(amfi);
+                if (err != NULL) {
+                    qDebug() << "Failed to accept developer mode."
+                             << err->message << "Code:" << err->code;
+                    return err;
+                }
+
                 qDebug() << "Developer mode enabled, device will reboot.";
-                // // After reboot, accept developer mode
             }
             return err;
         });

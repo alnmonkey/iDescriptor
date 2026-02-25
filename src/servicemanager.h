@@ -304,7 +304,8 @@ public:
     takeScreenshot(const iDescriptorDevice *device,
                    ScreenshotrClientHandle *screenshotrClient,
                    ScreenshotData *screenshot);
-
+    static IdeviceFfiError *
+    revealDeveloperModeOptionInUI(const iDescriptorDevice *device);
     static IdeviceFfiError *enableDevMode(const iDescriptorDevice *device);
 };
 
