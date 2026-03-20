@@ -168,5 +168,10 @@ public:
                fileName.endsWith(".MP4", Qt::CaseInsensitive) ||
                fileName.endsWith(".M4V", Qt::CaseInsensitive);
     }
+
+    static bool isPreviewableFile(const QString &fileName)
+    {
+        return isGalleryFile(fileName) || isVideoFile(fileName);
+    }
 };
 } // namespace iDescriptor

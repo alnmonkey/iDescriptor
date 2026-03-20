@@ -87,6 +87,7 @@ private:
     ZIconWidget *m_homeButton;
     ZIconWidget *m_upButton;
     ZIconWidget *m_enterButton;
+    ZIconWidget *m_deleteButton;
     const iDescriptorDevice *m_device;
     bool m_favEnabled;
     AfcClientHandle *m_afc;
@@ -105,15 +106,12 @@ private:
     void showErrorState();
     void showFileListState();
     void saveFavoritePlace(const QString &path, const QString &alias);
-    void openWithDesktopService(const QString &nextPath, const QString &name);
+    void openWithDesktopService(QListWidgetItem *item);
+    void onDeleteClicked();
 
     void setupContextMenu();
-    void exportSelectedFile(QListWidgetItem *item);
-    void exportSelectedFile(QListWidgetItem *item, const QString &directory);
-    int exportFileToPath(AfcClientHandle *afc, const char *device_path,
-                         const char *local_path);
-    int importFileToDevice(AfcClientHandle *afc, const char *device_path,
-                           const char *local_path);
+    void exportAndOpenSelectedFile(QListWidgetItem *item,
+                                   const QString &directory);
     void updateButtonStates();
     void goUp();
 #ifndef WIN32

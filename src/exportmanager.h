@@ -53,8 +53,13 @@ public:
                       const QString &destinationPath,
                       std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
-    void cancelExport(const QUuid &jobId);
+    QUuid startImport(const iDescriptorDevice *device,
+                      const QList<ImportItem> &items,
+                      const QString &destinationPath,
+                      std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
+    void cancelExport(const QUuid &jobId);
+    void cancelAllJobs();
     bool isJobRunning(const QUuid &jobId) const;
     static QString generateUniqueOutputPath(const QString &basePath);
 
@@ -90,7 +95,7 @@ private:
 
     // Thread-safe storage for active jobs
     mutable QMutex m_jobsMutex;
-    QMap<QUuid, ExportJob *> m_activeJobs;
+    QMap<QUuid, JobBase *> m_activeJobs;
 
     // Manager owns the dialog
     ExportProgressDialog *m_exportProgressDialog;

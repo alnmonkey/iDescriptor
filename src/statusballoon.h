@@ -18,7 +18,7 @@
 #include <atomic>
 class BalloonProcess;
 
-enum class ProcessType { Export, Upload };
+enum class ProcessType { Export, Import };
 
 enum class ProcessStatus { Queued, Running, Completed, Failed, Cancelled };
 
@@ -71,10 +71,10 @@ public:
     static StatusBalloon *sharedInstance();
 
     // Process management
-    QUuid startExportProcess(const QString &title, int totalItems,
-                             const QString &destinationPath);
+    QUuid startProcess(const QString &title, int totalItems,
+                       const QString &destinationPath, ProcessType type);
 
-    void onFileTransferProgress(const QUuid &processId, int currentItem,
+    void onFileTransferProgress(const QUuid &processId,
                                 const QString &currentFile,
                                 qint64 bytesTransferred, qint64 totalBytes);
 
@@ -100,6 +100,7 @@ private:
     void onExportFinished(const QUuid &processId,
                           const ExportJobSummary &summary);
     void onItemExported(const QUuid &processId, const ExportResult &result);
+    void onItemImported(const QUuid &processId, const ImportResult &result);
     void handleJobUpdate(ProcessItem *item);
 
     QVBoxLayout *m_mainLayout;

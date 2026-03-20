@@ -28,10 +28,14 @@
 #include <QMainWindow>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPalette>
+#include <QPropertyAnimation>
 #include <QScreen>
 #include <QSlider>
 #include <QSplitter>
 #include <QSplitterHandle>
+#include <QStyleHints>
 #include <QStyleOption>
 #include <QWheelEvent>
 #include <QWidget>
@@ -62,6 +66,20 @@
 #endif
 
 #define THUMBNAIL_SIZE QSize(128, 128)
+#define MIN_MAIN_WINDOW_SIZE QSize(900, 600)
+
+inline bool isDarkMode()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    const auto scheme = QGuiApplication::styleHints()->colorScheme();
+    return scheme == Qt::ColorScheme::Dark;
+#else
+    const QPalette defaultPalette;
+    const auto text = defaultPalette.color(QPalette::WindowText);
+    const auto window = defaultPalette.color(QPalette::Window);
+    return text.lightness() > window.lightness();
+#endif // QT_VERSION
+}
 
 inline QString mergeStyles(QWidget *widget, const QString &newStyles)
 {
@@ -74,8 +92,6 @@ inline QString mergeStyles(QWidget *widget, const QString &newStyles)
 
     return existing + "\n" + newStyles;
 }
-
-#define MIN_MAIN_WINDOW_SIZE QSize(900, 600)
 
 class ResponsiveGraphicsView : public QGraphicsView
 {
@@ -484,4 +500,142 @@ protected:
         // Let the base class handle the rest of the event
         QSlider::mousePressEvent(event);
     }
+};
+
+class IDLoadingIconLabel : public QLabel
+{
+    Q_OBJECT
+    Q_PROPERTY(qreal shimmerOffset READ shimmerOffset WRITE setShimmerOffset)
+
+public:
+    explicit IDLoadingIconLabel(QWidget *parent = nullptr) : QLabel(parent)
+    {
+        setFixedSize(64, 64);
+        setAlignment(Qt::AlignCenter);
+        initAnimation();
+    }
+
+    ~IDLoadingIconLabel() override { stopLoading(); }
+
+    qreal shimmerOffset() const { return m_shimmerOffset; }
+
+    void setShimmerOffset(qreal offset)
+    {
+        m_shimmerOffset = offset;
+        update();
+    }
+
+    void setLoadedPixmap(const QPixmap &pixmap)
+    {
+        stopLoading();
+        setPixmap(pixmap);
+        update();
+    }
+
+    void setLoadFailed()
+    {
+        stopLoading();
+        setPixmap(QPixmap());
+        m_failed = true;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        QRectF r = rect().adjusted(2, 2, -2, -2);
+        QPainterPath path;
+        path.addRoundedRect(r, 16, 16);
+        painter.setClipPath(path);
+
+        const bool dark = isDarkMode();
+
+        // shadcn-like neutral palette
+        const QColor base = dark ? QColor("#27272a")       // zinc-900
+                                 : QColor("#e5e7eb");      // zinc-200
+        const QColor highlight = dark ? QColor("#3f3f46")  // zinc-800
+                                      : QColor("#f4f4f5"); // zinc-100
+
+        if (m_animation &&
+            m_animation->state() == QAbstractAnimation::Running) {
+            // Skeleton shimmer background
+            QLinearGradient grad(r.topLeft(), r.topRight());
+
+            const qreal center = m_shimmerOffset;
+            const qreal left = qMax<qreal>(0.0, center - 0.3);
+            const qreal right = qMin<qreal>(1.0, center + 0.3);
+
+            grad.setColorAt(0.0, base);
+            grad.setColorAt(left, base);
+            grad.setColorAt(center, highlight);
+            grad.setColorAt(right, base);
+            grad.setColorAt(1.0, base);
+
+            painter.fillRect(r, grad);
+        } else {
+            painter.fillRect(r, base);
+        }
+
+        if (!pixmap().isNull() &&
+            (!m_animation ||
+             m_animation->state() != QAbstractAnimation::Running)) {
+            QPixmap pm = pixmap();
+            pm.setDevicePixelRatio(devicePixelRatioF());
+            QPixmap scaled =
+                pm.scaled(r.size().toSize(), Qt::KeepAspectRatioByExpanding,
+                          Qt::SmoothTransformation);
+            painter.drawPixmap(r.topLeft(), scaled);
+            return;
+        }
+
+        QColor textColor;
+        if (m_failed) {
+            // shadcn red-500
+            textColor = QColor("#ef4444");
+        } else {
+            // shadcn foreground-ish
+            textColor = dark ? QColor("#f9fafb")  // zinc-50
+                             : QColor("#18181b"); // zinc-900
+        }
+
+        painter.setPen(textColor);
+        QFont f = font();
+        f.setBold(true);
+        painter.setFont(f);
+        painter.drawText(r, Qt::AlignCenter, QStringLiteral("iD"));
+    }
+
+private:
+    void initAnimation()
+    {
+        if (m_animation)
+            return;
+
+        m_animation = new QPropertyAnimation(this, "shimmerOffset", this);
+        m_animation->setDuration(1200);
+        m_animation->setStartValue(0.0);
+        m_animation->setEndValue(1.0);
+        m_animation->setLoopCount(-1);
+        m_animation->start();
+    }
+
+    void stopLoading()
+    {
+        if (!m_animation)
+            return;
+
+        m_animation->stop();
+        m_animation->deleteLater();
+        m_animation = nullptr;
+    }
+
+private:
+    QPropertyAnimation *m_animation = nullptr;
+    qreal m_shimmerOffset = 0.0;
+    bool m_failed = false;
 };

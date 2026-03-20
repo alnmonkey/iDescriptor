@@ -276,7 +276,8 @@ void MediaStreamer::streamFileRange(QTcpSocket *socket, qint64 startByte,
     const QByteArray pathBytes = m_filePath.toUtf8();
 
     IdeviceFfiError *err_open = ServiceManager::safeAfcFileOpen(
-        m_device, pathBytes.constData(), AfcRdOnly, &context->afcHandle);
+        m_device, pathBytes.constData(), AfcRdOnly, &context->afcHandle,
+        m_afcClient);
 
     if (err_open || context->afcHandle == 0) {
         qWarning() << "Failed to open file on device:" << m_filePath;
@@ -355,7 +356,7 @@ qint64 MediaStreamer::getFileSize()
 
     AfcFileInfo info = {};
     IdeviceFfiError *info_err = ServiceManager::safeAfcGetFileInfo(
-        m_device, pathBytes.constData(), &info);
+        m_device, pathBytes.constData(), &info, m_afcClient);
 
     if (info_err || info.size == 0) {
         qWarning() << "Failed to get file info for:" << m_filePath;
@@ -365,8 +366,7 @@ qint64 MediaStreamer::getFileSize()
 
     size_t fileSize = info.size;
 
-    // FIXME : safe to free ?
-    // afc_file_info_free(&info);
+    afc_file_info_free(&info);
 
     if (fileSize > 0) {
         m_cachedFileSize = fileSize;

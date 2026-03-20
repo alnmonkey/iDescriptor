@@ -16,8 +16,10 @@ class ImageTask : public QObject, public QRunnable
     Q_OBJECT
 public:
     ImageTask(const iDescriptorDevice *device, const QString &path,
-              unsigned int row, bool scale = true)
-        : m_device(device), m_path(path), m_isThumbnail(scale), m_row(row)
+              unsigned int row, bool scale = true,
+              std::optional<AfcClientHandle *> altAfc = std::nullopt)
+        : m_device(device), m_path(path), m_isThumbnail(scale), m_row(row),
+          m_altAfc(altAfc)
     {
         setAutoDelete(false);
     }
@@ -32,17 +34,18 @@ protected:
 
         if (isVideo) {
             QPixmap thumbnail = ImageLoader::generateVideoThumbnailFFmpeg(
-                m_device, m_path, THUMBNAIL_SIZE);
+                m_device, m_path, THUMBNAIL_SIZE, m_altAfc);
 
             emit finished(m_path, thumbnail, m_row);
         } else {
             if (m_isThumbnail) {
                 QPixmap image = ImageLoader::loadThumbnailFromDevice(
-                    m_device, m_path, THUMBNAIL_SIZE);
+                    m_device, m_path, THUMBNAIL_SIZE, m_altAfc);
                 emit finished(m_path, image, m_row);
             } else {
                 qDebug() << "Loading full image for:" << m_path;
-                QPixmap image = ImageLoader::loadImage(m_device, m_path);
+                QPixmap image =
+                    ImageLoader::loadImage(m_device, m_path, m_altAfc);
                 emit finished(m_path, image, m_row);
             }
         }
@@ -53,6 +56,7 @@ private:
     QString m_path;
     bool m_isThumbnail;
     unsigned int m_row;
+    std::optional<AfcClientHandle *> m_altAfc;
 };
 
 #endif // IMAGETASK_H

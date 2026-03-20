@@ -21,8 +21,8 @@
 #include "devicemonitor.h"
 #include "iDescriptor.h"
 #include "mainwindow.h"
-// #include "settingsmanager.h"
 #include "networkdevicemanager.h"
+#include "settingsmanager.h"
 #include <QDebug>
 #include <QMessageBox>
 #include <QThreadPool>
@@ -151,13 +151,13 @@ void AppContext::cachePairedDevices()
                                         QString::fromUtf8(mac_address), path);
                                 m_pairingFileCache[QString::fromUtf8(
                                     mac_address)] = path;
-                                free(mac_address);
+                                plist_mem_free(mac_address);
                             }
                         }
 
                         plist_free(root_node);
                     }
-                    free(plist_data);
+                    plist_mem_free(plist_data);
                 }
                 // Clean up
                 // idevice_pairing_file_free(pairing_file.unwrap().raw());
@@ -192,6 +192,10 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
                            QString ipAddress)
 {
 
+    if (QCoreApplication::closingDown()) {
+        qDebug() << "Ignoring addDevice during shutdown for" << uniq.get();
+        return;
+    }
     emit initStarted(uniq);
 
     if (auto device = getDevice(uniq)) {
@@ -257,6 +261,7 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
                     // TODO:it could also be password protected, so check for
                     // that Initialization failed, cleaning up resources.
                     // PasswordProtected
+                    // Invalidhostid
                     if (initResult->error && initResult->error->code ==
                                                  PairingDialogResponsePending) {
                         if (addType == AddType::Regular) {
@@ -461,14 +466,14 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
                     addType == AddType::UpgradeToWireless ||
                     addType == AddType::Regular) {
                     qDebug() << "Wireless device added: " << uniq;
-                    // SettingsManager::sharedInstance()->doIfEnabled(
-                    //     SettingsManager::Setting::AutoRaiseWindow, []() {
-                    //         if (MainWindow *mainWindow =
-                    //         MainWindow::sharedInstance()) {
-                    //             mainWindow->raise();
-                    //             mainWindow->activateWindow();
-                    //         }
-                    //     });
+                    SettingsManager::sharedInstance()->doIfEnabled(
+                        SettingsManager::Setting::AutoRaiseWindow, []() {
+                            if (MainWindow *mainWindow =
+                                    MainWindow::sharedInstance()) {
+                                mainWindow->raise();
+                                mainWindow->activateWindow();
+                            }
+                        });
 
                     emit deviceAdded(device);
                     emit deviceChange();
@@ -485,11 +490,11 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
 
 int AppContext::getConnectedDeviceCount() const
 {
-    // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
-    //     return m_devices.size() + m_recoveryDevices.size();
-    // #else
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
+    return m_devices.size() + m_recoveryDevices.size();
+#else
     return m_devices.size();
-    // #endif
+#endif
 }
 
 void AppContext::removeDevice(iDescriptor::Uniq uniq)
@@ -540,20 +545,7 @@ void AppContext::removeDevice(iDescriptor::Uniq uniq)
     qDebug() << "Acquired lock, cleaning up device: "
              << QString::fromStdString(udid);
 
-    // FIXME: implement proper cleanup
-    if (device->afcClient)
-        afc_client_free(device->afcClient);
-    if (device->afc2Client)
-        afc_client_free(device->afc2Client);
-    // idevice_free(device->device);
-
-    if (device->heartbeatThread) {
-        device->heartbeatThread->requestInterruption();
-        // device->heartbeatThread->wait();
-        delete device->heartbeatThread;
-    }
-
-    delete device;
+    freeDevice(device);
 }
 
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
@@ -599,12 +591,12 @@ QList<iDescriptorRecoveryDevice *> AppContext::getAllRecoveryDevices()
 // Returns whether there are any devices connected (regular or recovery)
 bool AppContext::noDevicesConnected() const
 {
-    // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
-    //     return (m_devices.isEmpty() && m_recoveryDevices.isEmpty() &&
-    //             m_pendingDevices.isEmpty());
-    // #else
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
+    return (m_devices.isEmpty() && m_recoveryDevices.isEmpty() &&
+            m_pendingDevices.isEmpty());
+#else
     return (m_devices.isEmpty() && m_pendingDevices.isEmpty());
-    // #endif
+#endif
 }
 
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
@@ -644,24 +636,11 @@ void AppContext::addRecoveryDevice(uint64_t ecid)
 
 AppContext::~AppContext()
 {
-    // FIXME: deviceRemoved can trigger, new devices being added while we are
-    // trying to clean up
     for (auto device : m_devices) {
-        emit deviceRemoved(device->udid, device->deviceInfo.wifiMacAddress,
-                           device->deviceInfo.ipAddress,
-                           device->deviceInfo.isWireless);
-        if (device->afcClient)
-            afc_client_free(device->afcClient);
-        if (device->afc2Client)
-            afc_client_free(device->afc2Client);
-        // idevice_free(device->device);
-
-        if (device->heartbeatThread) {
-            device->heartbeatThread->requestInterruption();
-            device->heartbeatThread->wait();
-            delete device->heartbeatThread;
-        }
+        freeDevice(device);
     }
+
+    m_devices.clear();
 
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     for (auto recoveryDevice : m_recoveryDevices) {
@@ -739,4 +718,22 @@ void AppContext::tryToConnectToNetworkDevice(const NetworkDevice &device)
 void AppContext::emitNoPairingFileForWirelessDevice(const QString &udid)
 {
     emit noPairingFileForWirelessDevice(udid);
+}
+
+void AppContext::freeDevice(iDescriptorDevice *device)
+{
+    if (device->afcClient)
+        afc_client_free(device->afcClient);
+    if (device->afc2Client)
+        afc_client_free(device->afc2Client);
+
+    if (device->heartbeatThread) {
+        device->heartbeatThread->requestInterruption();
+        device->heartbeatThread->wait();
+        delete device->heartbeatThread;
+    }
+
+    lockdownd_client_free(device->lockdown);
+    idevice_provider_free(device->provider);
+    delete device;
 }

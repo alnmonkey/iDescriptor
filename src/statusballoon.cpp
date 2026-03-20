@@ -155,12 +155,18 @@ StatusBalloon::StatusBalloon(QWidget *parent) : QBalloonTip(parent)
 #ifdef WIN32
     setAttribute(Qt::WA_TranslucentBackground);
 #endif
+    setObjectName("StatusBalloon");
+    setStyleSheet("QWidget#StatusBalloon { border-radius: 8px; border: "
+                  "1px solid #ccc;  }");
+    // Create main layout
     m_mainLayout = new QVBoxLayout();
     m_mainLayout->setSpacing(8);
     m_mainLayout->setContentsMargins(5, 5, 5, 5);
 
     m_noProcesesLabel =
         new QLabel("Export & Import processes will appear here", this);
+    m_noProcesesLabel->setAlignment(Qt::AlignCenter);
+    m_noProcesesLabel->setWordWrap(true);
 
     // Header label
     m_headerLabel = new QLabel("Processes");
@@ -198,38 +204,40 @@ void StatusBalloon::connectExportThreadSignals()
     ExportManager *exportManager = ExportManager::sharedInstance();
 
     connect(exportManager->m_exportThread, &ExportManagerThread::exportFinished,
-            this, &StatusBalloon::onExportFinished);
+            this, &StatusBalloon::onExportFinished); //?
 
     connect(exportManager->m_exportThread, &ExportManagerThread::itemExported,
             this, &StatusBalloon::onItemExported);
+
+    connect(exportManager->m_exportThread, &ExportManagerThread::itemImported,
+            this, &StatusBalloon::onItemImported);
 
     connect(exportManager->m_exportThread,
             &ExportManagerThread::fileTransferProgress, this,
             &StatusBalloon::onFileTransferProgress);
     // QTimer::singleShot(3000, this, [this]() {
     //     // test
-    //     startExportProcess("Test Export Process", 10,
-    //     "/path/to/destination");
+    //     startProcess("Test Export Process", 10, "/path/to/destination",
+    //                  ProcessType::Export);
     // });
 }
 
 void StatusBalloon::onFileTransferProgress(const QUuid &processId,
-                                           int currentItem,
                                            const QString &currentFile,
                                            qint64 bytesTransferred,
                                            qint64 totalBytes)
 {
     qDebug() << "StatusBalloon::updateProcessProgress";
-    // QMutexLocker locker(&m_processesMutex);
+    // FIXME
+    //  QMutexLocker locker(&m_processesMutex);
 
-    if (!m_processes.contains(processId)) {
+    ProcessItem *item = m_processes[processId];
+    if (!item) {
         qDebug() << "StatusBalloon::updateProcessProgress: unknown processId"
                  << processId;
         return;
     }
 
-    ProcessItem *item = m_processes[processId];
-    item->completedItems = currentItem;
     item->currentFile = currentFile;
     item->transferredBytes = bytesTransferred;
     item->totalBytes = totalBytes;
@@ -301,17 +309,51 @@ void StatusBalloon::onItemExported(const QUuid &processId,
     updateHeader();
 }
 
-QUuid StatusBalloon::startExportProcess(const QString &title, int totalItems,
-                                        const QString &destinationPath)
+void StatusBalloon::onItemImported(const QUuid &processId,
+                                   const ImportResult &result)
+{
+    qDebug() << "StatusBalloon::onItemImported entry:" << processId
+             << "Success:" << result.success;
+    QMutexLocker locker(&m_processesMutex);
+
+    if (!m_processes.contains(processId)) {
+        qDebug() << "StatusBalloon::onItemImported: unknown processId"
+                 << processId;
+        return;
+    }
+
+    ProcessItem *item = m_processes[processId];
+    if (result.success) {
+        item->completedItems += 1;
+    } else {
+        item->failedItems += 1;
+    }
+
+    if (item->completedItems + item->failedItems == item->totalItems) {
+        // meaning all items are processed, but we don't know if the overall
+        // status is
+        if (item->failedItems > 0) {
+            item->status = ProcessStatus::Failed;
+        } else {
+            item->status = ProcessStatus::Completed;
+        }
+    }
+    handleJobUpdate(item);
+    updateHeader();
+}
+
+QUuid StatusBalloon::startProcess(const QString &title, int totalItems,
+                                  const QString &destinationPath,
+                                  ProcessType type)
 {
     qDebug() << "StatusBalloon::startExportProcess entry:" << title
              << totalItems << destinationPath;
 
-    handleShow(); // ensure balloon is visible when process starts
+    handleShow(true); // ensure balloon is visible when process starts
 
     auto *item = new ProcessItem();
     item->processId = QUuid::createUuid();
-    item->type = ProcessType::Export;
+    item->type = type;
     item->status = ProcessStatus::Running;
     item->title = title;
     item->totalItems = totalItems;
@@ -332,6 +374,10 @@ QUuid StatusBalloon::startExportProcess(const QString &title, int totalItems,
     // deadlock
     createProcessWidget(item);
     updateHeader();
+
+    // show blue dot when there is at least one running process
+    if (m_button)
+        m_button->setIndicatorVisible(true);
 
     return item->processId;
 }
@@ -380,10 +426,10 @@ void StatusBalloon::updateHeader()
 
 void StatusBalloon::handleShow(bool forceVisible)
 {
-    QPoint buttonBottomCenter = m_button->mapToGlobal(
+    QPoint pos = m_button->mapToGlobal(
         QPoint(m_button->width() / 2, m_button->height()));
 
-    toggleBaloon(buttonBottomCenter, -1, forceVisible);
+    toggleBaloon(pos, -1, forceVisible);
 }
 
 bool StatusBalloon::isProcessRunning(const QUuid &processId) const
@@ -465,8 +511,11 @@ void StatusBalloon::removeProcessWidget(const QUuid &processId)
         item->processWidget->deleteLater();
     }
 
-    // delete item;
     m_processes.remove(processId);
+
+    // hide dot if no active processes left
+    if (m_button && !hasActiveProcesses())
+        m_button->setIndicatorVisible(false);
 
     if (m_processes.isEmpty()) {
         hide();
@@ -481,6 +530,7 @@ void StatusBalloon::handleJobUpdate(ProcessItem *item)
     QString statusText;
     if (item->status == ProcessStatus::Running) {
         if (!item->currentFile.isEmpty()) {
+            // FIXME :Exporting... filename.ext or / Importing ... filename.ext
             statusText = item->currentFile;
         } else {
             statusText = "Processing...";
@@ -523,8 +573,15 @@ void StatusBalloon::resizeEvent(QResizeEvent *event)
     if (!m_noProcesesLabel)
         return;
 
+    const int margin = 10;
+    int maxWidth = qMax(0, width() - 2 * margin);
+    m_noProcesesLabel->setMaximumWidth(maxWidth);
     m_noProcesesLabel->adjustSize();
+
     int x = (width() - m_noProcesesLabel->width()) / 2;
     int y = (height() - m_noProcesesLabel->height()) / 2;
+    x = qMax(margin, x);
+    y = qMax(margin, y);
+
     m_noProcesesLabel->move(x, y);
 }

@@ -238,6 +238,37 @@ public:
         }
     }
 
+    template <typename T>
+    static T executeAfcClientOperation(
+        const iDescriptorDevice *device,
+        std::function<T(AfcClientHandle *client)> operation,
+        std::optional<AfcClientHandle *> altAfc = std::nullopt)
+    {
+        try {
+            if (!device) {
+                return T{};
+            }
+
+            std::lock_guard<std::recursive_mutex> lock(device->mutex);
+
+            // Double-check device is still valid after acquiring lock
+            if (!device->afcClient) {
+                return T{};
+            }
+
+            if (altAfc && !*altAfc) {
+                return T{};
+            }
+
+            // Determine which client to use
+            AfcClientHandle *client = altAfc ? *altAfc : device->afcClient;
+            return operation(client);
+        } catch (const std::exception &e) {
+            qDebug() << "Exception in executeAfcOperation:" << e.what();
+            return T{};
+        }
+    }
+
     // Specific AFC operation wrappers
     static IdeviceFfiError *safeAfcReadDirectory(
         const iDescriptorDevice *device, const char *path, char ***dirs,
@@ -298,7 +329,19 @@ public:
         const iDescriptorDevice *device, const char *device_path,
         const char *local_path,
         std::function<void(qint64, qint64)> progressCallback = nullptr,
-        std::atomic<bool> *cancelRequested = nullptr);
+        std::atomic<bool> *cancelRequested = nullptr,
+        std::optional<AfcClientHandle *> altAfc = std::nullopt);
+
+    static IdeviceFfiError *
+    importFileToPath(const iDescriptorDevice *device, const char *local_path,
+                     const char *device_path,
+                     std::function<void(qint64, qint64)> progressCallback,
+                     std::atomic<bool> *cancelRequested,
+                     std::optional<AfcClientHandle *> altAfc = std::nullopt);
+
+    static IdeviceFfiError *
+    deletePath(const iDescriptorDevice *device, const char *path,
+               std::optional<AfcClientHandle *> altAfc = std::nullopt);
 
     static IdeviceFfiError *
     takeScreenshot(const iDescriptorDevice *device,

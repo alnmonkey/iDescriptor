@@ -52,6 +52,7 @@ ExportManager::~ExportManager()
     m_activeJobs.clear();
 }
 
+// FIXME: show error on ui
 QUuid ExportManager::startExport(const iDescriptorDevice *device,
                                  const QList<ExportItem> &items,
                                  const QString &destinationPath,
@@ -87,11 +88,9 @@ QUuid ExportManager::startExport(const iDescriptorDevice *device,
     job->altAfc = altAfc;
     job->d_udid = device->udid;
 
-    // fixme : pass ExportJob
-    job->statusBalloonProcessId =
-        StatusBalloon::sharedInstance()->startExportProcess(
-            QString("Exporting %1 item(s)").arg(items.size()), items.size(),
-            destinationPath);
+    job->statusBalloonProcessId = StatusBalloon::sharedInstance()->startProcess(
+        QString("Exporting %1 item(s)").arg(items.size()), items.size(),
+        destinationPath, ProcessType::Export);
 
     // Use ExportManager's own jobId for its internal tracking and signals
     const QUuid managerJobId = job->jobId;
@@ -108,6 +107,55 @@ QUuid ExportManager::startExport(const iDescriptorDevice *device,
 
     m_exportThread->executeExportJob(job);
     qDebug() << "Started export job" << managerJobId << "for" << items.size()
+             << "items";
+    return managerJobId;
+}
+
+// FIXME: show error on ui
+QUuid ExportManager::startImport(const iDescriptorDevice *device,
+                                 const QList<ImportItem> &items,
+                                 const QString &destinationPath,
+                                 std::optional<AfcClientHandle *> altAfc)
+{
+    qDebug() << "startExport() entry - items:" << items.size()
+             << "dest:" << destinationPath;
+    if (!device) {
+        qWarning() << "Invalid device provided to ExportManager";
+        return QUuid();
+    }
+
+    if (items.isEmpty()) {
+        qWarning() << "No items provided for export";
+        return QUuid();
+    }
+
+    // Create new job
+    auto job = new ImportJob();
+    job->jobId = QUuid::createUuid();
+    job->items = items;
+    job->destinationPath = destinationPath;
+    job->altAfc = altAfc;
+    job->d_udid = device->udid;
+
+    job->statusBalloonProcessId = StatusBalloon::sharedInstance()->startProcess(
+        QString("Importing %1 item(s)").arg(items.size()), items.size(),
+        destinationPath, ProcessType::Import);
+
+    // Use ExportManager's own jobId for its internal tracking and signals
+    const QUuid managerJobId = job->jobId;
+
+    // todo:cleanupJob ?
+    // connect(job->watcher, &QFutureWatcher<void>::finished, this,
+    //         [this, managerJobId]() { cleanupJob(managerJobId); });
+
+    // Store job before starting
+    {
+        QMutexLocker locker(&m_jobsMutex);
+        m_activeJobs[managerJobId] = job;
+    }
+
+    m_exportThread->executeImportJob(job);
+    qDebug() << "Started import job" << managerJobId << "for" << items.size()
              << "items";
     return managerJobId;
 }
@@ -151,4 +199,14 @@ void ExportManager::cleanupJob(const QUuid &jobId)
     //     m_activeJobs.erase(it);
     //     qDebug() << "Cleaned up export job" << jobId;
     // }
+}
+
+void ExportManager::cancelAllJobs()
+{
+    QMutexLocker locker(&m_jobsMutex);
+    for (auto jobPtr : m_activeJobs) {
+        if (jobPtr)
+            jobPtr->cancelRequested = true;
+    }
+    qDebug() << "Cancellation requested for all active jobs";
 }

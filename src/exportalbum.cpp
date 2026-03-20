@@ -115,7 +115,6 @@ void ExportAlbum::getTotalPhotoCount(const QStringList &paths)
                 errorOccurred = true;
                 idevice_error_free(err);
             } else {
-                int index = 0;
                 for (size_t i = 0; i < innerCount; ++i) {
                     const char *item = items[i];
                     if (!item) {
@@ -130,8 +129,7 @@ void ExportAlbum::getTotalPhotoCount(const QStringList &paths)
                     QString filePath = path + "/" + QString::fromUtf8(item);
 
                     m_exportItems.append(
-                        ExportItem(filePath, fileName, m_device->udid, index));
-                    ++index;
+                        ExportItem(filePath, fileName, m_device->udid));
                 }
                 free_directory_listing(items, innerCount);
                 count += innerCount;

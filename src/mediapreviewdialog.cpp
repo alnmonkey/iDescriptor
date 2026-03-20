@@ -199,8 +199,8 @@ void MediaPreviewDialog::loadImage()
     };
     // 99999 is so that it gets the highest priority in the queue
     unsigned int priority = 99999;
-    ImageLoader::sharedInstance().requestImageWithCallback(m_device, m_filePath,
-                                                           priority, callback);
+    ImageLoader::sharedInstance().requestImageWithCallback(
+        m_device, m_filePath, priority, callback, m_afcClient);
 }
 
 void MediaPreviewDialog::loadVideo()

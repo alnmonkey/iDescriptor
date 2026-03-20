@@ -22,35 +22,32 @@
 #include <QByteArray>
 #include <QDebug>
 
-QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
-                                       const char *path)
+QByteArray read_afc_file_to_byte_array(AfcClientHandle *afc, const char *path)
 {
     AfcFileHandle *handle = nullptr;
-    IdeviceFfiError *err_open = // Use distinct variable name
-        ServiceManager::safeAfcFileOpen(device, path, AfcRdOnly, &handle);
+    IdeviceFfiError *err_open = afc_file_open(afc, path, AfcRdOnly, &handle);
 
     if (err_open) {
         qDebug() << "Could not open file" << path
                  << "Error:" << err_open->message;
-        idevice_error_free(err_open); // Free the error object
+        idevice_error_free(err_open);
         return QByteArray();
     }
 
     AfcFileInfo info = {};
-    IdeviceFfiError *err_info = // Use distinct variable name
-        ServiceManager::safeAfcGetFileInfo(device, path, &info);
+    IdeviceFfiError *err_info = afc_get_file_info(afc, path, &info);
 
     if (err_info) {
         qDebug() << "Could not get file info for file" << path
                  << "Error:" << err_info->message;
-        idevice_error_free(err_info); // Free the error object
-        ServiceManager::safeAfcFileClose(device, handle); // Close handle
+        idevice_error_free(err_info);
+        afc_file_close(handle);
         return QByteArray();
     }
 
     size_t fileSize = info.size;
     if (fileSize == 0) {
-        ServiceManager::safeAfcFileClose(device, handle);
+        afc_file_close(handle);
         afc_file_info_free(&info); // Free internal strings of info
         return QByteArray();
     }
@@ -60,14 +57,14 @@ QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
 
     uint8_t *chunkData = nullptr;
     size_t bytesRead = 0;
-    IdeviceFfiError *read_err = ServiceManager::safeAfcFileRead(
-        device, handle, &chunkData, fileSize, &bytesRead);
+    IdeviceFfiError *read_err =
+        afc_file_read(handle, &chunkData, fileSize, &bytesRead);
 
     if (read_err) {
         qDebug() << "AFC Error: Read failed for file" << path
                  << "Error:" << read_err->message;
         idevice_error_free(read_err);
-        ServiceManager::safeAfcFileClose(device, handle);
+        afc_file_close(handle);
         afc_file_info_free(&info); // Free internal strings of info
         return QByteArray();
     }
@@ -75,7 +72,7 @@ QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
     buffer.append(reinterpret_cast<const char *>(chunkData), bytesRead);
     afc_file_read_data_free(chunkData, bytesRead);
 
-    ServiceManager::safeAfcFileClose(device, handle);
+    afc_file_close(handle);
 
     if (bytesRead != fileSize) {
         qDebug() << "AFC Error: Read mismatch for file" << path

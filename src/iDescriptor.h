@@ -30,6 +30,7 @@
 #include <idevice++/bindings.hpp>
 #include <idevice++/core_device_proxy.hpp>
 #include <idevice++/diagnostics_relay.hpp>
+#include <idevice++/dvt/location_simulation.hpp>
 #include <idevice++/dvt/remote_server.hpp>
 #include <idevice++/dvt/screenshot.hpp>
 #include <idevice++/ffi.hpp>
@@ -504,10 +505,7 @@ struct NetworkDevice {
 
 QPixmap load_heic(const QByteArray &data);
 
-QByteArray read_afc_file_to_byte_array(const iDescriptorDevice *device,
-                                       const char *path);
-
-bool isDarkMode();
+QByteArray read_afc_file_to_byte_array(AfcClientHandle *afc, const char *path);
 
 IdeviceFfiError *_install_IPA(const iDescriptorDevice *device,
                               const char *filePath, const char *ipaName);
@@ -635,21 +633,6 @@ inline int read_file(const char *filename, uint8_t **data, size_t *length)
     return 1;
 }
 
-struct ExportItem {
-    QString sourcePathOnDevice;
-    QString suggestedFileName;
-    int itemIndex = -1;
-    std::string d_udid;
-
-    ExportItem() = default;
-    ExportItem(const QString &sourcePath, const QString &fileName,
-               std::string d_udid, int index)
-        : sourcePathOnDevice(sourcePath), suggestedFileName(fileName),
-          d_udid(d_udid), itemIndex(index)
-    {
-    }
-};
-
 struct ExportResult {
     QString sourceFilePath;
     QString outputFilePath;
@@ -668,15 +651,74 @@ struct ExportJobSummary {
     bool wasCancelled = false;
 };
 
-struct ExportJob {
+struct ImportResult;
+
+template <typename ResultT> class PItem
+{
+public:
+    QString sourcePathOnDevice;
+    QString suggestedFileName;
+    std::string d_udid;
+    std::function<void(const ResultT &)> callback;
+
+    PItem() = default;
+    PItem(const QString &sourcePath, const QString &fileName,
+          std::string d_udid,
+          std::function<void(const ResultT &)> callback = nullptr)
+        : sourcePathOnDevice(sourcePath), suggestedFileName(fileName),
+          d_udid(std::move(d_udid)), callback(std::move(callback))
+    {
+    }
+};
+
+struct ExportItem : public PItem<ExportResult> {
+    using PItem<ExportResult>::PItem;
+};
+
+struct ImportItem : public PItem<ImportResult> {
+    using PItem<ImportResult>::PItem;
+};
+
+class JobBase
+{
+public:
     QUuid jobId;
-    QList<ExportItem> items;
     QString destinationPath;
     std::optional<AfcClientHandle *> altAfc;
     std::atomic<bool> cancelRequested{false};
     QUuid statusBalloonProcessId;
     // device udid
     std::string d_udid;
+
+    virtual ~JobBase() = default;
+};
+
+template <typename ItemT> class Job : public JobBase
+{
+public:
+    QList<ItemT> items;
+};
+
+// Concrete aliases
+using ExportJob = Job<ExportItem>;
+using ImportJob = Job<ImportItem>;
+
+struct ImportResult {
+    QString sourceFilePath;
+    QString outputFilePath;
+    bool success = false;
+    QString errorMessage;
+    qint64 bytesTransferred = 0;
+};
+
+struct ImportJobSummary {
+    QUuid jobId;
+    int totalItems = 0;
+    int successfulItems = 0;
+    int failedItems = 0;
+    qint64 totalBytesTransferred = 0;
+    QString destinationPath;
+    bool wasCancelled = false;
 };
 
 inline QString formatFileSize(qint64 bytes)

@@ -276,13 +276,9 @@ void GalleryWidget::onExportSelected()
     }
 
     QList<ExportItem> exportItems;
-    // FIXME: index
-    int index = 0;
     for (const QString &filePath : filePaths) {
         QString fileName = filePath.split('/').last();
-        exportItems.append(
-            ExportItem(filePath, fileName, m_device->udid, index));
-        ++index;
+        exportItems.append(ExportItem(filePath, fileName, m_device->udid));
     }
 
     qDebug() << "Starting export of selected files:" << exportItems.size()
@@ -336,14 +332,10 @@ void GalleryWidget::onExportAll()
         return;
     }
 
-    // FIXME: index
-    int index = 0;
     QList<ExportItem> exportItems;
     for (const QString &filePath : filePaths) {
         QString fileName = filePath.split('/').last();
-        exportItems.append(
-            ExportItem(filePath, fileName, m_device->udid, index));
-        ++index;
+        exportItems.append(ExportItem(filePath, fileName, m_device->udid));
     }
 
     qDebug() << "Starting export of:" << exportItems.size() << "items to"

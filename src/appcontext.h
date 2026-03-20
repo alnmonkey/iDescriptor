@@ -59,6 +59,7 @@ private:
     QMap<QString, QString> m_pairingFileCache;
     void cachePairedDevices();
     void emitNoPairingFileForWirelessDevice(const QString &udid);
+    void freeDevice(iDescriptorDevice *device);
 signals:
     void deviceAdded(const iDescriptorDevice *device);
     void deviceRemoved(const std::string &udid, const std::string &macAddress,

@@ -537,12 +537,8 @@ void AppsWidget::createAppCard(
     cardLayout->setSpacing(10);
 
     // App icon
-    QLabel *iconLabel = new QLabel();
-    QPointer<QLabel> safeIconLabel = iconLabel;
-    QPixmap placeholderIcon = QApplication::style()
-                                  ->standardIcon(QStyle::SP_ComputerIcon)
-                                  .pixmap(64, 64);
-    iconLabel->setPixmap(placeholderIcon);
+    IDLoadingIconLabel *iconLabel = new IDLoadingIconLabel();
+    QPointer<IDLoadingIconLabel> safeIconLabel = iconLabel;
     iconLabel->setAlignment(Qt::AlignCenter);
     cardLayout->addWidget(iconLabel);
 
@@ -552,25 +548,31 @@ void AppsWidget::createAppCard(
         QNetworkReply *reply = m_networkManager->get(request);
         connect(
             reply, &QNetworkReply::finished, this, [reply, safeIconLabel]() {
-                if (reply->error() == QNetworkReply::NoError && safeIconLabel) {
-                    QByteArray data = reply->readAll();
-                    QPixmap pixmap;
-                    if (pixmap.loadFromData(data)) {
-                        QPixmap scaled = pixmap.scaled(
-                            64, 64, Qt::KeepAspectRatioByExpanding,
-                            Qt::SmoothTransformation);
-                        QPixmap rounded(64, 64);
-                        rounded.fill(Qt::transparent);
+                if (safeIconLabel) {
+                    if (reply->error() == QNetworkReply::NoError) {
+                        QByteArray data = reply->readAll();
+                        QPixmap pixmap;
+                        if (pixmap.loadFromData(data)) {
+                            QPixmap scaled = pixmap.scaled(
+                                64, 64, Qt::KeepAspectRatioByExpanding,
+                                Qt::SmoothTransformation);
+                            QPixmap rounded(64, 64);
+                            rounded.fill(Qt::transparent);
 
-                        QPainter painter(&rounded);
-                        painter.setRenderHint(QPainter::Antialiasing);
-                        QPainterPath path;
-                        path.addRoundedRect(QRectF(0, 0, 64, 64), 16, 16);
-                        painter.setClipPath(path);
-                        painter.drawPixmap(0, 0, scaled);
-                        painter.end();
+                            QPainter painter(&rounded);
+                            painter.setRenderHint(QPainter::Antialiasing);
+                            QPainterPath path;
+                            path.addRoundedRect(QRectF(0, 0, 64, 64), 16, 16);
+                            painter.setClipPath(path);
+                            painter.drawPixmap(0, 0, scaled);
+                            painter.end();
 
-                        safeIconLabel->setPixmap(rounded);
+                            safeIconLabel->setLoadedPixmap(rounded);
+                        } else {
+                            safeIconLabel->setLoadFailed();
+                        }
+                    } else {
+                        safeIconLabel->setLoadFailed();
                     }
                 }
                 reply->deleteLater();
@@ -580,8 +582,11 @@ void AppsWidget::createAppCard(
         fetchAppIconFromApple(
             m_networkManager, bundleId,
             [safeIconLabel](const QPixmap &pixmap, const QJsonObject &appInfo) {
-                // Check if iconLabel still exists
-                if (safeIconLabel && !pixmap.isNull()) {
+                Q_UNUSED(appInfo);
+                if (!safeIconLabel)
+                    return;
+
+                if (!pixmap.isNull()) {
                     QPixmap scaled =
                         pixmap.scaled(64, 64, Qt::KeepAspectRatioByExpanding,
                                       Qt::SmoothTransformation);
@@ -596,7 +601,9 @@ void AppsWidget::createAppCard(
                     painter.drawPixmap(0, 0, scaled);
                     painter.end();
 
-                    safeIconLabel->setPixmap(rounded);
+                    safeIconLabel->setLoadedPixmap(rounded);
+                } else {
+                    safeIconLabel->setLoadFailed();
                 }
             });
     }

@@ -62,14 +62,15 @@ void ImageLoader::requestThumbnail(const iDescriptorDevice *device,
 */
 void ImageLoader::requestImageWithCallback(
     const iDescriptorDevice *device, const QString &path, int priority,
-    std::function<void(const QPixmap &)> callback)
+    std::function<void(const QPixmap &)> callback,
+    std::optional<AfcClientHandle *> altAfc)
 {
 
     /*
         FIXME: priority is passed as row
         nothing dangerous but a bit hacky, should be handled better
     */                                                 //scale=false
-    auto *task = new ImageTask(device, path, priority, false);
+    auto *task = new ImageTask(device, path, priority, false, altAfc);
 
     /*
         TODO: should we do this ?
@@ -170,10 +171,11 @@ void ImageLoader::onTaskFinished(const QString &path, const QPixmap &pixmap,
 
 // almost a copy of loadThumbnailFromDevice but without any scaling logic
 QPixmap ImageLoader::loadImage(const iDescriptorDevice *device,
-                               const QString &filePath)
+                               const QString &filePath,
+                               std::optional<AfcClientHandle *> altAfc)
 {
     QByteArray imageData = ServiceManager::safeReadAfcFileToByteArray(
-        device, filePath.toUtf8().constData());
+        device, filePath.toUtf8().constData(), altAfc);
 
     if (imageData.isEmpty()) {
         qDebug() << "Could not read from device:" << filePath;
@@ -208,12 +210,13 @@ QPixmap ImageLoader::loadImage(const iDescriptorDevice *device,
     return {};
 }
 
-QPixmap ImageLoader::loadThumbnailFromDevice(const iDescriptorDevice *device,
-                                             const QString &filePath,
-                                             const QSize &size)
+QPixmap
+ImageLoader::loadThumbnailFromDevice(const iDescriptorDevice *device,
+                                     const QString &filePath, const QSize &size,
+                                     std::optional<AfcClientHandle *> altAfc)
 {
     QByteArray imageData = ServiceManager::safeReadAfcFileToByteArray(
-        device, filePath.toUtf8().constData());
+        device, filePath.toUtf8().constData(), altAfc);
 
     if (imageData.isEmpty()) {
         qDebug() << "Could not read from device:" << filePath;
@@ -252,18 +255,17 @@ QPixmap ImageLoader::loadThumbnailFromDevice(const iDescriptorDevice *device,
     return {};
 }
 
-QPixmap
-ImageLoader::generateVideoThumbnailFFmpeg(const iDescriptorDevice *device,
-                                          const QString &filePath,
-                                          const QSize &requestedSize)
+QPixmap ImageLoader::generateVideoThumbnailFFmpeg(
+    const iDescriptorDevice *device, const QString &filePath,
+    const QSize &requestedSize, std::optional<AfcClientHandle *> altAfc)
 {
     QPixmap thumbnail;
 
     AfcFileHandle *fileHandle = nullptr;
 
-    IdeviceFfiError *err_open = // Use distinct variable name for clarity
-        ServiceManager::safeAfcFileOpen(device, filePath.toUtf8().constData(),
-                                        AfcFopenMode::AfcRdOnly, &fileHandle);
+    IdeviceFfiError *err_open = ServiceManager::safeAfcFileOpen(
+        device, filePath.toUtf8().constData(), AfcFopenMode::AfcRdOnly,
+        &fileHandle, altAfc);
 
     if (err_open || fileHandle == nullptr) {
         qWarning() << "Failed to open video file for thumbnail:" << filePath;

@@ -20,6 +20,7 @@
 #ifndef DISKUSAGEWIDGET_H
 #define DISKUSAGEWIDGET_H
 #include "diskusagebar.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "qprocessindicator.h"
 
