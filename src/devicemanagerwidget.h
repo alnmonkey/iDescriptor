@@ -27,6 +27,10 @@
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "recoverydeviceinfowidget.h"
 #endif
+#include "appcontext.h"
+#include "mainwindow.h"
+#include "settingsmanager.h"
+#include <QDebug>
 #include <QHBoxLayout>
 #include <QMap>
 #include <QStackedWidget>

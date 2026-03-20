@@ -19,12 +19,6 @@
 
 #include "networkdevicestoconnectwidget.h"
 
-#ifdef __linux__
-#include "core/services/avahi/avahi_service.h"
-#else
-#include "core/services/dnssd/dnssd_service.h"
-#endif
-
 #include "appcontext.h"
 #include <QApplication>
 #include <QFrame>
@@ -42,7 +36,7 @@ NetworkDeviceCard::NetworkDeviceCard(const NetworkDevice &device,
     cardLayout->setContentsMargins(12, 10, 12, 10);
     cardLayout->setSpacing(4);
 
-    // Device name (primary)
+    // Device name
     QLabel *nameLabel = new QLabel(device.name);
     nameLabel->setWordWrap(true);
     QFont nameFont = nameLabel->font();
@@ -151,24 +145,13 @@ NetworkDevicesToConnectWidget::NetworkDevicesToConnectWidget(QWidget *parent)
 {
     setupUI();
 
-#ifdef __linux__
-    m_networkProvider = new AvahiService(this);
-    connect(m_networkProvider, &AvahiService::deviceAdded, this,
+    connect(NetworkDeviceProvider::sharedInstance(),
+            &NetworkDeviceProvider::deviceAdded, this,
             &NetworkDevicesToConnectWidget::onWirelessDeviceAdded);
-    connect(m_networkProvider, &AvahiService::deviceRemoved, this,
+    connect(NetworkDeviceProvider::sharedInstance(),
+            &NetworkDeviceProvider::deviceRemoved, this,
             &NetworkDevicesToConnectWidget::onWirelessDeviceRemoved);
-#else
-    m_networkProvider = new DnssdService(this);
-    connect(m_networkProvider, &DnssdService::deviceAdded, this,
-            &NetworkDevicesToConnectWidget::onWirelessDeviceAdded);
-    connect(m_networkProvider, &DnssdService::deviceRemoved, this,
-            &NetworkDevicesToConnectWidget::onWirelessDeviceRemoved);
-#endif
 
-    // Start scanning for network devices
-    m_networkProvider->startBrowsing();
-
-    // Initial device list update
     updateDeviceList();
 
     connect(AppContext::sharedInstance(),
@@ -184,12 +167,7 @@ NetworkDevicesToConnectWidget::NetworkDevicesToConnectWidget(QWidget *parent)
             this, &NetworkDevicesToConnectWidget::onDeviceAlreadyExists);
 }
 
-NetworkDevicesToConnectWidget::~NetworkDevicesToConnectWidget()
-{
-    if (m_networkProvider) {
-        m_networkProvider->stopBrowsing();
-    }
-}
+NetworkDevicesToConnectWidget::~NetworkDevicesToConnectWidget() {}
 
 void NetworkDevicesToConnectWidget::setupUI()
 {
@@ -271,7 +249,8 @@ void NetworkDevicesToConnectWidget::updateDeviceList()
 {
     clearDeviceCards();
 
-    QList<NetworkDevice> devices = m_networkProvider->getNetworkDevices();
+    QList<NetworkDevice> devices =
+        NetworkDeviceProvider::sharedInstance()->getNetworkDevices();
 
     if (devices.isEmpty()) {
         m_statusLabel->setText("No network devices found");

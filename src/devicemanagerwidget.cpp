@@ -18,34 +18,32 @@
  */
 
 #include "devicemanagerwidget.h"
-#include "appcontext.h"
-#include "devicemenuwidget.h"
-#include "devicependingwidget.h"
-#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
-#include "recoverydeviceinfowidget.h"
-#endif
-#include "settingsmanager.h"
-#include <QDebug>
 
 DeviceManagerWidget::DeviceManagerWidget(QWidget *parent)
     : QWidget(parent), m_currentDeviceUuid("")
 {
     setupUI();
 
-    connect(AppContext::sharedInstance(), &AppContext::deviceAdded, this,
-            [this](const iDescriptorDevice *device) {
-                addDevice(device);
+    connect(
+        AppContext::sharedInstance(), &AppContext::deviceAdded, this,
+        [this](const iDescriptorDevice *device) {
+            addDevice(device);
 
-                // Apply settings-based behavior for switching to new device
-                // SettingsManager::sharedInstance()->doIfEnabled(
-                //     SettingsManager::Setting::SwitchToNewDevice,
-                //     [this, device]() {
-                //         AppContext::sharedInstance()->setCurrentDeviceSelection(
-                //             DeviceSelection(device->udid));
-                //     });
+            SettingsManager::sharedInstance()->doIfEnabled(
+                SettingsManager::Setting::AutoRaiseWindow, []() {
+                    if (MainWindow *mainWindow = MainWindow::sharedInstance()) {
+                        mainWindow->raiseDeviceTab();
+                    }
+                });
 
-                emit updateNoDevicesConnected();
-            });
+            SettingsManager::sharedInstance()->doIfEnabled(
+                SettingsManager::Setting::SwitchToNewDevice, [this, device]() {
+                    AppContext::sharedInstance()->setCurrentDeviceSelection(
+                        DeviceSelection(device->udid));
+                });
+
+            emit updateNoDevicesConnected();
+        });
 
     connect(AppContext::sharedInstance(), &AppContext::deviceRemoved, this,
             [this](const std::string &uuid) {

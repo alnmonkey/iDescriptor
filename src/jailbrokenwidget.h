@@ -20,25 +20,26 @@
 #ifndef JAILBROKENWIDGET_H
 #define JAILBROKENWIDGET_H
 
-#ifdef __linux__
-#include "core/services/avahi/avahi_service.h"
-#else
-#include "core/services/dnssd/dnssd_service.h"
-#endif
+#include "appcontext.h"
+#include "responsiveqlabel.h"
+#include "sshterminaltool.h"
 
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
-#include "opensshterminalwidget.h"
-#include <QAbstractButton>
+#include <QApplication>
 #include <QButtonGroup>
+#include <QDebug>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QRadioButton>
+#include <QScrollArea>
 #include <QVBoxLayout>
 #include <QWidget>
 
 class ClickableWidget;
 
-// Define the struct here so it's available to the class declaration
 struct JailbreakToolInfo {
     QString title;
     QString description;
@@ -56,9 +57,8 @@ public:
 
 private slots:
 private:
-    // Helper function to create a tool widget
     ClickableWidget *createJailbreakTool(const JailbreakToolInfo &info);
-    OpenSSHTerminalWidget *m_sshTerminalWidget = nullptr;
+    SSHTerminalTool *m_sshTerminalWidget = nullptr;
 };
 
 #endif // JAILBROKENWIDGET_H

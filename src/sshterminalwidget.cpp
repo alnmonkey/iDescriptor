@@ -18,26 +18,6 @@
  */
 
 #include "sshterminalwidget.h"
-#include "qprocessindicator.h"
-#include "settingsmanager.h"
-#include <QDebug>
-#include <QDir>
-#include <QFile>
-#include <QHBoxLayout>
-#include <QHostAddress>
-#include <QInputDialog>
-#include <QLabel>
-#include <QMenu>
-#include <QProcess>
-#include <QProcessEnvironment>
-#include <QPushButton>
-#include <QStackedWidget>
-#include <QStandardPaths>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <libssh/libssh.h>
-#include <qtermwidget6/qtermwidget.h>
-#include <unistd.h>
 
 SSHTerminalWidget::SSHTerminalWidget(const ConnectionInfo &connectionInfo,
                                      QWidget *parent)
@@ -50,6 +30,9 @@ SSHTerminalWidget::SSHTerminalWidget(const ConnectionInfo &connectionInfo,
     setMinimumSize(800, 600);
 
     setupUI();
+#ifdef WIN32
+    setupWinWindow(this);
+#endif
 
     // Initialize SSH
     ssh_init();

@@ -69,6 +69,10 @@ public:
         m_uniq = QString::fromStdString(uniq);
         m_isMac = isMac;
     };
+    /* no need to set, unless needed */
+    void setIP(const QString &ip) { m_ip = ip; }
+    void setIP(const std::string &ip) { m_ip = QString::fromStdString(ip); }
+    const QString &getIP() const { return m_ip; }
     const QString &get() const { return m_uniq; }
     operator QString() const { return m_uniq; }
     operator std::string() const { return m_uniq.toStdString(); }
@@ -76,6 +80,7 @@ public:
 private:
     QString m_uniq;
     bool m_isMac;
+    QString m_ip;
 };
 
 class Utils

@@ -20,13 +20,8 @@
 #ifndef NETWORKDEVICESWIDGET_H
 #define NETWORKDEVICESWIDGET_H
 
-#ifdef __linux__
-#include "core/services/avahi/avahi_service.h"
-#else
-#include "core/services/dnssd/dnssd_service.h"
-#endif
-
 #include "iDescriptor-ui.h"
+#include "networkdeviceprovider.h"
 #include <QEvent>
 #include <QGroupBox>
 #include <QLabel>
@@ -57,12 +52,6 @@ private:
     QWidget *m_scrollContent = nullptr;
     QVBoxLayout *m_deviceLayout = nullptr;
     QLabel *m_statusLabel = nullptr;
-
-#ifdef __linux__
-    AvahiService *m_networkProvider = nullptr;
-#else
-    DnssdService *m_networkProvider = nullptr;
-#endif
 
     QList<QWidget *> m_deviceCards;
 

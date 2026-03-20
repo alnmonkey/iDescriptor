@@ -37,7 +37,6 @@
 #include <unistd.h>
 
 #include "appcontext.h"
-#include "networkdevicemanager.h"
 #include "networkdeviceswidget.h"
 #include "settingsmanager.h"
 #include "statusballoon.h"
@@ -418,8 +417,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // ═══════════════════════════════════════════════════════════════════════
     //  Add a wireless device
     // ═══════════════════════════════════════════════════════════════════════
-    connect(NetworkDeviceManager::sharedInstance(),
-            &NetworkDeviceManager::deviceAdded, this,
+    connect(NetworkDeviceProvider::sharedInstance(),
+            &NetworkDeviceProvider::deviceAdded, this,
             [this](const NetworkDevice &device) {
                 if (auto existingDevice =
                         AppContext::sharedInstance()->getDeviceByMacAddress(
@@ -515,6 +514,13 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::raiseDeviceTab()
+{
+    m_ZTabWidget->setCurrentIndex(0);
+    raise();
+    activateWindow();
 }
 
 MainWindow::~MainWindow()

@@ -21,13 +21,15 @@
 #define MAINWINDOW_H
 #include "ZDownloader.h"
 #include "ZUpdater.h"
-#include "devicemanagerwidget.h"
 #include "devicemonitor.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "ztabwidget.h"
 #include <QLabel>
 #include <QMainWindow>
 #include <QStackedWidget>
+
+class DeviceManagerWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -38,6 +40,7 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     ZUpdater *m_updater = nullptr;
+    void raiseDeviceTab();
 public slots:
     void updateNoDevicesConnected();
 

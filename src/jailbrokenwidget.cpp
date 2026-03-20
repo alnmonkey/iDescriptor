@@ -18,29 +18,6 @@
  */
 
 #include "jailbrokenwidget.h"
-#include "appcontext.h"
-#include "opensshterminalwidget.h"
-#include "responsiveqlabel.h"
-
-#ifdef __linux__
-#include "core/services/avahi/avahi_service.h"
-#else
-#include "core/services/dnssd/dnssd_service.h"
-#endif
-
-#include "iDescriptor-ui.h"
-#include "iDescriptor.h"
-#include <QApplication>
-#include <QButtonGroup>
-#include <QDebug>
-#include <QGroupBox>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QPushButton>
-#include <QRadioButton>
-#include <QScrollArea>
-#include <QVBoxLayout>
-#include <QWidget>
 
 JailbrokenWidget::JailbrokenWidget(QWidget *parent) : QWidget{parent}
 {
@@ -50,7 +27,7 @@ JailbrokenWidget::JailbrokenWidget(QWidget *parent) : QWidget{parent}
 
     // Define all the tools you want to display
     QList<JailbreakToolInfo> tools;
-    tools.append({"Open SSH Terminal", "Connect to your device via SSH",
+    tools.append({"SSH Terminal", "Connect to your device via SSH",
                   ":/resources/icons/TablerDatabaseExport.png"});
     tools.append({"More Tools Coming", "New features will be added soon",
                   ":/resources/icons/TablerDatabaseExport.png",
@@ -119,7 +96,7 @@ JailbrokenWidget::createJailbreakTool(const JailbreakToolInfo &info)
     layout->addWidget(descLabel);
 
     // TODO: Connect the clicked signal to a slot
-    if (info.title == "Open SSH Terminal") {
+    if (info.title == "SSH Terminal") {
         iconLabel->setIcon(QIcon(":/resources/icons/BxBxsTerminal.png"));
 
         connect(b, &ClickableWidget::clicked, this, [this]() {
@@ -128,7 +105,7 @@ JailbrokenWidget::createJailbreakTool(const JailbreakToolInfo &info)
                 m_sshTerminalWidget->activateWindow();
                 return;
             }
-            m_sshTerminalWidget = new OpenSSHTerminalWidget();
+            m_sshTerminalWidget = new SSHTerminalTool();
             m_sshTerminalWidget->setAttribute(Qt::WA_DeleteOnClose);
             m_sshTerminalWidget->show();
             m_sshTerminalWidget->raise();

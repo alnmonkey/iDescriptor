@@ -36,34 +36,19 @@ NetworkDevicesWidget::NetworkDevicesWidget(QWidget *parent) : Tool(parent)
     setMinimumSize(300, 300);
     setMaximumSize(500, 500);
     setupUI();
-#ifdef __linux__
-    m_networkProvider = new AvahiService(this);
-    connect(m_networkProvider, &AvahiService::deviceAdded, this,
-            &NetworkDevicesWidget::onWirelessDeviceAdded);
-    connect(m_networkProvider, &AvahiService::deviceRemoved, this,
-            &NetworkDevicesWidget::onWirelessDeviceRemoved);
-#else
-    m_networkProvider = new DnssdService(this);
-    connect(m_networkProvider, &DnssdService::deviceAdded, this,
-            &NetworkDevicesWidget::onWirelessDeviceAdded);
-    connect(m_networkProvider, &DnssdService::deviceRemoved, this,
-            &NetworkDevicesWidget::onWirelessDeviceRemoved);
-#endif
 
-    // Start scanning for network devices
-    m_networkProvider->startBrowsing();
+    connect(NetworkDeviceProvider::sharedInstance(),
+            &NetworkDeviceProvider::deviceAdded, this,
+            &NetworkDevicesWidget::onWirelessDeviceAdded);
+    connect(NetworkDeviceProvider::sharedInstance(),
+            &NetworkDeviceProvider::deviceRemoved, this,
+            &NetworkDevicesWidget::onWirelessDeviceRemoved);
 
-    // Initial device list update
     updateDeviceList();
     setMaximumHeight(sizeHint().height());
 }
 
-NetworkDevicesWidget::~NetworkDevicesWidget()
-{
-    if (m_networkProvider) {
-        m_networkProvider->stopBrowsing();
-    }
-}
+NetworkDevicesWidget::~NetworkDevicesWidget() {}
 
 void NetworkDevicesWidget::setupUI()
 {
@@ -197,7 +182,8 @@ void NetworkDevicesWidget::updateDeviceList()
 {
     clearDeviceCards();
 
-    QList<NetworkDevice> devices = m_networkProvider->getNetworkDevices();
+    QList<NetworkDevice> devices =
+        NetworkDeviceProvider::sharedInstance()->getNetworkDevices();
 
     if (devices.isEmpty()) {
         m_statusLabel->setText("No network devices found");

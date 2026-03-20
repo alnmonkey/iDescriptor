@@ -17,47 +17,46 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef OPENSSHTERMINALWIDGET_H
-#define OPENSSHTERMINALWIDGET_H
+#ifndef SSHTERMINALTOOL_H
+#define SSHTERMINALTOOL_H
 
+#include "networkdeviceprovider.h"
 #include <QWidget>
-#ifdef __linux__
-#include "core/services/avahi/avahi_service.h"
-#else
-#include "core/services/dnssd/dnssd_service.h"
-#endif
 
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "sshterminalwidget.h"
 #include <QAbstractButton>
 #include <QButtonGroup>
 #include <QGroupBox>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QVBoxLayout>
 #include <QWidget>
 
-enum class DeviceType { None, Wired, Wireless };
-
-class OpenSSHTerminalWidget : public QWidget
+class SSHTerminalTool : public Tool
 {
     Q_OBJECT
 public:
-    explicit OpenSSHTerminalWidget(QWidget *parent = nullptr);
-    ~OpenSSHTerminalWidget();
+    explicit SSHTerminalTool(QWidget *parent = nullptr);
+    ~SSHTerminalTool();
 private slots:
     void onOpenSSHTerminal();
-    void onWiredDeviceAdded(const iDescriptorDevice *device);
-    void onWiredDeviceRemoved(const std::string &udid);
+    void On_iDeviceAdded(const iDescriptorDevice *device);
+    void On_iDeviceRemoved(const std::string &udid);
     void onWirelessDeviceAdded(const NetworkDevice &device);
     void onWirelessDeviceRemoved(const QString &deviceName);
     void onDeviceSelected(QAbstractButton *button);
+    void onManualConnectClicked();
 
 private:
     void setupDeviceSelectionUI(QVBoxLayout *layout);
     void updateDeviceList();
     void clearDeviceButtons();
-    void addWiredDevice(const iDescriptorDevice *device);
+    void addDevice(const iDescriptorDevice *device);
     void addWirelessDevice(const NetworkDevice &device);
     void resetSelection();
 
@@ -66,23 +65,20 @@ private:
 
     // Device selection UI
     QVBoxLayout *m_deviceLayout;
-    QGroupBox *m_wiredDevicesGroup;
-    QGroupBox *m_wirelessDevicesGroup;
-    QVBoxLayout *m_wiredDevicesLayout;
-    QVBoxLayout *m_wirelessDevicesLayout;
+
+    QGroupBox *m_connectedDevicesGroup;
+    QVBoxLayout *m_connectedDevicesLayout;
+
+    QGroupBox *m_networkDevicesGroup;
+    QVBoxLayout *m_networkDevicesLayout;
+
     QButtonGroup *m_deviceButtonGroup;
 
-#ifdef __linux__
-    AvahiService *m_wirelessProvider = nullptr;
-#else
-    DnssdService *m_wirelessProvider = nullptr;
-#endif
+    iDescriptor::Uniq m_selectedUniq;
 
-    DeviceType m_selectedDeviceType = DeviceType::None;
-    iDescriptorDevice *m_selectedWiredDevice = nullptr;
-    NetworkDevice m_selectedNetworkDevice;
-
-    const iDescriptorDevice *m_device = nullptr;
+    QGroupBox *m_manualConnectionGroup;
+    QLineEdit *m_manualIpEdit;
+    QPushButton *m_manualConnectButton;
 
     // SSH components
     ssh_session m_sshSession;
@@ -95,4 +91,4 @@ private:
 signals:
 };
 
-#endif // OPENSSHTERMINALWIDGET_H
+#endif // SSHTERMINALTOOL_H

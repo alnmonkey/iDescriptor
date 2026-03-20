@@ -20,15 +20,26 @@
 #ifndef SSHTERMINALWIDGET_H
 #define SSHTERMINALWIDGET_H
 
+#include "qprocessindicator.h"
+#include "settingsmanager.h"
+#include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QHBoxLayout>
+#include <QHostAddress>
+#include <QInputDialog>
 #include <QLabel>
+#include <QMenu>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QStackedWidget>
-#include <QString>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QWidget>
 #include <libssh/libssh.h>
+#include <qtermwidget6/qtermwidget.h>
+#include <unistd.h>
 
 class QTermWidget;
 class QProcessIndicator;
