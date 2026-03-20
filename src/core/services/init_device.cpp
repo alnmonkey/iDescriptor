@@ -530,13 +530,6 @@ void init_idescriptor_device(const iDescriptor::Uniq &uniq,
         // dont cleanup here, afc2 is optional
     }
 
-    // FIXME: will probably not work on iOS 17 and above
-    // requires dev image disk
-    // err = location_simulation_connect(provider, &location_simulation);
-    // if (err) {
-    //     qDebug() << "Failed to create Location Simulation client";
-    //     goto cleanup;
-    // }
     get_device_info_xml(uniq.get().toUtf8().constData(), lockdown, infoXml);
 
     lockdownd_get_value(lockdown, "EnableWifiConnections",
@@ -570,24 +563,22 @@ void init_idescriptor_device(const iDescriptor::Uniq &uniq,
     }
 cleanup:
     // Cleanup on error
-    // FIXME: implement proper cleanup
-    // one of them causes a crash here, needs investigation
     result.error = err;
     if (!result.success) {
         qDebug() << "Initialization failed, cleaning up resources."
                  << err->message;
-        // if (afc2_client)
-        //     afc_client_free(afc2_client);
-        // if (afc_client)
-        //     afc_client_free(afc_client);
-        // if (lockdown)
-        //     lockdownd_client_free(lockdown);
-        // if (provider)
-        //     idevice_provider_free(provider);
-        // if (addr_handle)
-        //     idevice_usbmuxd_addr_free(addr_handle);
-        // if (usbmuxd_conn)
-        //     idevice_usbmuxd_connection_free(usbmuxd_conn);
+        if (afc2_client)
+            afc_client_free(afc2_client);
+        if (afc_client)
+            afc_client_free(afc_client);
+        if (lockdown)
+            lockdownd_client_free(lockdown);
+        if (addr_handle)
+            idevice_usbmuxd_addr_free(addr_handle);
+        if (usbmuxd_conn)
+            idevice_usbmuxd_connection_free(usbmuxd_conn);
+        if (provider)
+            idevice_provider_free(provider);
     }
 }
 
