@@ -497,16 +497,34 @@ void MainWindow::updateNoDevicesConnected()
     m_mainStackedWidget->setCurrentIndex(1); // Show device list page
 }
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (StatusBalloon::sharedInstance()->hasActiveProcesses()) {
+        auto reply = QMessageBox::question(
+            this, tr("Transfers in Progress"),
+            tr("There are import/export operations in progress.\n"
+               "Do you really want to quit? This will cancel them."),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+        if (reply == QMessageBox::No) {
+            event->ignore();
+            return;
+        }
+
+        ExportManager::sharedInstance()->cancelAllJobs();
+    }
+
+    QMainWindow::closeEvent(event);
+}
+
 MainWindow::~MainWindow()
 {
-    // idevice_event_unsubscribe();
-    // #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
-    // irecv_device_event_unsubscribe(context);
-    // #endif
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
+    irecv_device_event_unsubscribe(context);
+#endif
     m_deviceMonitor->requestInterruption();
-    // FIXME:QThread: Destroyed while thread '' is still running
-    // m_deviceMonitor->wait();
+    m_deviceMonitor->wait();
     delete m_deviceMonitor;
-    // delete m_updater;
+    delete m_updater;
     // sleep(2);
 }

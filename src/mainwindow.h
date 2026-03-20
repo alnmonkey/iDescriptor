@@ -56,5 +56,8 @@ private:
     QWidget *m_titleBar;
     QWidget *m_contentArea;
     QHBoxLayout *m_titleBarLayout;
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 };
 #endif // MAINWINDOW_H
