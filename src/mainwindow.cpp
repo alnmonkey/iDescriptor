@@ -79,22 +79,37 @@ void handleCallback(const IdeviceEvent *e)
     qDebug() << "Device event: "
              << (e->kind == 1 ? "Connected" : "Disconnected")
              << ", UDID: " << udid;
-    free(e->udid);
-    bool isConnected = (e->kind == 1);
+    // free(e->udid);
+    AddType addType;
 
-    if (isConnected) {
-        QMetaObject::invokeMethod(
-            AppContext::sharedInstance(), "addDevice", Qt::QueuedConnection,
-            Q_ARG(iDescriptor::Uniq, iDescriptor::Uniq(udid)),
-            Q_ARG(iDescriptor::IdeviceConnectionType,
-                  static_cast<iDescriptor::IdeviceConnectionType>(
-                      iDescriptor::CONNECTION_USB)),
-            Q_ARG(AddType, AddType::Regular));
-    } else {
+    switch (e->kind) {
+    case 1: { // fully connected
+        addType = AddType::Regular;
+        break;
+    }
+    case 2: { // disconnected
         QMetaObject::invokeMethod(
             AppContext::sharedInstance(), "removeDevice", Qt::QueuedConnection,
             Q_ARG(iDescriptor::Uniq, iDescriptor::Uniq(udid)));
+        return;
     }
+    case 3: { // pairing pending
+        addType = AddType::Pairing;
+        break;
+    }
+    case 4: { // pairing failed
+        addType = AddType::FailedToPair;
+        break;
+    }
+    }
+
+    QMetaObject::invokeMethod(
+        AppContext::sharedInstance(), "addDevice", Qt::QueuedConnection,
+        Q_ARG(iDescriptor::Uniq, iDescriptor::Uniq(udid)),
+        Q_ARG(iDescriptor::IdeviceConnectionType,
+              static_cast<iDescriptor::IdeviceConnectionType>(
+                  iDescriptor::CONNECTION_USB)),
+        Q_ARG(AddType, addType));
 }
 
 MainWindow *MainWindow::sharedInstance()
@@ -188,10 +203,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 if (m_mainStackedWidget->currentIndex() != 0) {
                     welcomeMenuSwitch->setToolTip(
                         "Switch to Connected Devices");
-                    return m_mainStackedWidget->setCurrentIndex(0);
+                    return showWelcomeTab();
                 }
                 welcomeMenuSwitch->setToolTip("Switch to Welcome Menu");
-                m_mainStackedWidget->setCurrentIndex(1);
+                showConnectedDevicesTab();
             });
 
     connect(m_ZTabWidget, &ZTabWidget::currentChanged, this,
@@ -213,11 +228,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     statusLayout->addWidget(appVersionLabel);
     statusLayout->addWidget(githubButton);
     statusLayout->addWidget(settingsButton);
-    // #ifdef WIN32
-    //     statusLayout->setStyleSheet("QStatusBar { border-top: 1px solid
-    //     #dcdcdc;
-    //     }");
-    // #endif
 
     mainLayout->addWidget(statusbar);
 
@@ -495,6 +505,13 @@ void MainWindow::raiseDeviceTab()
     raise();
     activateWindow();
 }
+
+void MainWindow::showConnectedDevicesTab()
+{
+    m_mainStackedWidget->setCurrentIndex(1);
+}
+
+void MainWindow::showWelcomeTab() { m_mainStackedWidget->setCurrentIndex(0); }
 
 MainWindow::~MainWindow()
 {

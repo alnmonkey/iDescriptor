@@ -73,12 +73,7 @@ void AppContext::cachePairedDevices()
         if (!isCompatible) {
             continue;
         }
-        qDebug() << "Found pairing file for MAC"
-                 << QString::fromStdString(wifiMacAddress);
 
-        qDebug() << "Caching pairing file for MAC"
-                 << QString::fromStdString(wifiMacAddress) << "Local Path"
-                 << lockdowndir.filePath(fileName);
         m_pairingFileCache[QString::fromStdString(wifiMacAddress)] =
             lockdowndir.filePath(fileName);
     }
@@ -187,8 +182,28 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
     }
     emit initStarted(uniq);
 
-    if (auto device = getDevice(uniq)) {
+    const iDescriptorDevice *existingDevice = nullptr;
+    existingDevice = getDeviceByMacAddress(uniq.get());
+    if (!existingDevice) {
+        existingDevice = getDevice(uniq.get().toStdString());
+    }
+
+    if (existingDevice) {
         emit deviceAlreadyExists(uniq);
+        // TODO: add a setting for this
+
+        setCurrentDeviceSelection(DeviceSelection(existingDevice->udid), true);
+        return;
+    }
+
+    if (addType == AddType::Pairing) {
+        handlePairing(uniq, true);
+        return;
+    }
+
+    if (addType == AddType::FailedToPair) {
+        // FIXME: no widget is listening for this signal for now
+        emit pairingFailed(uniq);
         return;
     }
 
@@ -199,6 +214,8 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
                                                   addType, wifiMacAddress,
                                                   ipAddress, initResult]() {
             if (addType == AddType::UpgradeToWireless) {
+                // FIXME: wireless pairing is supported iOS 14+
+                // we can ignore devices that don't support it,
                 qDebug() << "AddType::UpgradeToWireless";
                 const QString _pairingFilePath = getCachedPairingFile(uniq);
 
@@ -243,11 +260,28 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
                 watcher->deleteLater();
                 qDebug() << "init_idescriptor_device success ?: "
                          << initResult->success;
-
                 if (!initResult->success) {
-                    return handlePairing(initResult.get(), addType, uniq);
+                    emit initFailed(uniq);
+                    if (initResult->error) {
+                        // Handle if it's a pairing related error
+                        const auto code = initResult->error->code;
+                        if (code == PairingDialogResponsePending ||
+                            code == InvalidHostID ||
+                            code == PasswordProtected) {
+                            handlePairing(uniq, true);
+                        }
+                        return;
+                    }
+                    // FIXME: warn
+                    return;
                 }
                 qDebug() << "Device initialized: " << uniq;
+
+                if (m_pendingDevices.contains(uniq)) {
+                    qDebug() << "Removing from pending devices: " << uniq;
+                    m_pendingDevices.removeAll(uniq);
+                    emit devicePairingExpired(uniq);
+                }
 
                 iDescriptorDevice *device = new iDescriptorDevice{
                     .udid = initResult->deviceInfo.UniqueDeviceID,
@@ -447,17 +481,25 @@ AppContext::~AppContext()
 #endif
 }
 
-void AppContext::setCurrentDeviceSelection(const DeviceSelection &selection)
+void AppContext::setCurrentDeviceSelection(const DeviceSelection &selection,
+                                           bool showConnectedDevices)
 {
     if (m_currentSelection.type == selection.type &&
         m_currentSelection.udid == selection.udid &&
         m_currentSelection.ecid == selection.ecid &&
         m_currentSelection.section == selection.section) {
         qDebug() << "setCurrentDeviceSelection: No change in selection";
+        if (showConnectedDevices) {
+            MainWindow::sharedInstance()->showConnectedDevicesTab();
+        }
         return; // No change
     }
     m_currentSelection = selection;
     emit currentDeviceSelectionChanged(m_currentSelection);
+
+    if (showConnectedDevices) {
+        MainWindow::sharedInstance()->showConnectedDevicesTab();
+    }
 }
 
 const DeviceSelection &AppContext::getCurrentDeviceSelection() const
@@ -499,7 +541,7 @@ void AppContext::heartbeatFailed(const QString &macAddress, int tries)
 void AppContext::tryToConnectToNetworkDevice(const NetworkDevice &device)
 {
 
-    // force refresh macAddress-udid mapping
+    // force refresh macAddress-pairing file mapping
     cachePairedDevices();
 
     QMetaObject::invokeMethod(
@@ -536,185 +578,23 @@ void AppContext::freeDevice(iDescriptorDevice *device)
     device = nullptr;
 }
 
-void AppContext::handlePairing(iDescriptorInitDeviceResult *initResult,
-                               AddType addType, iDescriptor::Uniq uniq)
+void AppContext::handlePairing(iDescriptor::Uniq uniq, bool timeout)
 {
-    qDebug() << "[handlePairing] for device" << uniq;
-    emit initFailed(uniq);
-
-    if (!initResult || !initResult->error) {
-        qDebug() << "[handlePairing] initResult->error is null for" << uniq
-                 << "- skipping pairing handling";
-        return;
-    }
-
-    const auto code = initResult->error->code;
-    if (code == PairingDialogResponsePending || code == InvalidHostID ||
-        code == PasswordProtected) {
-        if (addType == AddType::Regular) {
-            m_pendingDevices.append(uniq);
-            emit devicePasswordProtected(uniq);
-            emit deviceChange();
-            QTimer::singleShot(
-                SettingsManager::sharedInstance()->connectionTimeout() * 1000,
-                this, [this, uniq]() {
-                    if (m_pendingDevices.contains(uniq)) {
-                        qDebug() << "Pairing expired for "
-                                    "device UDID:"
-                                 << uniq;
-                        m_pendingDevices.removeAll(uniq);
-                        emit devicePairingExpired(uniq);
-                        emit deviceChange();
-                    }
-                });
-            // FIXME: free properly and move to a better place
-            QThreadPool::globalInstance()->start([uniq, this]() {
-                UsbmuxdConnectionHandle *usbmuxd_conn = nullptr;
-                UsbmuxdAddrHandle *addr_handle = nullptr;
-                IdeviceProviderHandle *provider = nullptr;
-                LockdowndClientHandle *lockdown = nullptr;
-                IdevicePairingFile *pairing_file = nullptr;
-
-                IdeviceFfiError *err =
-                    idevice_usbmuxd_new_default_connection(0, &usbmuxd_conn);
-                if (err) {
-                    // if (!isWireless) {
-                    qDebug() << "Failed to connect to usbmuxd";
-                    // goto cleanup;
-                    return;
-                    // }
-                }
-
-                err = idevice_usbmuxd_default_addr_new(&addr_handle);
-                if (err) {
-                    qDebug() << "Failed to create address handle";
-                    // goto cleanup;
-                    return;
-                }
-
-                UsbmuxdDeviceHandle **devices;
-                int device_count;
-                int actual_device_id = -1;
-                err = idevice_usbmuxd_get_devices(usbmuxd_conn, &devices,
-                                                  &device_count);
-
-                for (size_t i = 0; i < device_count; i++) {
-                    const char *device_udid =
-                        idevice_usbmuxd_device_get_udid(devices[i]);
-                    if (strcmp(device_udid, uniq.get().toUtf8().constData()) ==
-                        0) {
-                        actual_device_id =
-                            idevice_usbmuxd_device_get_device_id(devices[i]);
-                        break;
-                    }
-                }
-
-                err = usbmuxd_provider_new(
-                    addr_handle, 0, uniq.get().toUtf8().constData(),
-                    actual_device_id, APP_LABEL, &provider);
-
-                err = lockdownd_connect(provider, &lockdown);
-                if (err) {
-                    qDebug() << "Failed to connect to lockdown";
-                    return;
-                }
-
-                QString hostId = QUuid::createUuid()
-                                     .toString()
-                                     .remove("{")
-                                     .remove("}")
-                                     .toUpper();
-                char *buid = nullptr;
-                idevice_usbmuxd_get_buid(usbmuxd_conn, &buid);
-
-                bool ok = false;
-                while (true) {
-                    // if (const auto dev =
-                    //         AppContext::sharedInstance()
-                    //             ->getDevice(
-                    //                 uniq.get().toStdString()))
-                    //                 {
-
-                    if (ok) {
-                        qDebug() << "Successfully paired with "
-                                    "device, ";
-                        break;
-                    };
-                    err = lockdownd_pair(lockdown, hostId.toStdString().c_str(),
-                                         buid, nullptr, &pairing_file);
-                    if (err) {
-                        qDebug()
-                            << "Failed to pair with device" << err->message;
-
-                        std::this_thread::sleep_for(std::chrono::seconds(5));
-                        //  return;
-                        // goto cleanup;
-                    } else {
-
-                        qDebug() << "There was no error, pairing "
-                                    "successful";
-                        uint8_t *data = nullptr;
-                        size_t size = 0;
-
-                        // Serialize pairing file to bytes
-                        IdeviceFfiError *err = idevice_pairing_file_serialize(
-                            pairing_file, &data, &size);
-                        if (err) {
-                            qDebug() << "Failed to serialize "
-                                        "pairing file:"
-                                     << err->message;
-                            // idevice_error_free(err);
-                            // goto cleanup;
-                        }
-
-                        err = idevice_usbmuxd_save_pair_record(
-                            usbmuxd_conn, uniq.get().toUtf8().constData(), data,
-                            size);
-
-                        QMetaObject::invokeMethod(
-                            AppContext::sharedInstance(), "addDevice",
-                            Qt::QueuedConnection,
-                            Q_ARG(iDescriptor::Uniq, uniq),
-                            Q_ARG(iDescriptor::IdeviceConnectionType,
-                                  iDescriptor::IdeviceConnectionType::
-                                      CONNECTION_NETWORK),
-                            Q_ARG(AddType, AddType::Regular));
-                        ok = true;
-                    }
+    m_pendingDevices.append(uniq);
+    emit devicePasswordProtected(uniq);
+    emit deviceChange();
+    if (timeout) {
+        QTimer::singleShot(
+            SettingsManager::sharedInstance()->connectionTimeout() * 1000, this,
+            [this, uniq]() {
+                if (m_pendingDevices.contains(uniq)) {
+                    qDebug() << "Pairing expired for "
+                                "device UDID:"
+                             << uniq;
+                    m_pendingDevices.removeAll(uniq);
+                    emit devicePairingExpired(uniq);
+                    emit deviceChange();
                 }
             });
-        }
     }
-
-    // else if (initResult.error ==
-    //                LOCKDOWN_E_PAIRING_DIALOG_RESPONSE_PENDING
-    //                ||
-    //            initResult.error ==
-    //            LOCKDOWN_E_INVALID_HOST_ID) {
-    //     m_pendingDevices.append(udid);
-    //     emit devicePairPending(udid);
-    //     emit deviceChange();
-    //     QTimer::singleShot(
-    //         SettingsManager::sharedInstance()->connectionTimeout()
-    //         *
-    //             1000,
-    //         this, [this, udid]() {
-    //             qDebug()
-    //                 << "Pairing timer fired for device
-    //                 UDID: " << udid;
-    //             if (m_pendingDevices.contains(udid)) {
-    //                 qDebug()
-    //                     << "Pairing expired for device
-    //                     UDID: " << udid;
-    //                 m_pendingDevices.removeAll(udid);
-    //                 emit devicePairingExpired(udid);
-    //                 emit deviceChange();
-    //             }
-    //         });
-    // } else {
-    //     qDebug() << "Unhandled error for device UDID: "
-    //     << udid
-    //              << " Error code: " << initResult.error;
-    // }
-    return;
 }

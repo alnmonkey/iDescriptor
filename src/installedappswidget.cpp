@@ -55,18 +55,11 @@ void AppTabWidget::setupUI(const QPixmap &icon)
     mainLayout->setContentsMargins(10, 8, 10, 8);
     mainLayout->setSpacing(10);
 
-    // Icon label
-    m_iconLabel = new QLabel();
+    m_iconLabel = new IDLoadingIconLabel(this);
     m_iconLabel->setFixedSize(32, 32);
-    m_iconLabel->setScaledContents(true);
 
     if (!icon.isNull()) {
-        m_iconLabel->setPixmap(icon);
-    } else {
-        QPixmap placeholderIcon = QApplication::style()
-                                      ->standardIcon(QStyle::SP_ComputerIcon)
-                                      .pixmap(32, 32);
-        m_iconLabel->setPixmap(placeholderIcon);
+        m_iconLabel->setLoadedPixmap(icon);
     }
     mainLayout->addWidget(m_iconLabel);
 
@@ -101,6 +94,18 @@ void AppTabWidget::setupUI(const QPixmap &icon)
     mainLayout->addStretch();
 
     updateStyles();
+}
+
+void AppTabWidget::setIcon(const QPixmap &icon)
+{
+    if (!m_iconLabel)
+        return;
+
+    if (!icon.isNull()) {
+        m_iconLabel->setLoadedPixmap(icon);
+    } else {
+        m_iconLabel->setLoadFailed();
+    }
 }
 
 void AppTabWidget::mousePressEvent(QMouseEvent *event)
@@ -180,10 +185,6 @@ InstalledAppsWidget::~InstalledAppsWidget()
         m_containerWatcher->waitForFinished();
     }
     cleanupHouseArrestClients();
-    if (m_springboardClient) {
-        springboard_services_free(m_springboardClient);
-        m_springboardClient = nullptr;
-    }
 }
 
 void InstalledAppsWidget::setupUI()
@@ -313,17 +314,6 @@ void InstalledAppsWidget::fetchInstalledApps()
         std::lock_guard<std::recursive_mutex> lock(m_device->mutex);
 
         QVariantList apps;
-        // fetch icon from springboard service
-        IdeviceFfiError *err = nullptr;
-        if (!m_springboardClient) {
-            err = springboard_services_connect(m_device->provider,
-                                               &m_springboardClient);
-            if (err) {
-                qDebug() << "Error connecting to SpringBoard services:"
-                         << QString::fromUtf8(err->message);
-                idevice_error_free(err);
-            }
-        }
 
         try {
             InstallationProxyClientHandle *installationProxyClientHandle =
@@ -426,34 +416,6 @@ void InstalledAppsWidget::fetchInstalledApps()
                         appData["type"] = appType;
 
                         QString bundleId = appData["bundleId"].toString();
-
-                        if (m_springboardClient && !bundleId.isEmpty()) {
-                            void *out_result;
-                            size_t out_result_len;
-
-                            // FIXME: free out_result
-                            // there is no springboard_services_free_data or
-                            // similar, create an issue
-                            err = springboard_services_get_icon(
-                                m_springboardClient,
-                                bundleId.toUtf8().constData(), &out_result,
-                                &out_result_len);
-                            if (err != nullptr) {
-                                qWarning() << "Error getting icon for"
-                                           << appData.value("bundleId") << ":"
-                                           << QString::fromUtf8(err->message);
-                                idevice_error_free(err);
-                            } else {
-                                QByteArray byteArray(
-                                    reinterpret_cast<const char *>(out_result),
-                                    static_cast<int>(out_result_len));
-                                QImage image;
-                                image.loadFromData(byteArray);
-                                QPixmap pixmap = QPixmap::fromImage(image);
-                                appData["icon"] = pixmap;
-                            }
-                        }
-
                         if (!bundleId.isEmpty()) {
                             apps.append(appData);
                         }
@@ -508,6 +470,8 @@ void InstalledAppsWidget::onAppsDataReady()
     qDeleteAll(m_appTabs);
     m_appTabs.clear();
     m_selectedTab = nullptr;
+    m_iconLoadQueue.clear();
+    m_iconLoading = false;
 
     // Create tabs for each app
     for (const QVariant &appVariant : apps) {
@@ -516,7 +480,6 @@ void InstalledAppsWidget::onAppsDataReady()
         QString bundleId = appData.value("bundleId").toString();
         QString version = appData.value("version").toString();
         QString appType = appData.value("type").toString();
-        QPixmap icon = appData.value("icon").value<QPixmap>();
 
         bool fileSharingEnabled =
             appData.value("fileSharingEnabled", false).toBool();
@@ -536,7 +499,9 @@ void InstalledAppsWidget::onAppsDataReady()
             tabName += " (System)";
         }
 
-        createAppTab(tabName, bundleId, version, icon);
+        createAppTab(tabName, bundleId, version, QPixmap());
+
+        enqueueIconLoad(bundleId);
 
         // Select first tab if available
         if (!m_appTabs.isEmpty()) {
@@ -556,7 +521,7 @@ void InstalledAppsWidget::createAppTab(const QString &appName,
             &InstalledAppsWidget::onAppTabClicked);
 
     // Remove the stretch before adding the new tab
-    m_tabLayout->removeItem(m_tabLayout->itemAt(m_tabLayout->count() - 1));
+    m_tabLayout->removeItem(m_tabLayout->itemAt(m_tabLayout->count() - 1)); //
 
     m_tabLayout->addWidget(tabWidget);
     m_tabLayout->addStretch(); // Add stretch back at the end
@@ -844,4 +809,98 @@ void InstalledAppsWidget::disableTabs(bool disable)
     for (AppTabWidget *tab : m_appTabs) {
         tab->setEnabled(!disable);
     }
+}
+
+void InstalledAppsWidget::enqueueIconLoad(const QString &bundleId)
+{
+    if (bundleId.isEmpty())
+        return;
+
+    if (!m_iconLoadQueue.contains(bundleId)) {
+        m_iconLoadQueue.enqueue(bundleId);
+    }
+
+    if (!m_iconLoading) {
+        startNextIconLoad();
+    }
+}
+
+void InstalledAppsWidget::startNextIconLoad()
+{
+    if (!m_device || QCoreApplication::closingDown()) {
+        m_iconLoading = false;
+        return;
+    }
+
+    if (m_iconLoadQueue.isEmpty()) {
+        m_iconLoading = false;
+        return;
+    }
+
+    m_iconLoading = true;
+    const QString bundleId = m_iconLoadQueue.dequeue();
+
+    QtConcurrent::run([this, bundleId]() {
+        if (QCoreApplication::closingDown() || !m_device)
+            return;
+
+        QPixmap iconPixmap;
+
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_device->mutex);
+
+            IdeviceFfiError *err = nullptr;
+            SpringBoardServicesClientHandle *springboardClient = nullptr;
+
+            err = springboard_services_connect(m_device->provider,
+                                               &springboardClient);
+            if (err != nullptr) {
+                qWarning() << "Error connecting to SpringBoard services for"
+                           << bundleId << ":"
+                           << QString::fromUtf8(err->message);
+                idevice_error_free(err);
+            } else {
+                void *out_result = nullptr;
+                size_t out_result_len = 0;
+
+                err = springboard_services_get_icon(
+                    springboardClient, bundleId.toUtf8().constData(),
+                    &out_result, &out_result_len);
+                if (err != nullptr) {
+                    qWarning() << "Error getting icon for" << bundleId << ":"
+                               << QString::fromUtf8(err->message);
+                    idevice_error_free(err);
+                } else if (out_result && out_result_len > 0) {
+                    QByteArray byteArray(
+                        reinterpret_cast<const char *>(out_result),
+                        static_cast<int>(out_result_len));
+                    QImage image;
+                    image.loadFromData(byteArray);
+                    iconPixmap = QPixmap::fromImage(image);
+                    springboard_services_free_icon_result(out_result,
+                                                          out_result_len);
+                }
+
+                springboard_services_free(springboardClient);
+            }
+        }
+
+        QMetaObject::invokeMethod(
+            this,
+            [this, bundleId, iconPixmap]() {
+                if (QCoreApplication::closingDown())
+                    return;
+
+                for (AppTabWidget *tab : m_appTabs) {
+                    if (tab->getBundleId() == bundleId) {
+                        tab->setIcon(iconPixmap);
+                        break;
+                    }
+                }
+
+                m_iconLoading = false;
+                startNextIconLoad();
+            },
+            Qt::QueuedConnection);
+    });
 }

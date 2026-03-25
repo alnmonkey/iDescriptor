@@ -20,30 +20,11 @@
 #include "deviceinfowidget.h"
 #include "batterywidget.h"
 #include "diskusagewidget.h"
-// #include "fileexplorerwidget.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "infolabel.h"
 #include "privateinfolabel.h"
 #include "toolboxwidget.h"
-#include <QApplication>
-#include <QDebug>
-#include <QGraphicsDropShadowEffect>
-#include <QGridLayout>
-#include <QGroupBox>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QList>
-#include <QMessageBox>
-#include <QPainter>
-#include <QPair>
-#include <QPixmap>
-#include <QPushButton>
-#include <QResizeEvent>
-#include <QTabWidget>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QtCore>
 
 DeviceInfoWidget::DeviceInfoWidget(const iDescriptorDevice *device,
                                    QWidget *parent)
@@ -391,35 +372,41 @@ void DeviceInfoWidget::onBatteryMoreClicked()
 void DeviceInfoWidget::updateBatteryInfo()
 {
     qDebug() << "Updating battery info...";
-    plist_t diagnostics = nullptr;
-    // DONT BLOCK
-    get_battery_info(m_device->diagRelay.get(), diagnostics);
+    QThreadPool::globalInstance()->start([this]() {
+        std::lock_guard<std::recursive_mutex> lock(m_device->mutex);
+        if (!m_device || QCoreApplication::closingDown())
+            return;
 
-    if (!diagnostics) {
-        qDebug() << "Failed to get diagnostics plist.";
-        return;
-    }
-    /*DATA*/
-    DeviceInfo &d = const_cast<DeviceInfo &>(m_device->deviceInfo);
-    qDebug() << "old device" << d.oldDevice;
-    PlistNavigator ioreg = PlistNavigator(diagnostics);
-    if (d.oldDevice)
-        ServiceManager::safeParseOldDeviceBattery(m_device, ioreg, d);
-    else
-        ServiceManager::safeParseDeviceBattery(m_device, ioreg, d);
-    /*UI*/
-    updateChargingStatusIcon();
-    m_chargingWattsWithCableTypeLabel->setText(
-        QString::number(d.batteryInfo.watts) + "W" + "/" +
-        (d.batteryInfo.usbConnectionType == BatteryInfo::ConnectionType::USB
-             ? "USB"
-             : "USB-C"));
+        /* diagnostics will be freed by c++ wrapper */
+        plist_t diagnostics = nullptr;
+        get_battery_info(m_device->diagRelay.get(), diagnostics);
+        QMetaObject::invokeMethod(this, [this, diagnostics]() {
+            if (!diagnostics) {
+                qDebug() << "Failed to get diagnostics plist.";
+                return;
+            }
+            /*DATA*/
+            DeviceInfo &d = const_cast<DeviceInfo &>(m_device->deviceInfo);
+            qDebug() << "old device" << d.oldDevice;
+            PlistNavigator ioreg = PlistNavigator(diagnostics);
+            if (d.oldDevice)
+                ServiceManager::safeParseOldDeviceBattery(m_device, ioreg, d);
+            else
+                ServiceManager::safeParseDeviceBattery(m_device, ioreg, d);
+            /*UI*/
+            updateChargingStatusIcon();
+            m_chargingWattsWithCableTypeLabel->setText(
+                QString::number(d.batteryInfo.watts) + "W" + "/" +
+                (d.batteryInfo.usbConnectionType ==
+                         BatteryInfo::ConnectionType::USB
+                     ? "USB"
+                     : "USB-C"));
 
-    m_batteryWidget->updateContext(
-        d.batteryInfo.isCharging,
-        qBound<int>(1, d.batteryInfo.currentBatteryLevel, 100));
-    // FIXME: does diag c++ wrappers free this already ?
-    // plist_free(diagnostics);
+            m_batteryWidget->updateContext(
+                d.batteryInfo.isCharging,
+                qBound<int>(1, d.batteryInfo.currentBatteryLevel, 100));
+        });
+    });
 }
 
 void DeviceInfoWidget::updateChargingStatusIcon()

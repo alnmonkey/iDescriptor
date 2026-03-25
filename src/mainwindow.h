@@ -40,6 +40,8 @@ public:
     ~MainWindow();
     ZUpdater *m_updater = nullptr;
     void raiseDeviceTab();
+    void showConnectedDevicesTab();
+    void showWelcomeTab();
 public slots:
     void updateNoDevicesConnected();
 

@@ -45,6 +45,7 @@ public:
     void noPairingFile();
     void initStarted();
     void connected();
+    void alreadyExists();
 };
 
 class NetworkDevicesToConnectWidget : public QWidget

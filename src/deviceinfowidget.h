@@ -24,9 +24,24 @@
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "servicemanager.h"
+#include <QApplication>
+#include <QDebug>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QList>
+#include <QMessageBox>
+#include <QPainter>
+#include <QPair>
+#include <QPixmap>
+#include <QPushButton>
+#include <QResizeEvent>
+#include <QTabWidget>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QWidget>
+#include <QtCore>
 
 class DeviceInfoWidget : public QWidget
 {

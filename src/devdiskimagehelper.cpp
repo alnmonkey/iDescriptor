@@ -20,9 +20,9 @@
 #include "devdiskimagehelper.h"
 #include "appcontext.h"
 #include "devdiskmanager.h"
-#include "qprocessindicator.h"
 #include "servicemanager.h"
 #include "settingsmanager.h"
+#include "zloadingwidget.h"
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -52,38 +52,32 @@ void DevDiskImageHelper::setupUI()
     mainLayout->setContentsMargins(20, 20, 20, 20);
     mainLayout->setSpacing(15);
 
-    // Loading indicator
-    auto *indicatorLayout = new QHBoxLayout();
-    indicatorLayout->addStretch();
-    m_loadingIndicator = new QProcessIndicator();
-    m_loadingIndicator->setType(QProcessIndicator::line_rotate);
-    m_loadingIndicator->setFixedSize(64, 32);
-    indicatorLayout->addWidget(m_loadingIndicator);
-    indicatorLayout->addStretch();
-    mainLayout->addLayout(indicatorLayout);
+    // ZLoadingWidget handles the spinner + state switching
+    m_loadingWidget = new ZLoadingWidget(true, this);
+    mainLayout->addWidget(m_loadingWidget);
 
-    // Status label
-    m_statusLabel = new QLabel("Checking developer disk image...");
+    // Custom error layout: message + Retry
+    auto *errorLayout = new QHBoxLayout();
+    errorLayout->addStretch();
+
+    m_statusLabel = new QLabel("An error occurred.");
     m_statusLabel->setWordWrap(true);
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(m_statusLabel);
-
-    // Button layout
-    auto *buttonLayout = new QHBoxLayout();
-    buttonLayout->addStretch();
-
-    m_mountButton = new QPushButton("Mount");
-    m_mountButton->setDefault(true);
-    m_mountButton->setVisible(false);
-    connect(m_mountButton, &QPushButton::clicked, this,
-            &DevDiskImageHelper::onMountButtonClicked);
-    buttonLayout->addWidget(m_mountButton);
+    errorLayout->addWidget(m_statusLabel);
 
     m_retryButton = new QPushButton("Retry");
-    m_retryButton->setVisible(false);
     connect(m_retryButton, &QPushButton::clicked, this,
             &DevDiskImageHelper::onRetryButtonClicked);
-    buttonLayout->addWidget(m_retryButton);
+    errorLayout->addWidget(m_retryButton);
+
+    errorLayout->addStretch();
+
+    // Register custom error layout with ZLoadingWidget
+    m_loadingWidget->setupErrorWidget(errorLayout);
+
+    // Bottom button row (Cancel / Close)
+    auto *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
 
     m_cancelButton = new QPushButton("Cancel");
     connect(m_cancelButton, &QPushButton::clicked, this, &QDialog::reject);
@@ -98,7 +92,12 @@ void DevDiskImageHelper::setupUI()
 
 void DevDiskImageHelper::start()
 {
-    m_loadingIndicator->start();
+    if (m_cancelButton) {
+        m_cancelButton->setText("Cancel");
+    }
+    if (m_loadingWidget) {
+        m_loadingWidget->showLoading();
+    }
     showStatus("Please wait...");
 
     unsigned int deviceMajorVersion =
@@ -151,8 +150,10 @@ void DevDiskImageHelper::checkAndMount()
 void DevDiskImageHelper::onMountButtonClicked()
 {
     QString path = SettingsManager::sharedInstance()->mkDevDiskImgPath();
-    m_mountButton->setVisible(false);
-    m_loadingIndicator->start();
+
+    if (m_loadingWidget) {
+        m_loadingWidget->showLoading();
+    }
 
     // Check if we need to download first
     unsigned int deviceMajorVersion =
@@ -250,23 +251,37 @@ void DevDiskImageHelper::onImageDownloadFinished(const QString &version,
 
 void DevDiskImageHelper::showRetryUI(const QString &errorMessage)
 {
-    m_loadingIndicator->stop();
-    showStatus(errorMessage, true);
-    m_mountButton->setVisible(false);
-    m_retryButton->setVisible(true);
-    m_cancelButton->setText("Close");
+    if (m_statusLabel) {
+        m_statusLabel->setText(errorMessage);
+    }
+    if (m_loadingWidget) {
+        m_loadingWidget->showError();
+    }
+    if (m_cancelButton) {
+        m_cancelButton->setText("Close");
+    }
 }
 
 void DevDiskImageHelper::onRetryButtonClicked()
 {
-    m_retryButton->setVisible(false);
-    m_cancelButton->setText("Cancel");
-    start();
+    if (m_cancelButton) {
+        m_cancelButton->setText("Cancel");
+    }
+    if (m_loadingWidget) {
+        m_loadingWidget->showLoading();
+    }
+    QTimer::singleShot(200, this, &DevDiskImageHelper::start);
 }
 
 void DevDiskImageHelper::showStatus(const QString &message, bool isError)
 {
-    m_statusLabel->setText(message);
+    if (isError) {
+        showRetryUI(message);
+    } else {
+        if (m_statusLabel) {
+            m_statusLabel->setText(message);
+        }
+    }
 
     show();
 }
@@ -279,7 +294,9 @@ void DevDiskImageHelper::showStatus(const QString &message, bool isError)
 void DevDiskImageHelper::finishWithSuccess(bool wait)
 {
     auto handler = [this]() {
-        m_loadingIndicator->stop();
+        if (m_loadingWidget) {
+            m_loadingWidget->stop(false);
+        }
         accept();
     };
     if (wait) {
@@ -290,6 +307,5 @@ void DevDiskImageHelper::finishWithSuccess(bool wait)
 
 void DevDiskImageHelper::finishWithError(const QString &errorMessage)
 {
-    m_loadingIndicator->stop();
-    showStatus(errorMessage, true);
+    showRetryUI(errorMessage);
 }

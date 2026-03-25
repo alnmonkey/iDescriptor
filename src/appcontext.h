@@ -52,7 +52,8 @@ public:
     ~AppContext();
     int getConnectedDeviceCount() const;
 
-    void setCurrentDeviceSelection(const DeviceSelection &selection);
+    void setCurrentDeviceSelection(const DeviceSelection &selection,
+                                   bool showConnectedDevices = false);
     const DeviceSelection &getCurrentDeviceSelection() const;
     const iDescriptorDevice *
     getDeviceByMacAddress(const QString &macAddress) const;
@@ -68,8 +69,10 @@ private:
     void cachePairedDevices();
     void emitNoPairingFileForWirelessDevice(const QString &udid);
     void freeDevice(iDescriptorDevice *device);
-    void handlePairing(iDescriptorInitDeviceResult *initResult, AddType addType,
-                       iDescriptor::Uniq uniq);
+    void handlePairing(iDescriptor::Uniq uniq, bool timeout);
+    // void handlePairing(iDescriptorInitDeviceResult *initResult, AddType
+    // addType,
+    //                    iDescriptor::Uniq uniq);
 signals:
     void deviceAdded(const iDescriptorDevice *device);
     void deviceRemoved(const std::string &udid, const std::string &macAddress,
@@ -87,6 +90,7 @@ signals:
     void noPairingFileForWirelessDevice(const QString &macAddress);
     void initFailed(const QString &udid);
     void initStarted(const QString &udid);
+    void pairingFailed(const QString &udid);
 
     void systemSleepStarting();
     void systemWakeup();

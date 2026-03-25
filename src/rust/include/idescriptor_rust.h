@@ -5,7 +5,8 @@ extern "C" {
 #endif
 
 typedef struct {
-    int kind; // 1 = connected, 2 = disconnected
+    int kind; // 1 = connected, 2 = disconnected, 3 = pairing pending, 4 =
+              // pairing failed
     char *udid;
 } IdeviceEvent;
 

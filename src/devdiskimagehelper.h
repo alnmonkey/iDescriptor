@@ -27,7 +27,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-class QProcessIndicator;
+class ZLoadingWidget;
 
 class DevDiskImageHelper : public QDialog
 {
@@ -62,8 +62,7 @@ private:
     const iDescriptorDevice *m_device;
 
     QLabel *m_statusLabel;
-    QProcessIndicator *m_loadingIndicator;
-    QPushButton *m_mountButton;
+    ZLoadingWidget *m_loadingWidget;
     QPushButton *m_retryButton;
     QPushButton *m_cancelButton;
 

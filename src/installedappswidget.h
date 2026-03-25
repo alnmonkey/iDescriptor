@@ -20,6 +20,7 @@
 #ifndef INSTALLEDAPPSWIDGET_H
 #define INSTALLEDAPPSWIDGET_H
 
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "zlineedit.h"
 #include "zloadingwidget.h"
@@ -45,6 +46,7 @@
 #include <QPixmap>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QQueue>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -68,6 +70,9 @@ public:
     QString getBundleId() const { return m_bundleId; }
     QString getAppName() const { return m_appName; }
     QString getVersion() const { return m_version; }
+
+    void setIcon(const QPixmap &icon);
+
     void updateStyles();
 
 signals:
@@ -91,7 +96,7 @@ private:
     QString m_version;
     bool m_selected = false;
 
-    QLabel *m_iconLabel;
+    IDLoadingIconLabel *m_iconLabel;
     QLabel *m_nameLabel;
     QLabel *m_versionLabel;
     QNetworkAccessManager *m_networkManager = new QNetworkAccessManager(this);
@@ -131,6 +136,9 @@ private:
     void cleanupHouseArrestClients();
     void disableTabs(bool disable);
 
+    void enqueueIconLoad(const QString &bundleId);
+    void startNextIconLoad();
+
     const iDescriptorDevice *m_device;
     QHBoxLayout *m_mainLayout;
     QStackedWidget *m_stackedWidget;
@@ -147,8 +155,8 @@ private:
     QScrollArea *m_containerScrollArea;
     QWidget *m_containerWidget;
     QVBoxLayout *m_containerLayout;
-    QFutureWatcher<QVariantMap> *m_watcher;
-    QFutureWatcher<QVariantMap> *m_containerWatcher;
+    QFutureWatcher<QVariantMap> *m_watcher = nullptr;
+    QFutureWatcher<QVariantMap> *m_containerWatcher = nullptr;
     QSplitter *m_splitter;
     ZLoadingWidget *m_zloadingWidget;
 
@@ -156,7 +164,10 @@ private:
     // App data storage
     QList<AppTabWidget *> m_appTabs;
     AppTabWidget *m_selectedTab = nullptr;
-    SpringBoardServicesClientHandle *m_springboardClient = nullptr;
+
+    QQueue<QString> m_iconLoadQueue;
+    bool m_iconLoading = false;
+
     bool m_loadingContainer = false;
     bool m_loaded = false;
 };

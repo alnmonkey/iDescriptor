@@ -65,7 +65,6 @@ std::string safeGetXML(const char *key, pugi::xml_node dict)
     return "";
 }
 
-// this is reused in the ui in deviceinfowidget
 void parseOldDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d)
 {
     d.batteryInfo.isCharging = ioreg["IsCharging"].getBool();
@@ -317,8 +316,6 @@ void fullDeviceInfo(const pugi::xml_document &doc, AfcClientHandle *afcClient,
         d.oldDevice = !ioreg["BatteryData"];
         if (d.oldDevice) {
             parseOldDevice(ioreg, d);
-            plist_free(diagnostics);
-            diagnostics = nullptr;
             return;
         }
 
@@ -354,8 +351,6 @@ void fullDeviceInfo(const pugi::xml_document &doc, AfcClientHandle *afcClient,
                                          : "Error retrieving serial number";
         qDebug() << "Cycle count: " << cycleCount;
         parseDeviceBattery(ioreg, d);
-        plist_free(diagnostics);
-        diagnostics = nullptr;
 
         return;
     } catch (const std::exception &e) {
@@ -485,9 +480,8 @@ void init_idescriptor_device(const iDescriptor::Uniq &uniq,
 
     err = idevice_provider_get_pairing_file(provider, &pairing_file);
     if (err) {
-        idevice_error_free(err);
-        err = new IdeviceFfiError{.code = PairingDialogResponsePending,
-                                  .message = "Pairing dialog response pending"};
+        // TODO: maybe unnecessary
+        err->code = PairingDialogResponsePending;
 
         qDebug() << "Waiting for user to respond to pairing dialog on device";
         goto cleanup;
@@ -570,6 +564,8 @@ cleanup:
             afc_client_free(afc2_client);
         if (afc_client)
             afc_client_free(afc_client);
+        if (diagnostics_relay)
+            diagnostics_relay_client_free(diagnostics_relay);
         if (lockdown)
             lockdownd_client_free(lockdown);
         if (addr_handle)

@@ -516,8 +516,13 @@ void DiskUsageWidget::fetchData()
             return result;
         }
 
-        result["galleryUsage"] = QVariant::fromValue(uint64_t(0));
-        return result;
+        // FIXME:
+        // bool debug = qgetenv("ID_DESCRIPTOR_DEBUG_GALLERY_USAGE") == "1";
+        bool debug = true;
+        if (debug) {
+            result["galleryUsage"] = QVariant::fromValue(uint64_t(0));
+            return result;
+        }
 
         const size_t CHUNK_SIZE = 256 * 1024;
         uint8_t *db_data = nullptr;

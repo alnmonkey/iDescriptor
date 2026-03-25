@@ -134,6 +134,17 @@ void NetworkDeviceCard::connected()
     });
 }
 
+void NetworkDeviceCard::alreadyExists()
+{
+    m_connectButton->setText("Already connected");
+    m_connectButton->setEnabled(false);
+
+    QTimer::singleShot(3000, this, [this]() {
+        m_connectButton->setText("Connect");
+        m_connectButton->setEnabled(true);
+    });
+}
+
 void NetworkDeviceCard::initStarted()
 {
     m_connectButton->setText("Connecting...");
@@ -244,7 +255,6 @@ void NetworkDevicesToConnectWidget::clearDeviceCards()
     }
     m_deviceCards.clear();
 }
-
 void NetworkDevicesToConnectWidget::updateDeviceList()
 {
     clearDeviceCards();
@@ -344,8 +354,8 @@ void NetworkDevicesToConnectWidget::onDeviceAlreadyExists(
 {
     NetworkDeviceCard *deviceCard = m_deviceCards[QString(uniq.get())];
     if (deviceCard) {
-        qDebug() << "Calling connected() on device card for" << uniq.get();
-        deviceCard->connected();
+        qDebug() << "Calling alreadyExists() on device card for" << uniq.get();
+        deviceCard->alreadyExists();
         return;
     }
     qDebug() << "No device card found for" << uniq.get();

@@ -98,7 +98,7 @@
 
 // rust codebase
 extern "C" {
-#include "idecriptor_rust.h"
+#include "idescriptor_rust.h"
 }
 namespace iDescriptor
 {
@@ -295,7 +295,13 @@ struct TakeScreenshotResult {
 void warn(const QString &message, const QString &title = "Warning",
           QWidget *parent = nullptr);
 
-enum class AddType { Regular, Pairing, Wireless, UpgradeToWireless };
+enum class AddType {
+    Regular,
+    Pairing,
+    FailedToPair,
+    Wireless,
+    UpgradeToWireless
+};
 
 class PlistNavigator
 {

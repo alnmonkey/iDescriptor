@@ -123,8 +123,6 @@ void LiveScreenWidget::startInitialization()
 
     connect(helper, &DevDiskImageHelper::mountingCompleted, this,
             [this, helper](bool success) {
-                helper->deleteLater();
-
                 if (success) {
                     // for some reason it does not work immediately, so delay a
                     // bit
