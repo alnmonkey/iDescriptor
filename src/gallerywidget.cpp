@@ -118,7 +118,10 @@ void GalleryWidget::setupControlsLayout()
 
     // Sort order combo box
     QLabel *sortLabel = new QLabel("Sort:");
-    sortLabel->setStyleSheet(mergeStyles(sortLabel, "font-weight: 600;"));
+    QFont sortFont = sortLabel->font();
+    sortFont.setWeight(QFont::DemiBold);
+    sortLabel->setFont(sortFont);
+
     m_sortComboBox = new QComboBox();
     m_sortComboBox->addItem("Newest First",
                             static_cast<int>(PhotoModel::NewestFirst));
@@ -130,7 +133,9 @@ void GalleryWidget::setupControlsLayout()
 
     // Filter combo box
     QLabel *filterLabel = new QLabel("Filter:");
-    filterLabel->setStyleSheet(mergeStyles(filterLabel, "font-weight: 600;"));
+    QFont filterFont = filterLabel->font();
+    filterFont.setWeight(QFont::DemiBold);
+    filterLabel->setFont(filterFont);
     m_filterComboBox = new QComboBox();
     m_filterComboBox->addItem("All Media", static_cast<int>(PhotoModel::All));
     m_filterComboBox->addItem("Images Only",
@@ -333,7 +338,6 @@ void GalleryWidget::onExportAll()
     QList<QString> exportItems;
     for (const QString &filePath : filePaths) {
         QString fileName = filePath.split('/').last();
-        // exportItems.append(ExportItem(filePath, fileName, m_device->udid));
     }
 
     qDebug() << "Starting export of:" << exportItems.size() << "items to"
@@ -362,7 +366,9 @@ void GalleryWidget::setupAlbumSelectionView()
     layout->setContentsMargins(0, 0, 0, 0);
     // Add instructions label
     QLabel *instructionLabel = new QLabel("Select a photo album:");
-    instructionLabel->setStyleSheet("font-weight: bold;");
+    QFont instructionFont = instructionLabel->font();
+    instructionFont.setWeight(QFont::Bold);
+    instructionLabel->setFont(instructionFont);
     layout->addWidget(instructionLabel);
 
     m_albumListView = new QListView();
@@ -370,20 +376,22 @@ void GalleryWidget::setupAlbumSelectionView()
     m_albumListView->setFlow(QListView::LeftToRight);
     m_albumListView->setWrapping(true);
     m_albumListView->setResizeMode(QListView::Adjust);
-    m_albumListView->setIconSize(QSize(250, 250));
-    m_albumListView->setGridSize(QSize(260, 280));
-    m_albumListView->setSpacing(10);
+    m_albumListView->setIconSize(QSize(200, 230));
+    m_albumListView->setGridSize(QSize(210, 260));
+
     m_albumListView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_albumListView->setUniformItemSizes(true);
 
     m_albumListView->setStyleSheet("QListView { "
                                    "    border-top: 1px solid #c1c1c1ff; "
                                    "    background-color: transparent; "
+                                   "    border-radius: 0px;"
                                    "    padding: 0px;"
+                                   "    padding-top: 5px;"
                                    "} "
                                    "QListView::item { "
-                                   "    width: 250px; "
-                                   "    height: 250px; "
+                                   "    width: 200px; "
+                                   "    height: 270px; "
                                    "    margin: 2px; "
                                    "}");
 
@@ -412,8 +420,8 @@ void GalleryWidget::setupPhotoGalleryView()
     m_listView->setFlow(QListView::LeftToRight);
     m_listView->setWrapping(true);
     m_listView->setResizeMode(QListView::Adjust);
-    m_listView->setIconSize(QSize(120, 120));
-    m_listView->setSpacing(10);
+    m_listView->setIconSize(QSize(200, 230));
+    m_listView->setGridSize(QSize(210, 260));
     m_listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_listView->setUniformItemSizes(true);
     m_listView->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -421,11 +429,13 @@ void GalleryWidget::setupPhotoGalleryView()
     m_listView->setStyleSheet("QListView { "
                               "    border-top: 1px solid #c1c1c1ff; "
                               "    background-color: transparent; "
+                              "    border-radius: 0px;"
                               "    padding: 0px;"
+                              "    padding-top: 5px;"
                               "} "
                               "QListView::item { "
-                              "    width: 150px; "
-                              "    height: 150px; "
+                              "    width: 200px; "
+                              "    height: 270px; "
                               "    margin: 2px; "
                               "}");
 

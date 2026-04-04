@@ -84,6 +84,9 @@ QVariant PhotoModel::data(const QModelIndex &index, int role) const
     case Qt::UserRole:
         return info.filePath;
 
+    case Qt::SizeHintRole:
+        return QSize(210, 260);
+
     case Qt::DecorationRole: {
         ImageLoader &imgloader = ImageLoader::sharedInstance();
         // Check memory cache first

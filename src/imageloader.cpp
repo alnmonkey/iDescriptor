@@ -241,7 +241,7 @@ QPixmap ImageLoader::loadThumbnailFromDevice(
     QByteArray imageData;
 
     if (useAfc2) {
-        device->afc2_backend->file_to_buffer(filePath);
+        imageData = device->afc2_backend->file_to_buffer(filePath);
     } else if (hause_arrest.has_value() && hause_arrest.value()) {
         qDebug() << "Loading thumbnail using HauseArrest for:" << filePath;
         imageData = hause_arrest.value()->file_to_buffer(filePath);
@@ -266,10 +266,11 @@ QPixmap ImageLoader::loadThumbnailFromDevice(
 
     QImageReader reader(&buffer);
     if (reader.canRead()) {
-        reader.setScaledSize(size);
         QImage image = reader.read();
         if (!image.isNull()) {
-            return QPixmap::fromImage(image);
+            QImage scaled = image.scaled(size, Qt::KeepAspectRatio,
+                                         Qt::SmoothTransformation);
+            return QPixmap::fromImage(scaled);
         }
         qDebug() << "QImageReader failed to decode" << filePath
                  << "Error:" << reader.errorString();
