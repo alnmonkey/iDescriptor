@@ -31,60 +31,64 @@ mod qobject {
 
     extern "RustQt" {
         #[qobject]
-        type AfcBackend = super::RAfcBackend;
+        type Afc2Backend = super::RAfc2Backend;
 
         #[qinvokable]
-        fn set_udid(self: Pin<&mut AfcBackend>, udid: &QString);
+        fn set_udid(self: Pin<&mut Afc2Backend>, udid: &QString);
 
         #[qinvokable]
-        fn load_album_list(self: Pin<&mut AfcBackend>);
+        fn load_album_list(self: Pin<&mut Afc2Backend>);
 
         #[qinvokable]
-        fn list_dir(self: &AfcBackend, path: &QString) -> QList_QString;
+        fn list_dir(self: &Afc2Backend, path: &QString) -> QList_QString;
 
         #[qinvokable]
-        fn file_to_buffer(self: &AfcBackend, file_path: &QString) -> QByteArray;
+        fn file_to_buffer(self: &Afc2Backend, file_path: &QString) -> QByteArray;
 
         #[qinvokable]
-        fn is_directory(self: &AfcBackend, path: &QString) -> bool;
+        fn is_directory(self: &Afc2Backend, path: &QString) -> bool;
 
         #[qinvokable]
-        fn get_file_size(self: &AfcBackend, path: &QString) -> i64;
+        fn get_file_size(self: &Afc2Backend, path: &QString) -> i64;
 
         #[qinvokable]
-        fn read_file_range(self: &AfcBackend, path: &QString, offset: i64, len: i64) -> QByteArray;
+        fn read_file_range(self: &Afc2Backend, path: &QString, offset: i64, len: i64)
+        -> QByteArray;
 
         #[qinvokable]
-        fn check_is_dir_and_list(self: &AfcBackend, path: &QString);
+        fn check_is_dir_and_list(self: &Afc2Backend, path: &QString);
         #[qsignal]
         fn check_is_dir_and_list_finished(
-            self: Pin<&mut AfcBackend>,
+            self: Pin<&mut Afc2Backend>,
             success: bool,
             entries: &QMap_QString_QVariant,
         );
 
         #[qsignal]
-        fn album_list_loaded(self: Pin<&mut AfcBackend>, udid: QString, album_list: QList_QString);
+        fn album_list_loaded(self: Pin<&mut Afc2Backend>, udid: QString, album_list: QList_QString);
 
         #[qinvokable]
-        fn get_dirs_item_count(self: &AfcBackend, dir: &QList_QString) -> i64;
+        fn get_dirs_item_count(self: &Afc2Backend, dir: &QList_QString) -> i64;
 
         #[qinvokable]
-        fn list_files_flat(self: &AfcBackend, dir: &QString) -> QList_QString;
+        fn list_files_flat(self: &Afc2Backend, dir: &QString) -> QList_QString;
 
         #[qinvokable]
-        fn start_video_stream(self: &AfcBackend, file_path: &QString) -> QString;
+        fn start_video_stream(self: &Afc2Backend, file_path: &QString) -> QString;
+
+        #[qinvokable]
+        fn is_available(self: &Afc2Backend) -> bool;
     }
 
-    impl cxx_qt::Threading for AfcBackend {}
-    impl cxx_qt::Constructor<(QString,), NewArguments = (QString,)> for AfcBackend {}
+    impl cxx_qt::Threading for Afc2Backend {}
+    impl cxx_qt::Constructor<(QString,), NewArguments = (QString,)> for Afc2Backend {}
 }
 
 #[derive(Default)]
-pub struct RAfcBackend {
+pub struct RAfc2Backend {
     udid: QString,
 }
-impl cxx_qt::Constructor<(QString,)> for qobject::AfcBackend {
+impl cxx_qt::Constructor<(QString,)> for qobject::Afc2Backend {
     type BaseArguments = ();
     type InitializeArguments = ();
     type NewArguments = (QString,);
@@ -99,12 +103,12 @@ impl cxx_qt::Constructor<(QString,)> for qobject::AfcBackend {
         (args, (), ())
     }
 
-    fn new(args: (QString,)) -> RAfcBackend {
-        RAfcBackend { udid: args.0 }
+    fn new(args: (QString,)) -> RAfc2Backend {
+        RAfc2Backend { udid: args.0 }
     }
 }
 
-impl qobject::AfcBackend {
+impl qobject::Afc2Backend {
     fn get_udid(&self) -> &QString {
         use cxx_qt::CxxQtType;
         &self.rust().udid
@@ -113,6 +117,24 @@ impl qobject::AfcBackend {
     fn set_udid(mut self: Pin<&mut Self>, udid: &QString) {
         use cxx_qt::CxxQtType;
         self.as_mut().rust_mut().udid = udid.clone();
+    }
+
+    fn is_available(self: &Self) -> bool {
+        let udid_string = self.get_udid().to_string();
+
+        run_sync(async move {
+            let device = APP_DEVICE_STATE
+                .lock()
+                .await
+                .get(udid_string.as_str())
+                .cloned();
+            if let Some(d) = device {
+                d.afc2.is_some()
+            } else {
+                eprintln!("Device with UDID {} not found", udid_string);
+                false
+            }
+        })
     }
 
     fn is_directory(self: &Self, path: &QString) -> bool {
@@ -135,7 +157,13 @@ impl qobject::AfcBackend {
                     }
                 };
 
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid_string);
+                        return false;
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -164,7 +192,13 @@ impl qobject::AfcBackend {
                     }
                 };
 
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return Vec::new();
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -191,7 +225,7 @@ impl qobject::AfcBackend {
 
         RUNTIME.spawn(async move {
             let qt_thread = qt_t.clone();
-            let afc = {
+            let afc_arc = {
                 let device = APP_DEVICE_STATE.lock().await.get(udid.as_str()).cloned();
                 let device = match device {
                     Some(d) => d,
@@ -209,10 +243,24 @@ impl qobject::AfcBackend {
                     }
                 };
 
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        qt_thread
+                            .queue(move |q| {
+                                q.check_is_dir_and_list_finished(
+                                    false,
+                                    &QMap::<QMapPair_QString_QVariant>::default(),
+                                );
+                            })
+                            .ok();
+                        return;
+                    }
+                }
             };
 
-            let mut afc = afc.lock().await;
+            let mut afc = afc_arc.lock().await;
             let map_result = afc::check_is_dir_and_list(&mut afc, path_str).await;
 
             qt_thread
@@ -242,7 +290,13 @@ impl qobject::AfcBackend {
                         return;
                     }
                 };
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid_str);
+                        return;
+                    }
+                }
             };
 
             println!("Device found: {:?}", udid_str);
@@ -316,7 +370,13 @@ impl qobject::AfcBackend {
                         return Vec::new();
                     }
                 };
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return Vec::new();
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -375,7 +435,13 @@ impl qobject::AfcBackend {
                         return -1;
                     }
                 };
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return -1;
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -407,7 +473,13 @@ impl qobject::AfcBackend {
                     }
                 };
 
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return Vec::new();
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -482,7 +554,13 @@ impl qobject::AfcBackend {
                     }
                 };
 
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return -1;
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -525,7 +603,13 @@ impl qobject::AfcBackend {
                     }
                 };
 
-                device.afc.clone()
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return Vec::new();
+                    }
+                }
             };
 
             let mut afc = afc_arc.lock().await;
@@ -645,7 +729,7 @@ impl qobject::AfcBackend {
 
                         let mut afc_client = {
                             let maybe_device = APP_DEVICE_STATE.lock().await.get(&udid_clone).cloned();
-                            let device =match maybe_device {
+                            let device = match maybe_device {
                                 Some(d) => d,
                                 None => {
                                     // FIXME
@@ -663,7 +747,7 @@ impl qobject::AfcBackend {
                                 }
                             };
                             let provider = device.provider.lock().await;
-                            match AfcClient::connect(provider.as_ref()).await {
+                            match AfcClient::new_afc2(provider.as_ref()).await {
                                 Ok(c) => c,
                                 Err(e) => {
                                     //FIXME

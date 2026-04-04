@@ -1,7 +1,7 @@
 use crate::POSSIBLE_ROOT;
 use cxx_qt_lib::QString;
 use idevice::{
-    IdeviceService, afc::AfcClient, diagnostics_relay::DiagnosticsRelayClient,
+    IdeviceError, IdeviceService, afc::AfcClient, diagnostics_relay::DiagnosticsRelayClient,
     house_arrest::HouseArrestClient, installation_proxy::InstallationProxyClient,
     provider::IdeviceProvider,
 };
@@ -9,6 +9,8 @@ use plist::Dictionary as PlistDictionary;
 use plist_macro::plist;
 use rusqlite::Connection;
 use std::path::PathBuf;
+
+pub const PUBLIC_STAGING: &str = "PublicStaging";
 
 pub async fn get_battery_info(diag: &mut DiagnosticsRelayClient) -> Option<PlistDictionary> {
     match diag.ioregistry(None, None, Some("IOPMPowerSource")).await {
@@ -28,7 +30,7 @@ pub async fn get_cable_info(diag: &mut DiagnosticsRelayClient) -> Option<PlistDi
 }
 
 pub async fn detect_jailbroken(afc: &mut AfcClient) -> bool {
-    match afc.list_dir(POSSIBLE_ROOT).await {
+    match afc.list_dir(format!("{}/bin", POSSIBLE_ROOT)).await {
         Ok(vec) => vec.len() > 0,
         Err(_) => false,
     }
@@ -144,5 +146,14 @@ pub fn get_lockdown_path() -> PathBuf {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"));
         base.join("Apple").join("Lockdown")
+    }
+}
+
+/// Ensure `PublicStaging` exists on device via AFC
+pub async fn ensure_public_staging(afc: &mut AfcClient) -> Result<(), IdeviceError> {
+    // Try to stat and if it fails, create directory
+    match afc.get_file_info(PUBLIC_STAGING).await {
+        Ok(_) => Ok(()),
+        Err(_) => afc.mk_dir(PUBLIC_STAGING).await,
     }
 }

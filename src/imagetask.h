@@ -18,9 +18,10 @@ public:
     ImageTask(const std::shared_ptr<iDescriptorDevice> device,
               const QString &path, unsigned int row, bool scale = true,
               std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest =
-                  std::nullopt)
+                  std::nullopt,
+              bool useAfc2 = false)
         : m_device(device), m_path(path), m_isThumbnail(scale), m_row(row),
-          m_hause_arrest(hause_arrest)
+          m_hause_arrest(hause_arrest), m_useAfc2(useAfc2)
     {
         setAutoDelete(true);
     }
@@ -35,18 +36,19 @@ protected:
 
         if (isVideo) {
             QPixmap thumbnail = ImageLoader::generateVideoThumbnailFFmpeg(
-                m_device, m_path, THUMBNAIL_SIZE, m_hause_arrest);
+                m_device, m_path, THUMBNAIL_SIZE, m_hause_arrest, m_useAfc2);
 
             emit finished(m_path, thumbnail, m_row);
         } else {
             if (m_isThumbnail) {
                 QPixmap image = ImageLoader::loadThumbnailFromDevice(
-                    m_device, m_path, THUMBNAIL_SIZE, m_hause_arrest);
+                    m_device, m_path, THUMBNAIL_SIZE, m_hause_arrest,
+                    m_useAfc2);
                 emit finished(m_path, image, m_row);
             } else {
                 qDebug() << "Loading full image for:" << m_path;
-                QPixmap image =
-                    ImageLoader::loadImage(m_device, m_path, m_hause_arrest);
+                QPixmap image = ImageLoader::loadImage(
+                    m_device, m_path, m_hause_arrest, m_useAfc2);
                 emit finished(m_path, image, m_row);
             }
         }
@@ -58,6 +60,7 @@ private:
     bool m_isThumbnail;
     unsigned int m_row;
     std::optional<std::shared_ptr<CXX::HauseArrest>> m_hause_arrest;
+    bool m_useAfc2;
 };
 
 #endif // IMAGETASK_H

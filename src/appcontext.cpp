@@ -61,6 +61,7 @@ void AppContext::cachePairedDevices()
 #endif
 }
 
+/* addDevice is only called with udid from backend */
 void AppContext::addDevice(iDescriptor::Uniq uniq,
                            iDescriptor::IdeviceConnectionType conn_type,
                            AddType addType, QString info,
@@ -73,10 +74,7 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
     }
 
     std::shared_ptr<iDescriptorDevice> existingDevice = nullptr;
-    // existingDevice = getDeviceByMacAddress(uniq.get());
-    if (!existingDevice) {
-        existingDevice = getDevice(uniq.get());
-    }
+    existingDevice = getDevice(uniq.get());
 
     if (existingDevice) {
         uniq.isMac() ? emit deviceAlreadyExistsMAC(uniq)
@@ -88,7 +86,7 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
     }
 
     if (addType == AddType::Pairing) {
-        // handlePairing(uniq, true);
+        handlePairing(uniq, true);
         return;
     }
 
@@ -130,7 +128,8 @@ void AppContext::addDevice(iDescriptor::Uniq uniq,
         .ios_version = deviceInfo.parsedDeviceVersion.major,
         .service_manager = new CXX::ServiceManager(
             uniq.get(), deviceInfo.parsedDeviceVersion.major),
-        .afc_backend = new CXX::AfcBackend(uniq.get())};
+        .afc_backend = new CXX::AfcBackend(uniq.get()),
+        .afc2_backend = new CXX::Afc2Backend(uniq.get())};
 
     m_devices[device.udid] = std::make_shared<iDescriptorDevice>(device);
 
@@ -284,10 +283,6 @@ void AppContext::addRecoveryDevice(uint64_t ecid)
 
 AppContext::~AppContext()
 {
-    for (auto device : m_devices) {
-        // freeDevice(device);
-    }
-
     m_devices.clear();
 
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT

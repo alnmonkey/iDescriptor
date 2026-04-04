@@ -32,6 +32,9 @@ mod qobject {
         type HauseArrest = super::RHauseArrestBackend;
 
         #[qinvokable]
+        fn get_bundle_id(self: &HauseArrest) -> &QString;
+
+        #[qinvokable]
         fn init_session(self: Pin<&mut HauseArrest>);
         #[qsignal]
         fn init_session_finished(self: Pin<&mut HauseArrest>, success: bool);
@@ -95,6 +98,12 @@ impl qobject::HauseArrest {
         use cxx_qt::CxxQtType;
         &self.rust().udid
     }
+
+    fn get_bundle_id(&self) -> &QString {
+        use cxx_qt::CxxQtType;
+        &self.rust().bundle_id
+    }
+
     fn init_session(self: Pin<&mut Self>) {
         let udid_str = self.udid.to_string();
         let bundle_id_str = self.bundle_id.to_string();

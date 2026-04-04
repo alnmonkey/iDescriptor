@@ -78,6 +78,7 @@
 #endif
 
 // rust codebase
+#include "idescriptor_rust_codebase/src/afc2_services.cxxqt.h"
 #include "idescriptor_rust_codebase/src/afc_services.cxxqt.h"
 #include "idescriptor_rust_codebase/src/hause_arrest.cxxqt.h"
 #include "idescriptor_rust_codebase/src/io_manager.cxxqt.h"
@@ -226,6 +227,7 @@ struct iDescriptorDevice {
     unsigned int ios_version;
     CXX::ServiceManager *service_manager;
     CXX::AfcBackend *afc_backend;
+    CXX::Afc2Backend *afc2_backend;
 };
 
 void fullDeviceInfo(const pugi::xml_document &doc, DeviceInfo &d);

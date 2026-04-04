@@ -31,7 +31,8 @@ public:
         const std::shared_ptr<iDescriptorDevice> device, const QString &path,
         int priority, std::function<void(const QPixmap &)> callback,
         std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest =
-            std::nullopt);
+            std::nullopt,
+        bool useAfc2 = false);
     void cancelThumbnail(const QString &path);
     bool isLoading(const QString &path);
     void clear();
@@ -40,16 +41,19 @@ public:
         const std::shared_ptr<iDescriptorDevice> device,
         const QString &filePath, const QSize &size,
         std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest =
-            std::nullopt);
+            std::nullopt,
+        bool useAfc2 = false);
     static QPixmap generateVideoThumbnailFFmpeg(
         const std::shared_ptr<iDescriptorDevice> device,
         const QString &filePath, const QSize &size,
         std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest =
-            std::nullopt);
+            std::nullopt,
+        bool useAfc2 = false);
     static QPixmap loadImage(const std::shared_ptr<iDescriptorDevice> device,
                              const QString &filePath,
                              std::optional<std::shared_ptr<CXX::HauseArrest>>
-                                 hause_arrest = std::nullopt);
+                                 hause_arrest = std::nullopt,
+                             bool useAfc2 = false);
 signals:
     void thumbnailReady(const QString &path, const QPixmap &image,
                         unsigned int row);

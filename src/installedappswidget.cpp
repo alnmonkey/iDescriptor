@@ -205,6 +205,7 @@ void InstalledAppsWidget::showLoadingState()
 
 void InstalledAppsWidget::showErrorState(const QString &error)
 {
+    m_zloadingWidget->stop(true);
     m_errorLabel->setText(QString("Error loading apps: %1").arg(error));
     m_stackedWidget->setCurrentWidget(m_errorWidget);
 }
@@ -285,14 +286,13 @@ void InstalledAppsWidget::createContentWidget()
 
 void InstalledAppsWidget::onAppsDataReady(const QMap<QString, QVariant> &result)
 {
-
+    m_zloadingWidget->stop(true);
     if (result.isEmpty()) {
         showErrorState("No apps found or failed to retrieve apps.");
         return;
     }
 
     m_stackedWidget->setCurrentWidget(m_contentWidget);
-    m_zloadingWidget->stop(true);
 
     // Clear existing tabs
     qDeleteAll(m_appTabs);
@@ -493,7 +493,7 @@ void InstalledAppsWidget::onContainerDataReady(bool success)
 
     // Create AfcExplorerWidget with the house arrest AFC client
     AfcExplorerWidget *explorer = new AfcExplorerWidget(
-        m_device, true, m_houseArrestAfcClient, "/Documents", this);
+        m_device, true, m_houseArrestAfcClient, false, "/Documents", this);
     explorer->setStyleSheet("border :none;");
     m_containerLayout->addWidget(explorer);
 }

@@ -22,6 +22,7 @@
 
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
+#include "iomanagerclient.h"
 #include "zloadingwidget.h"
 #include <QAction>
 #include <QEvent>
@@ -50,7 +51,8 @@ public:
                                bool favEnabled = false,
                                std::optional<std::shared_ptr<CXX::HauseArrest>>
                                    hause_arrest = std::nullopt,
-                               QString root = "/", QWidget *parent = nullptr);
+                               bool useAfc2 = false, QString root = "/",
+                               QWidget *parent = nullptr);
     void navigateToPath(const QString &path);
     void goHome();
 signals:
@@ -95,6 +97,7 @@ private:
     QString m_errorMessage;
     QString m_root;
     ZLoadingWidget *m_loadingWidget;
+    bool m_useAfc2;
 
     // Export system
     ExportManager *m_exportManager;
@@ -118,6 +121,8 @@ private:
 
     void onLoadPathFinished(bool success,
                             const QMap<QString, QVariant> &entries);
+
+    void handleExport(QList<QListWidgetItem *> filesToExport);
 
 #ifndef WIN32
     void updateNavStyles();

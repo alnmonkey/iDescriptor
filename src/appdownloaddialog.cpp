@@ -45,7 +45,7 @@ AppDownloadDialog::AppDownloadDialog(const QString &appName,
     setFixedWidth(500);
     setContentsMargins(0, 0, 0, 0);
 
-    m_loadingWidget = new ZLoadingWidget(true, this);
+    m_loadingWidget = new ZLoadingWidget(false, this);
     layout()->addWidget(m_loadingWidget);
     QVBoxLayout *contentLayout = new QVBoxLayout();
     contentLayout->setContentsMargins(0, 0, 0, 0);

@@ -30,7 +30,7 @@ IOManagerClient::IOManagerClient(QObject *parent) : QObject(parent) {}
 void IOManagerClient::startExport(
     const std::shared_ptr<iDescriptorDevice> device,
     const QList<QString> &items, const QString &destinationPath,
-    const QString &exportTitle, std::optional<bool> altAfc)
+    const QString &exportTitle)
 {
     qDebug() << "startExport() entry - items:" << items.size()
              << "dest:" << destinationPath;
@@ -69,6 +69,98 @@ void IOManagerClient::startExport(
         device->udid, jobId, items, destinationPath);
 
     qDebug() << "Started export job" << jobId << "for" << items.size()
+             << "items";
+}
+
+/* hause_arrest */
+void IOManagerClient::startExport(
+    const std::shared_ptr<iDescriptorDevice> device,
+    const QList<QString> &items, const QString &destinationPath,
+    const QString &exportTitle, const QString &bundleId)
+{
+    qDebug() << "startExport() hause_arrest entry - items:" << items.size()
+             << "dest:" << destinationPath;
+    if (!device) {
+        qWarning() << "Invalid device provided to ExportManager";
+        QMessageBox::critical(nullptr, "Export Error",
+                              "Invalid device specified for export.");
+        return;
+    }
+
+    if (items.isEmpty()) {
+        qWarning() << "No items provided for export";
+        QMessageBox::information(nullptr, "Export Error",
+                                 "No items selected for export.");
+        return;
+    }
+
+    QDir destDir(destinationPath);
+    if (!destDir.exists()) {
+        if (!destDir.mkpath(".")) {
+            qWarning() << "Could not create destination directory:"
+                       << destinationPath;
+            QMessageBox::critical(nullptr, "Export Error",
+                                  "Could not create destination directory.");
+
+            return;
+        }
+    }
+
+    QUuid jobId = QUuid::createUuid();
+
+    StatusBalloon::sharedInstance()->startProcess(
+        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId);
+
+    AppContext::sharedInstance()->ioManager->start_export_with_hause_arrest_afc(
+        device->udid, jobId, items, destinationPath, bundleId);
+
+    qDebug() << "Started export job with hause_arrest_afc" << jobId << "for"
+             << items.size() << "items";
+}
+
+/* afc2 */
+void IOManagerClient::startExport(
+    const std::shared_ptr<iDescriptorDevice> device,
+    const QList<QString> &items, const QString &destinationPath,
+    const QString &exportTitle, bool useAfc2)
+{
+    qDebug() << "startExport() hause_arrest entry - items:" << items.size()
+             << "dest:" << destinationPath;
+    if (!device) {
+        qWarning() << "Invalid device provided to ExportManager";
+        QMessageBox::critical(nullptr, "Export Error",
+                              "Invalid device specified for export.");
+        return;
+    }
+
+    if (items.isEmpty()) {
+        qWarning() << "No items provided for export";
+        QMessageBox::information(nullptr, "Export Error",
+                                 "No items selected for export.");
+        return;
+    }
+
+    QDir destDir(destinationPath);
+    if (!destDir.exists()) {
+        if (!destDir.mkpath(".")) {
+            qWarning() << "Could not create destination directory:"
+                       << destinationPath;
+            QMessageBox::critical(nullptr, "Export Error",
+                                  "Could not create destination directory.");
+
+            return;
+        }
+    }
+
+    QUuid jobId = QUuid::createUuid();
+
+    StatusBalloon::sharedInstance()->startProcess(
+        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId);
+
+    AppContext::sharedInstance()->ioManager->start_export_with_afc2(
+        device->udid, jobId, items, destinationPath);
+
+    qDebug() << "Started export job with afc2" << jobId << "for" << items.size()
              << "items";
 }
 

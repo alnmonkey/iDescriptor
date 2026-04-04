@@ -38,14 +38,22 @@ class IOManagerClient : public QObject
 public:
     static IOManagerClient *sharedInstance();
 
-    // Delete copy and assignment operators
     IOManagerClient(const IOManagerClient &) = delete;
     IOManagerClient &operator=(const IOManagerClient &) = delete;
 
     void startExport(const std::shared_ptr<iDescriptorDevice> device,
                      const QList<QString> &items,
+                     const QString &destinationPath, const QString &jobTitle);
+    /* afc2 */
+    void startExport(const std::shared_ptr<iDescriptorDevice> device,
+                     const QList<QString> &items,
                      const QString &destinationPath, const QString &jobTitle,
-                     std::optional<bool> altAfc = std::nullopt);
+                     bool useAfc2);
+    /* hause_arrest_afc*/
+    void startExport(const std::shared_ptr<iDescriptorDevice> device,
+                     const QList<QString> &items,
+                     const QString &destinationPath, const QString &exportTitle,
+                     const QString &bundleId);
 
     void startImport(const std::shared_ptr<iDescriptorDevice> device,
                      const QList<QString> &items,

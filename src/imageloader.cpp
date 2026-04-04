@@ -63,14 +63,15 @@ void ImageLoader::requestThumbnail(
 void ImageLoader::requestImageWithCallback(
     const std::shared_ptr<iDescriptorDevice> device, const QString &path,
     int priority, std::function<void(const QPixmap &)> callback,
-    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest)
+    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest, bool useAfc2)
 {
 
     /*
         FIXME:  row is passed as priority
         nothing dangerous but a bit hacky, could be handled better
     */                                                 //scale=false
-    auto *task = new ImageTask(device, path, priority, false, hause_arrest);
+    auto *task =
+        new ImageTask(device, path, priority, false, hause_arrest, useAfc2);
 
     /*
         TODO: should we do this ?
@@ -174,7 +175,7 @@ void ImageLoader::onTaskFinished(const QString &path, const QPixmap &pixmap,
 // almost a copy of loadThumbnailFromDevice but without any scaling logic
 QPixmap ImageLoader::loadImage(
     const std::shared_ptr<iDescriptorDevice> device, const QString &filePath,
-    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest)
+    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest, bool useAfc2)
 {
     if (QCoreApplication::closingDown()) {
         qDebug() << "Application is closing, aborting loadImage for"
@@ -183,7 +184,9 @@ QPixmap ImageLoader::loadImage(
     }
     QByteArray imageData;
 
-    if (hause_arrest.has_value() && hause_arrest.value()) {
+    if (useAfc2) {
+        imageData = device->afc2_backend->file_to_buffer(filePath);
+    } else if (hause_arrest.has_value() && hause_arrest.value()) {
         qDebug() << "Loading image using HauseArrest for:" << filePath;
         imageData = hause_arrest.value()->file_to_buffer(filePath);
     } else {
@@ -226,7 +229,7 @@ QPixmap ImageLoader::loadImage(
 QPixmap ImageLoader::loadThumbnailFromDevice(
     const std::shared_ptr<iDescriptorDevice> device, const QString &filePath,
     const QSize &size,
-    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest)
+    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest, bool useAfc2)
 {
     if (QCoreApplication::closingDown()) {
         qDebug()
@@ -235,7 +238,16 @@ QPixmap ImageLoader::loadThumbnailFromDevice(
         return {};
     }
 
-    QByteArray imageData = device->afc_backend->file_to_buffer(filePath);
+    QByteArray imageData;
+
+    if (useAfc2) {
+        device->afc2_backend->file_to_buffer(filePath);
+    } else if (hause_arrest.has_value() && hause_arrest.value()) {
+        qDebug() << "Loading thumbnail using HauseArrest for:" << filePath;
+        imageData = hause_arrest.value()->file_to_buffer(filePath);
+    } else {
+        imageData = device->afc_backend->file_to_buffer(filePath);
+    }
 
     if (imageData.isEmpty()) {
         qDebug() << "Could not read from device:" << filePath;
@@ -277,7 +289,7 @@ QPixmap ImageLoader::loadThumbnailFromDevice(
 QPixmap ImageLoader::generateVideoThumbnailFFmpeg(
     const std::shared_ptr<iDescriptorDevice> device, const QString &filePath,
     const QSize &requestedSize,
-    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest)
+    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest, bool useAfc2)
 {
     QPixmap thumbnail;
     if (QCoreApplication::closingDown()) {
@@ -287,6 +299,11 @@ QPixmap ImageLoader::generateVideoThumbnailFFmpeg(
         return thumbnail;
     }
 
+    /*
+        FIXME: other afc clients are not respected here, we need to handle this
+        better, currently only the normal afc client is used for video thumbnail
+        generation
+    */
     CXX::AfcBackend *afc = device->afc_backend;
 
     const qint64 fileSize = afc->get_file_size(filePath);

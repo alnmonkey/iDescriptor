@@ -40,6 +40,25 @@ mod qobject {
         );
 
         #[qinvokable]
+        fn start_export_with_afc2(
+            self: Pin<&mut IOManager>,
+            udid: &QString,
+            job_id: &QUuid,
+            device_paths: &QList_QString,
+            destination_dir: &QString,
+        );
+
+        #[qinvokable]
+        fn start_export_with_hause_arrest_afc(
+            self: Pin<&mut IOManager>,
+            udid: &QString,
+            job_id: &QUuid,
+            device_paths: &QList_QString,
+            destination_dir: &QString,
+            hause_arrest_afc: &QString,
+        );
+
+        #[qinvokable]
         fn start_import(
             self: Pin<&mut IOManager>,
             udid: &QString,
@@ -300,7 +319,7 @@ impl qobject::IOManager {
         job_id: &qobject::QUuid,
         device_paths: &qobject::QList_QString,
         destination_dir: &qobject::QString,
-        hause_arrest_afc: &String,
+        hause_arrest_afc: &qobject::QString,
     ) {
         let udid_str = udid.to_string();
         let dest_dir_str = destination_dir.to_string();

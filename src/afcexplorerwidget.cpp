@@ -45,11 +45,11 @@
 
 AfcExplorerWidget::AfcExplorerWidget(
     const std::shared_ptr<iDescriptorDevice> device, bool favEnabled,
-    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest, QString root,
-    QWidget *parent)
+    std::optional<std::shared_ptr<CXX::HauseArrest>> hause_arrest, bool useAfc2,
+    QString root, QWidget *parent)
     : QWidget(parent), m_device(device), m_favEnabled(favEnabled),
       m_hauseArrest(hause_arrest), m_errorMessage("Failed to load directory"),
-      m_root(root)
+      m_root(root), m_useAfc2(useAfc2)
 {
 
     QVBoxLayout *rootLayout = new QVBoxLayout(this);
@@ -74,7 +74,26 @@ AfcExplorerWidget::AfcExplorerWidget(
     rootLayout->addWidget(m_loadingWidget);
     m_loadingWidget->setupContentWidget(contentContainer);
 
-    if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
+    connect(m_loadingWidget, &ZLoadingWidget::retryClicked, this, [this]() {
+        m_loadingWidget->showLoading();
+        QTimer::singleShot(100, this, [this]() { loadPath(m_history.top()); });
+    });
+
+    if (m_useAfc2) {
+        bool is_available = m_device->afc2_backend->is_available();
+        if (!is_available) {
+            qDebug()
+                << "[AfcExplorerWidget] AFC2 is not available on this device.";
+            m_loadingWidget->showError("AFC2 is not available on this device.");
+            return;
+        }
+    }
+
+    if (m_useAfc2) {
+        connect(m_device->afc2_backend,
+                &CXX::Afc2Backend::check_is_dir_and_list_finished, this,
+                &AfcExplorerWidget::onLoadPathFinished);
+    } else if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
         connect(m_hauseArrest.value().get(),
                 &CXX::HauseArrest::check_is_dir_and_list_finished, this,
                 &AfcExplorerWidget::onLoadPathFinished);
@@ -203,11 +222,26 @@ void AfcExplorerWidget::updateAddressBar(const QString &path)
 void AfcExplorerWidget::loadPath(const QString &path)
 {
     m_loadingWidget->showLoading();
+
+    if (m_useAfc2) {
+        bool is_available = m_device->afc2_backend->is_available();
+        if (!is_available) {
+            qDebug()
+                << "[AfcExplorerWidget] AFC2 is not available on this device.";
+            m_loadingWidget->showError("AFC2 is not available on this device.");
+            return;
+        }
+    }
+
     updateAddressBar(path);
     updateNavigationButtons();
 
+    // FIXME: we need a better approach to this
+    // similar code is repeated in some places
     /* use the correct afc client */
-    if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
+    if (m_useAfc2) {
+        m_device->afc2_backend->check_is_dir_and_list(path);
+    } else if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
         m_hauseArrest.value()->check_is_dir_and_list(path);
     } else {
         m_device->afc_backend->check_is_dir_and_list(path);
@@ -286,31 +320,8 @@ void AfcExplorerWidget::onFileListContextMenu(const QPoint &pos)
         if (filesToExport.isEmpty())
             return;
 
-        QString dir =
-            QFileDialog::getExistingDirectory(this, "Select Export Directory");
-        if (dir.isEmpty())
-            return;
+        handleExport(filesToExport);
 
-        // FIXME
-        // Convert to ExportItem list
-        // QList<ExportItem> exportItems;
-        // QString currPath = "/";
-        // if (!m_history.isEmpty())
-        //     currPath = m_history.top();
-        // if (!currPath.endsWith("/"))
-        //     currPath += "/";
-
-        // for (QListWidgetItem *selItem : filesToExport) {
-        //     QString fileName = selItem->text();
-        //     QString devicePath =
-        //         currPath == "/" ? "/" + fileName : currPath + fileName;
-        //     exportItems.append(
-        //         ExportItem(devicePath, fileName, m_device->udid));
-        // }
-
-        // ExportManager::sharedInstance()->startExport(
-        //     m_device, exportItems, dir, "Exporting from file Explorer",
-        //     m_afc);
     } else if (selectedAction == openAction) {
         onItemDoubleClicked(item);
     } else if (selectedAction == openNativeAction) {
@@ -333,31 +344,45 @@ void AfcExplorerWidget::onExportClicked()
     if (filesToExport.isEmpty())
         return;
 
+    handleExport(filesToExport);
+}
+
+void AfcExplorerWidget::handleExport(QList<QListWidgetItem *> filesToExport)
+{
+
     // Ask user for a directory to save all files
     QString dir =
         QFileDialog::getExistingDirectory(this, "Select Export Directory");
     if (dir.isEmpty())
         return;
 
-    // FIXME
-    //  // Convert to ExportItem list
-    //  QList<ExportItem> exportItems;
-    //  QString currPath = "/";
-    //  if (!m_history.isEmpty())
-    //      currPath = m_history.top();
-    //  if (!currPath.endsWith("/"))
-    //      currPath += "/";
+    QList<QString> exportItems;
+    QString currPath = "/";
+    if (!m_history.isEmpty())
+        currPath = m_history.top();
+    if (!currPath.endsWith("/"))
+        currPath += "/";
 
-    // for (QListWidgetItem *item : filesToExport) {
-    //     QString fileName = item->text();
-    //     QString devicePath =
-    //         currPath == "/" ? "/" + fileName : currPath + fileName;
-    //     exportItems.append(ExportItem(devicePath, fileName, m_device->udid));
-    // }
+    for (QListWidgetItem *selItem : filesToExport) {
+        QString fileName = selItem->text();
+        QString devicePath =
+            currPath == "/" ? "/" + fileName : currPath + fileName;
+        exportItems.append(devicePath);
+    }
 
-    // // Start export
-    // ExportManager::sharedInstance()->startExport(
-    //     m_device, exportItems, dir, "Exporting from file Explorer", m_afc);
+    if (m_useAfc2) {
+        IOManagerClient::sharedInstance()->startExport(
+            m_device, exportItems, dir, "Exporting from File Explorer <AFC2>",
+            true);
+    } else if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
+        IOManagerClient::sharedInstance()->startExport(
+            m_device, exportItems, dir,
+            "Exporting from File Explorer (App Container)",
+            m_hauseArrest.value()->get_bundle_id());
+    } else {
+        IOManagerClient::sharedInstance()->startExport(
+            m_device, exportItems, dir, "Exporting from File Explorer", true);
+    }
 }
 
 void AfcExplorerWidget::exportAndOpenSelectedFile(QListWidgetItem *item,

@@ -30,6 +30,7 @@ use once_cell::sync::Lazy;
 use plist::Value;
 mod afc;
 mod afc_services;
+mod afc2_services;
 mod hause_arrest;
 mod io_manager;
 mod screenshot;
@@ -38,32 +39,22 @@ mod utils;
 
 const POSSIBLE_ROOT: &str = "../../../../";
 const APP_LABEL: &str = "iDescriptor";
+const EV_CONNECTED: u32 = 1;
+const EV_DISCONNECTED: u32 = 2;
+const EV_PAIRING_PENDING: u32 = 3;
+const EV_FAIL_KIND: u32 = 4;
 
-// #[derive(Clone)]
+#[derive(Clone)]
 pub struct DeviceServices {
     pub afc: Arc<Mutex<AfcClient>>,
     pub afc2: Option<Arc<Mutex<AfcClient>>>,
     pub diag: Arc<Mutex<DiagnosticsRelayClient>>,
-    pub heartbeat_task: Option<JoinHandle<()>>,
+    pub heartbeat_task: Option<Arc<JoinHandle<()>>>,
     pub video_streams: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     pub provider: Arc<Mutex<Box<dyn idevice::provider::IdeviceProvider>>>,
     pub lockdown: Arc<Mutex<LockdownClient>>,
 }
 
-impl Clone for DeviceServices {
-    fn clone(&self) -> Self {
-        DeviceServices {
-            afc: self.afc.clone(),
-            afc2: self.afc2.clone(),
-            diag: self.diag.clone(),
-            // FIXME?
-            heartbeat_task: None,
-            video_streams: self.video_streams.clone(),
-            provider: self.provider.clone(),
-            lockdown: self.lockdown.clone(),
-        }
-    }
-}
 
 pub static APP_DEVICE_STATE: Lazy<Mutex<HashMap<String, DeviceServices>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -205,27 +196,39 @@ impl qobject::Core {
                                                         APP_LABEL,
                                                     );
 
-                                                    // FIXME: return if fails
-                                                    let info: (String, String) =
-                                                        init_idescriptor_device(
-                                                            provider,
-                                                            qt_thread.clone(),
-                                                        )
-                                                        .await
-                                                        .unwrap_or_default();
+                                                    let info = init_idescriptor_device(
+                                                        provider,
+                                                        qt_thread.clone(),
+                                                    )
+                                                    .await;
 
-                                                    let udid_for_event = info.0.clone();
-                                                    let info_for_event = info.1.clone();
-
-                                                    qt_thread
-                                                        .queue(move |Core_qobj| {
-                                                            Core_qobj.device_event(
-                                                                1,
-                                                                &QString::from(udid_for_event),
-                                                                &QString::from(info_for_event),
-                                                            );
-                                                        })
-                                                        .ok();
+                                                    match info {
+                                                        Some((udid_for_event, info_for_event)) => {
+                                                            qt_thread
+                                                                .queue(move |core_qobj| {
+                                                                    core_qobj.device_event(
+                                                                        EV_CONNECTED,
+                                                                        &QString::from(
+                                                                            udid_for_event,
+                                                                        ),
+                                                                        &QString::from(
+                                                                            info_for_event,
+                                                                        ),
+                                                                    );
+                                                                })
+                                                                .ok();
+                                                        }
+                                                        // FIXME: sometimes happens
+                                                        /*
+                                                            init_idescriptor_device: Attempting to start Lockdown session.
+                                                            init_idescriptor_device: Lockdown session started.
+                                                            init_idescriptor_device: Attempting to get default values from Lockdown.
+                                                            init_idescriptor_device: Default values obtained.
+                                                            init_idescriptor_device: Attempting to connect to AFC client.
+                                                            AfcClient::connect failed: PasswordProtected
+                                                         */
+                                                        None => return,
+                                                    }
                                                 }
 
                                                 if already_paired {
@@ -233,19 +236,36 @@ impl qobject::Core {
                                                     return;
                                                 }
 
+                                                fn emit_pairing_failed(
+                                                    qt_thread: cxx_qt::CxxQtThread<Core>,
+                                                    udid: String,
+                                                    reason : &str,
+                                                )  {
+                                                    let reason_clone = reason.to_string();
+                                                    qt_thread
+                                                        .queue(move |core_qobj| {
+                                                            core_qobj.device_event(
+                                                                EV_FAIL_KIND,
+                                                                &QString::from(udid),
+                                                                // FIXME: reason is not info
+                                                                &QString::from(reason_clone),
+                                                            );
+                                                        })
+                                                        .ok();
+                                                }
+
                                                 // pairing pending
                                                 let udid_for_event = udid.clone();
                                                 qt_thread
-                                                    .queue(move |Core_qobj| {
-                                                        Core_qobj.device_event(
-                                                            3,
+                                                    .queue(move |core_qobj| {
+                                                        core_qobj.device_event(
+                                                            EV_PAIRING_PENDING,
                                                             &QString::from(udid_for_event),
                                                             &QString::from(""),
                                                         );
                                                     })
                                                     .ok();
 
-                                                let ev_fail_kind = 4;
 
                                                 let mut uc2 = match UsbmuxdConnection::default()
                                                     .await
@@ -253,15 +273,7 @@ impl qobject::Core {
                                                     Ok(u) => u,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
-                                                        qt_thread
-                                                            .queue(move |Core_qobj| {
-                                                                Core_qobj.device_event(
-                                                                    ev_fail_kind,
-                                                                    &QString::from(udid_for_event),
-                                                                    &QString::from(""),
-                                                                );
-                                                            })
-                                                            .unwrap();
+                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to connect to usbmuxd");
                                                         return;
                                                     }
                                                 };
@@ -270,23 +282,13 @@ impl qobject::Core {
                                                     Ok(d) => d,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
-                                                        qt_thread
-                                                            .queue(move |Core_qobj| {
-                                                                Core_qobj.device_event(
-                                                                    ev_fail_kind,
-                                                                    &QString::from(udid_for_event),
-                                                                    &QString::from(""),
-                                                                );
-                                                            })
-                                                            .unwrap();
+                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to get device from usbmuxd");
                                                         return;
                                                     }
                                                 };
 
-                                                let provider = dev.to_provider(
-                                                    UsbmuxdAddr::default(),
-                                                    "iDescriptor",
-                                                );
+                                                let provider = dev
+                                                    .to_provider(UsbmuxdAddr::default(), APP_LABEL);
 
                                                 let mut lc = match LockdownClient::connect(
                                                     &provider,
@@ -296,15 +298,7 @@ impl qobject::Core {
                                                     Ok(l) => l,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
-                                                        qt_thread
-                                                            .queue(move |Core_qobj| {
-                                                                Core_qobj.device_event(
-                                                                    ev_fail_kind,
-                                                                    &QString::from(udid_for_event),
-                                                                    &QString::from(""),
-                                                                );
-                                                            })
-                                                            .unwrap();
+                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to connect to Lockdown");
                                                         return;
                                                     }
                                                 };
@@ -313,15 +307,7 @@ impl qobject::Core {
                                                     Ok(b) => b,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
-                                                        qt_thread
-                                                            .queue(move |Core_qobj| {
-                                                                Core_qobj.device_event(
-                                                                    ev_fail_kind,
-                                                                    &QString::from(udid_for_event),
-                                                                    &QString::from(""),
-                                                                );
-                                                            })
-                                                            .unwrap();
+                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to get BUID from usbmuxd");
                                                         return;
                                                     }
                                                 };
@@ -343,15 +329,9 @@ impl qobject::Core {
                                                     Ok(p) => p,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
-                                                        qt_thread
-                                                            .queue(move |Core_qobj| {
-                                                                Core_qobj.device_event(
-                                                                    ev_fail_kind,
-                                                                    &QString::from(udid_for_event),
-                                                                    &QString::from(""),
-                                                                );
-                                                            })
-                                                            .unwrap();
+                                                        // FIXME: we may not want to emit here
+                                                        // because if user doesnt accept pairing in time, it will be considered a failure
+                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to pair device");
                                                         return;
                                                     }
                                                 };
@@ -361,15 +341,7 @@ impl qobject::Core {
                                                     Ok(b) => b,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
-                                                        qt_thread
-                                                            .queue(move |Core_qobj| {
-                                                                Core_qobj.device_event(
-                                                                    ev_fail_kind,
-                                                                    &QString::from(udid_for_event),
-                                                                    &QString::from(""),
-                                                                );
-                                                            })
-                                                            .unwrap();
+                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to serialize pairing file");
                                                         return;
                                                     }
                                                 };
@@ -378,15 +350,7 @@ impl qobject::Core {
                                                     uc2.save_pair_record(&udid, bytes).await
                                                 {
                                                     let udid_for_event = udid.clone();
-                                                    qt_thread
-                                                        .queue(move |Core_qobj| {
-                                                            Core_qobj.device_event(
-                                                                ev_fail_kind,
-                                                                &QString::from(udid_for_event),
-                                                                &QString::from(""),
-                                                            );
-                                                        })
-                                                        .unwrap();
+                                                    emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to save pairing record to usbmuxd");
                                                     return;
                                                 }
 
@@ -400,14 +364,14 @@ impl qobject::Core {
 
                                                 let qt_thread = qt_t.clone();
                                                 qt_thread
-                                                    .queue(move |Core_qobj| {
-                                                        Core_qobj.device_event(
-                                                            2,
+                                                    .queue(move |core_qobj| {
+                                                        core_qobj.device_event(
+                                                            EV_DISCONNECTED,
                                                             &QString::from(udid),
                                                             &QString::from(""),
                                                         );
                                                     })
-                                                    .unwrap();
+                                                    .ok();
                                             }
                                         }
                                         Err(e) => {
@@ -448,26 +412,33 @@ impl qobject::Core {
                 Err(e) => {
                     let qt_thread = qt_t.clone();
                     qt_thread
-                        .queue(move |Core_qobj| {
-                            Core_qobj.no_pairing_file(&QString::from(mac_address_owned));
+                        .queue(move |core_qobj| {
+                            core_qobj.no_pairing_file(&QString::from(mac_address_owned));
                         })
-                        .unwrap();
+                        .ok();
                     eprintln!("Failed to read pairing file: {e}");
                     return;
                 }
             };
 
-            let t = TcpProvider {
-                addr: ip_owned.parse::<IpAddr>().unwrap(),
-                pairing_file: pairing_file,
-                label: APP_LABEL.to_string(),
+            let addr = match ip_owned.parse::<IpAddr>() {  
+                Ok(addr) => addr,  
+                Err(e) => {  
+                    //FIXME: emit event for failure
+                    eprintln!("Invalid IP address {}: {}", ip_owned, e);  
+                    return;  
+                }  
+            };  
+
+            let t = TcpProvider {  
+                addr,  
+                pairing_file,  
+                label: APP_LABEL.to_string(),  
             };
 
 
-             let result = tokio::select! {
-                res = init_idescriptor_device(t, qt_t.clone()) => {
-                    res
-                }
+            let result = tokio::select! {
+                res = init_idescriptor_device(t, qt_t.clone()) => res,
                 // timeout
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(10)) => {
                     eprintln!("Timeout collecting device info for wireless device mac address: {mac_address_owned}");
@@ -481,9 +452,9 @@ impl qobject::Core {
                     let qt_thread = qt_t.clone();
 
                     qt_thread
-                        .queue(move |Core_qobj| {
-                            Core_qobj.device_event(
-                                1,
+                        .queue(move |core_qobj| {
+                            core_qobj.device_event(
+                                EV_CONNECTED,
                                 &QString::from(udid),
                                 &QString::from(info),
                             );
@@ -495,8 +466,8 @@ impl qobject::Core {
                     let qt_thread = qt_t.clone();
 
                     qt_thread
-                        .queue(move |Core_qobj| {
-                            Core_qobj.init_failed(&QString::from(mac_address_owned));
+                        .queue(move |core_qobj| {
+                            core_qobj.init_failed(&QString::from(mac_address_owned));
                         })
                         .ok();
                 }
@@ -666,7 +637,7 @@ async fn init_idescriptor_device<
     if is_wireless {
         let mut hb_for_task = hb.take().unwrap();
         let udid_for_hb = udid.clone();
-        hb_task = Some(RUNTIME.spawn(async move {
+        hb_task = Some(Arc::new(RUNTIME.spawn(async move {
             eprintln!("heartbeat: starting heartbeat task ");
             let mut interval = 15u64;
             let mut fails = 0;
@@ -686,9 +657,9 @@ async fn init_idescriptor_device<
                             clean_device_from_app_state(&udid_for_hb).await;
 
                             let udid_for_event = udid_for_hb.clone();
-                            let _ = qt_thread_for_hb.queue(move |Core_qobj| {
-                                Core_qobj.device_event(
-                                    2,
+                            let _ = qt_thread_for_hb.queue(move |core_qobj| {
+                                core_qobj.device_event(
+                                    EV_DISCONNECTED,
                                     &QString::from(udid_for_event),
                                     &QString::from(""),
                                 );
@@ -708,9 +679,9 @@ async fn init_idescriptor_device<
                         clean_device_from_app_state(&udid_for_hb).await;
 
                         let udid_for_event = udid_for_hb.clone();
-                        let _ = qt_thread_for_hb.queue(move |Core_qobj| {
-                            Core_qobj.device_event(
-                                2,
+                        let _ = qt_thread_for_hb.queue(move |core_qobj| {
+                            core_qobj.device_event(
+                                EV_DISCONNECTED,
                                 &QString::from(udid_for_event),
                                 &QString::from(""),
                             );
@@ -725,7 +696,7 @@ async fn init_idescriptor_device<
             }
 
             eprintln!("heartbeat: heartbeat task ended.");
-        }));
+        })));
     }
 
     // FIXME: this cannot be done when paired wirelessly
