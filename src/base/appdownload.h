@@ -39,7 +39,7 @@ public:
 
     QNetworkAccessManager *m_manager = new QNetworkAccessManager(this);
     QPushButton *m_actionButton;
-    QProgressBar *m_progressBar;
+    QProgressBar *m_progressBar = nullptr;
     QTimer *m_progressTimer;
     QProcess *m_downloadProcess;
     QString m_appName;

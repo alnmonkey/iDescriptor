@@ -20,13 +20,24 @@
 #ifndef APPINSTALLDIALOG_H
 #define APPINSTALLDIALOG_H
 
+#include "appcontext.h"
 #include "base/appdownload.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
+#include "zloadingwidget.h"
+#include <QApplication>
 #include <QComboBox>
 #include <QDialog>
+#include <QDir>
 #include <QFutureWatcher>
 #include <QLabel>
+#include <QMessageBox>
+#include <QNetworkAccessManager>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPushButton>
 #include <QTemporaryDir>
+#include <QVBoxLayout>
 
 class AppInstallDialog : public AppDownloadBaseDialog
 {
@@ -49,7 +60,10 @@ private:
     QString m_bundleId;
     QLabel *m_statusLabel;
     QFutureWatcher<void> *m_installWatcher;
+    IDLoadingIconLabel *m_iconLabel = nullptr;
     QTemporaryDir *m_tempDir = nullptr;
+    ZLoadingWidget *m_loadingWidget = nullptr;
+    QPushButton *m_cancelButton = nullptr;
     void updateDeviceList();
     void performInstallation(const QString &ipaPath, const QString &ipaName,
                              const QString &deviceUdid);

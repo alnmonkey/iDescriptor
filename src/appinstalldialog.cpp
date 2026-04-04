@@ -18,21 +18,32 @@
  */
 
 #include "appinstalldialog.h"
-#include "appcontext.h"
-#include "iDescriptor.h"
-#include <QApplication>
-#include <QComboBox>
-#include <QDir>
-#include <QFutureWatcher>
-#include <QLabel>
-#include <QMessageBox>
-#include <QNetworkAccessManager>
-#include <QPainter>
-#include <QPainterPath>
-#include <QPushButton>
-#include <QTemporaryDir>
-#include <QVBoxLayout>
-#include <QtConcurrent/QtConcurrent>
+
+namespace
+{
+void setLabelTextColor(QLabel *label, const QColor &color)
+{
+    if (!label) {
+        return;
+    }
+    QPalette pal = label->palette();
+    pal.setColor(QPalette::WindowText, color);
+    label->setPalette(pal);
+}
+
+void resetLabelTextColor(QLabel *label)
+{
+    if (!label) {
+        return;
+    }
+    QWidget *parent = label->parentWidget();
+    QPalette pal = label->palette();
+    const QPalette basePal =
+        parent ? parent->palette() : QApplication::palette();
+    pal.setColor(QPalette::WindowText, basePal.color(QPalette::WindowText));
+    label->setPalette(pal);
+}
+} // namespace
 
 AppInstallDialog::AppInstallDialog(const QString &appName,
                                    const QString &description,
@@ -43,63 +54,92 @@ AppInstallDialog::AppInstallDialog(const QString &appName,
     setWindowTitle("Install " + appName + " - iDescriptor");
     setModal(true);
     setFixedWidth(500);
-    QVBoxLayout *layout = qobject_cast<QVBoxLayout *>(this->layout());
+    setContentsMargins(0, 0, 0, 0);
+
+    QVBoxLayout *baseLayout = qobject_cast<QVBoxLayout *>(this->layout());
+    m_loadingWidget = new ZLoadingWidget(false, this);
+    baseLayout->addWidget(m_loadingWidget);
+
+    QVBoxLayout *contentLayout = new QVBoxLayout();
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+
     // App info section
     QHBoxLayout *appInfoLayout = new QHBoxLayout();
-    IDLoadingIconLabel *iconLabel = new IDLoadingIconLabel();
-    QPointer<IDLoadingIconLabel> safeIconLabel = iconLabel;
+    m_iconLabel = new IDLoadingIconLabel();
+    QPointer<AppInstallDialog> safeThis = this;
 
     ::fetchAppIconFromApple(
         m_manager, bundleId,
-        [safeIconLabel](const QPixmap &pixmap, const QJsonObject &appInfo) {
-            if (safeIconLabel) {
-                safeIconLabel->setLoadedPixmap(pixmap);
+        [safeThis](const QPixmap &pixmap, const QJsonObject &appInfo) {
+            if (safeThis && safeThis.data()) {
+                safeThis->m_iconLabel->setLoadedPixmap(pixmap);
+            }
+            if (safeThis && safeThis->m_loadingWidget) {
+                safeThis->m_loadingWidget->stop(true);
             }
         });
-    appInfoLayout->addWidget(iconLabel);
+
+    appInfoLayout->addWidget(m_iconLabel);
 
     QVBoxLayout *detailsLayout = new QVBoxLayout();
     QLabel *nameLabel = new QLabel(appName);
-    nameLabel->setStyleSheet("font-size: 20px; font-weight: bold;");
+    {
+        QFont f = nameLabel->font();
+        f.setPointSize(20);
+        f.setBold(true);
+        nameLabel->setFont(f);
+    }
     detailsLayout->addWidget(nameLabel);
 
     QLabel *descLabel = new QLabel(description);
     descLabel->setWordWrap(true);
-    descLabel->setStyleSheet("font-size: 14px;");
+    {
+        QFont f = descLabel->font();
+        f.setPointSize(14);
+        descLabel->setFont(f);
+    }
     detailsLayout->addWidget(descLabel);
 
     appInfoLayout->addLayout(detailsLayout);
     appInfoLayout->addStretch();
-    layout->insertLayout(0, appInfoLayout);
+    contentLayout->addLayout(appInfoLayout);
 
     QLabel *deviceLabel = new QLabel("Choose Device:");
-    deviceLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
-    layout->insertWidget(1, deviceLabel);
+    {
+        QFont f = deviceLabel->font();
+        f.setPointSize(16);
+        f.setBold(true);
+        deviceLabel->setFont(f);
+    }
+    contentLayout->addWidget(deviceLabel);
 
     m_deviceCombo = new QComboBox();
-    layout->insertWidget(2, m_deviceCombo);
+    contentLayout->addWidget(m_deviceCombo);
 
     m_statusLabel = new QLabel("Ready to install");
-    m_statusLabel->setStyleSheet("font-size: 14px; padding: 5px;");
+    {
+        QFont f = m_statusLabel->font();
+        f.setPointSize(14);
+        m_statusLabel->setFont(f);
+    }
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    layout->insertWidget(3, m_statusLabel);
+    contentLayout->addWidget(m_statusLabel);
 
-    layout->addStretch();
+    contentLayout->addStretch();
 
     m_actionButton = new QPushButton("Install");
     m_actionButton->setFixedHeight(40);
 
     connect(m_actionButton, &QPushButton::clicked, this,
             &AppInstallDialog::onInstallClicked);
-    layout->addWidget(m_actionButton);
+    contentLayout->addWidget(m_actionButton);
 
-    QPushButton *cancelButton = new QPushButton("Cancel");
-    cancelButton->setFixedHeight(40);
-    cancelButton->setStyleSheet(
-        "background-color: #f0f0f0; color: #333; border: 1px solid #ddd; "
-        "border-radius: 6px; font-size: 16px;");
-    connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
-    layout->addWidget(cancelButton);
+    m_cancelButton = new QPushButton("Cancel");
+    m_cancelButton->setFixedHeight(40);
+    connect(m_cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+    contentLayout->addWidget(m_cancelButton);
+
+    m_loadingWidget->setupContentWidget(contentLayout);
 
     connect(AppContext::sharedInstance(), &AppContext::deviceChange, this,
             &AppInstallDialog::updateDeviceList);
@@ -117,6 +157,7 @@ void AppInstallDialog::updateDeviceList()
         m_actionButton->setDefault(false);
         m_actionButton->setEnabled(false);
         m_statusLabel->setText("No devices connected");
+        setLabelTextColor(m_statusLabel, Qt::red);
     } else {
         m_deviceCombo->setEnabled(true);
         for (const auto &device : devices) {
@@ -129,6 +170,7 @@ void AppInstallDialog::updateDeviceList()
         m_actionButton->setDefault(true);
         m_actionButton->setEnabled(true);
         m_statusLabel->setText("Ready to install");
+        resetLabelTextColor(m_statusLabel);
     }
 }
 
@@ -137,59 +179,63 @@ void AppInstallDialog::performInstallation(const QString &ipaPath,
                                            const QString &deviceUdid)
 {
     m_statusLabel->setText("Installing app...");
+    // cannot cancel from this point
+    m_cancelButton->setEnabled(false);
+    resetLabelTextColor(m_statusLabel);
 
-    // Setup install watcher
-    // m_installWatcher = new QFutureWatcher<IdeviceFfiError *>(this);
-    // connect(
-    //     m_installWatcher, &QFutureWatcher<IdeviceFfiError *>::finished, this,
-    //     [this]() {
-    //         IdeviceFfiError *result = m_installWatcher->result();
-    //         m_installWatcher->deleteLater();
-    //         m_installWatcher = nullptr;
+    std::shared_ptr<iDescriptorDevice> device =
+        AppContext::sharedInstance()->getDevice(deviceUdid);
 
-    //         if (result == nullptr) {
-    //             m_statusLabel->setText("Installation completed
-    //             successfully!"); m_statusLabel->setStyleSheet(
-    //                 "font-size: 14px; color: #34C759; padding: 5px;");
-    //             QMessageBox::information(this, "Success",
-    //                                      "App installed successfully!");
-    //             accept();
-    //         } else {
-    //             m_statusLabel->setText("Installation failed");
-    //             m_statusLabel->setStyleSheet(
-    //                 "font-size: 14px; color: #FF3B30; padding: 5px;");
-    //             QMessageBox::critical(
-    //                 this, "Error",
-    //                 QString(
-    //                     "Installation failed with message %1 and error code
-    //                     %2") .arg(QString::fromUtf8(result->message))
-    //                     .arg(result->code));
-    //             idevice_error_free(result);
-    //             reject();
-    //         }
-    //     });
+    QPointer<AppInstallDialog> safeThis = this;
+    // install_ipa_init
+    connect(device->service_manager, &CXX::ServiceManager::install_ipa_init,
+            this, [safeThis, this](bool started, const QString &state) {
+                if (!safeThis || !safeThis.data()) {
+                    return;
+                }
 
-    // Run installation in background thread
-    // QFuture<IdeviceFfiError *> future = QtConcurrent::run(
-    //     [ipaPath, ipaName, deviceUdid]() -> IdeviceFfiError * {
-    //         iDescriptorDevice *device =
-    //         AppContext::sharedInstance()->getDevice(
-    //             deviceUdid.toStdString());
-    //         if (!device) {
-    //             return nullptr;
-    //         }
+                if (!started) {
+                    QString msg =
+                        state.isEmpty()
+                            ? QStringLiteral("Failed to start installation")
+                            : state;
+                    m_loadingWidget->showError(msg);
+                    return;
+                }
 
-    //         // IdeviceFfiError *err = ServiceManager::install_IPA(
-    //         //     device, ipaPath.toStdString().c_str(),
-    //         //     ipaName.toStdString().c_str());
-    //         // if (err != nullptr) {
-    //         //     return err;
-    //         // }
-    //         return nullptr;
-    //     });
+                if (!state.isEmpty()) {
+                    m_statusLabel->setText(state);
+                } else {
+                    m_statusLabel->setText("Installing app...");
+                }
+                resetLabelTextColor(m_statusLabel);
+            });
 
-    // m_installWatcher->setFuture(future);
+    // install_ipa_progress
+    connect(device->service_manager, &CXX::ServiceManager::install_ipa_progress,
+            this, [this, safeThis](double progress, const QString &state) {
+                if (!safeThis || !safeThis.data()) {
+                    return;
+                }
+                if (!state.isEmpty()) {
+                    m_statusLabel->setText(state);
+                }
+                m_progressBar->setValue(static_cast<int>(progress * 100));
+
+                // treat >= 100% as completion
+                if (progress >= 1.0) {
+                    m_cancelButton->setEnabled(true);
+                    m_statusLabel->setText(
+                        "Installation completed successfully!");
+                    setLabelTextColor(m_statusLabel, Qt::darkGreen);
+                    QMessageBox::information(this, "Success",
+                                             "App installed successfully!");
+                    accept();
+                }
+            });
+    device->service_manager->install_ipa(ipaPath);
 }
+
 void AppInstallDialog::onInstallClicked()
 {
     if (m_deviceCombo->count() == 0) {
@@ -201,6 +247,7 @@ void AppInstallDialog::onInstallClicked()
     m_deviceCombo->setEnabled(false);
     m_actionButton->setEnabled(false);
     m_statusLabel->setText("Downloading app...");
+    resetLabelTextColor(m_statusLabel);
 
     QString selectedDevice = m_deviceCombo->currentData().toString();
 
@@ -217,8 +264,7 @@ void AppInstallDialog::onInstallClicked()
     m_tempDir = new QTemporaryDir();
     if (!m_tempDir->isValid()) {
         m_statusLabel->setText("Failed to create temporary directory");
-        m_statusLabel->setStyleSheet(
-            "font-size: 14px; color: #FF3B30; padding: 5px;");
+        setLabelTextColor(m_statusLabel, Qt::red);
         QMessageBox::critical(
             this, "Error",
             "Could not create temporary directory for download.");
@@ -227,6 +273,8 @@ void AppInstallDialog::onInstallClicked()
 
     startDownloadProcess(m_bundleId, m_tempDir->path(), buttonIndex, false,
                          false);
+
+    //  FIXME USE SAFETHIS
     connect(
         this, &AppDownloadBaseDialog::downloadFinished, this,
         [this, selectedDevice](bool success) {
@@ -245,8 +293,7 @@ void AppInstallDialog::onInstallClicked()
                     outDir.entryList(filters, QDir::Files, QDir::Time);
                 if (matches.isEmpty()) {
                     m_statusLabel->setText("Download failed - IPA not found");
-                    m_statusLabel->setStyleSheet(
-                        "font-size: 14px; color: #FF3B30; padding: 5px;");
+                    setLabelTextColor(m_statusLabel, Qt::red);
                     QMessageBox::critical(
                         this, "Error",
                         QString("Downloaded IPA not found in %1")
@@ -259,25 +306,24 @@ void AppInstallDialog::onInstallClicked()
 
             } else {
                 m_statusLabel->setText("Download failed");
-                m_statusLabel->setStyleSheet(
-                    "font-size: 14px; color: #FF3B30; padding: 5px;");
+                setLabelTextColor(m_statusLabel, Qt::red);
             }
         });
 }
 
 void AppInstallDialog::reject()
 {
-    // Cancel installation if it's running
-    // if (m_installWatcher && !m_installWatcher->isFinished()) {
-    //     m_installWatcher->cancel();
-    //     m_installWatcher->deleteLater();
-    //     m_installWatcher = nullptr;
-    //     if (m_statusLabel) {
-    //         m_statusLabel->setText("Installation cancelled");
-    //         m_statusLabel->setStyleSheet(
-    //             "font-size: 14px; color: #FF3B30; padding: 5px;");
-    //     }
-    // }
+    // FIMXE: is this ok ?
+    // if cancel button is already disabled, it means we're in the middle of
+    // installation and cannot cancel
+    if (!m_cancelButton->isEnabled()) {
+        return;
+    }
+
+    if (m_statusLabel) {
+        m_statusLabel->setText("Installation cancelled");
+        setLabelTextColor(m_statusLabel, Qt::red);
+    }
 
     AppDownloadBaseDialog::reject();
 }
