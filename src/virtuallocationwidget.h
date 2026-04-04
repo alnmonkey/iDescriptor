@@ -21,6 +21,7 @@
 #define VIRTUAL_LOCATION_H
 
 #include "devdiskimagehelper.h"
+#include "devmodewidget.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include <QGroupBox>
@@ -57,7 +58,7 @@ private:
     void addLocationButtons(QLayout *layout,
                             QList<QVariantMap> recentLocations);
 
-    void handleEnable();
+    void restoreButtons();
 
     QQuickWidget *m_quickWidget;
     QLineEdit *m_latitudeEdit;

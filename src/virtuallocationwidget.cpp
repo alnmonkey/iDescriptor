@@ -291,7 +291,7 @@ void VirtualLocation::updateInputsFromMap(const QString &latitude,
     qDebug() << "Updated inputs from map:" << latitude << "," << longitude;
 }
 
-void VirtualLocation::handleEnable()
+void VirtualLocation::restoreButtons()
 {
     QTimer::singleShot(1000, this, [this]() {
         m_applyButton->setText("Apply Location");
@@ -324,9 +324,8 @@ void VirtualLocation::onApplyClicked()
                 this,
                 [this, latitude, longitude, devDiskImageHelper](bool success) {
                     if (!success) {
-                        // mounter will show its own error message, just
-                        // re-enable the button here
-                        return handleEnable();
+                        // mounter will show its own error message
+                        return;
                     }
 
                     u_int32_t set_location_success =
@@ -344,17 +343,16 @@ void VirtualLocation::onApplyClicked()
                         QMessageBox::information(
                             this, "Success", "Location applied successfully!");
 
-                        // SettingsManager::sharedInstance()->saveRecentLocation(
-                        //     latitude, longitude);
+                        SettingsManager::sharedInstance()->saveRecentLocation(
+                            latitude, longitude);
                     }
-                    return handleEnable();
                 });
         connect(devDiskImageHelper, &DevDiskImageHelper::destroyed, this,
-                &VirtualLocation::handleEnable, Qt::SingleShotConnection);
+                &VirtualLocation::restoreButtons, Qt::SingleShotConnection);
         return devDiskImageHelper->start();
     }
 
-    // /* iOS 17 and above */
+    /* iOS 17 and above */
     int32_t set_location_res =
         m_device->service_manager->set_location(latitude, longitude);
 
@@ -364,10 +362,7 @@ void VirtualLocation::onApplyClicked()
                                  "Location applied successfully");
         break;
     case ServiceNotFoundErrorCode:
-        // TODO: create a widget for this
-        qDebug() << "Failed to set location simulation: service not found";
-        QMessageBox::warning(this, "Error",
-                             "Developer Mode is not enabled on the device.");
+        DevModeWidget(m_device, this).exec();
         break;
     case TimeoutErrorCode:
         qDebug() << "Failed to set location simulation: timed out";
@@ -381,7 +376,7 @@ void VirtualLocation::onApplyClicked()
                                  QString::number(set_location_res));
     }
 
-    handleEnable();
+    restoreButtons();
 }
 
 void VirtualLocation::loadRecentLocations(QVBoxLayout *layout)

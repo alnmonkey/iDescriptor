@@ -48,9 +48,6 @@ public:
                            const QString &downloadPath) const;
 
     // Mount operations
-
-    bool mountImage(const QString &version, const iDescriptorDevice *device);
-    bool unmountImage();
     std::pair<QString, QString> getPathsForVersion(const QString &version);
 
     // Signature comparison
@@ -58,7 +55,6 @@ public:
                            const char *mounted_sig, uint64_t mounted_sig_len);
 
     QByteArray getImageListData() const { return m_imageListJsonData; }
-    bool mountCompatibleImage(const iDescriptorDevice *device);
     QString downloadCompatibleImage(
         const std::shared_ptr<iDescriptorDevice> device,
         std::function<void(bool, const QString &version)> callback);

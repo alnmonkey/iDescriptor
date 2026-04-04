@@ -10,7 +10,7 @@ ExportAlbum::ExportAlbum(const std::shared_ptr<iDescriptorDevice> device,
     setupWinWindow(this);
 #endif
 
-    m_loadingWidget = new ZLoadingWidget(true, this);
+    m_loadingWidget = new ZLoadingWidget(false, this);
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->addWidget(m_loadingWidget);
 
@@ -99,6 +99,8 @@ void ExportAlbum::getTotalPhotoCount(const QStringList &paths)
     watcher->setFuture(QtConcurrent::run([this, paths]() {
         size_t count = 0;
         bool errorOccurred = false;
+        // FIXME: if a dir returns empty, it could be an error or just an empty
+        // dir, we should check that
         for (const QString &path : paths) {
             QList<QString> items = m_device->afc_backend->list_files_flat(path);
 
