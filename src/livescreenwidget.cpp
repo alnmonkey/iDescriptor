@@ -104,6 +104,8 @@ LiveScreenWidget::LiveScreenWidget(
                 applyTransformAndDisplay();
             });
 
+    connect(m_client, &CXX::ScreenshotBackend::init_failed, this,
+            &LiveScreenWidget::handleFailedInitialization);
     QTimer::singleShot(0, this, &LiveScreenWidget::startInitialization);
 }
 
