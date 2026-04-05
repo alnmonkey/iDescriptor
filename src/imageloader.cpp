@@ -8,6 +8,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/display.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 }
@@ -501,6 +502,14 @@ QPixmap ImageLoader::generateVideoThumbnailFFmpeg(
     }
 
     if (frameDecoded) {
+        // Get rotation from display matrix
+        double rotation = 0.0;
+        if (AVFrameSideData *sd =
+                av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX)) {
+            rotation =
+                -av_display_rotation_get(reinterpret_cast<int32_t *>(sd->data));
+        }
+
         // Convert frame to RGB24
         SwsContext *swsCtx =
             sws_getContext(frame->width, frame->height,
@@ -527,6 +536,13 @@ QPixmap ImageLoader::generateVideoThumbnailFFmpeg(
 
                     // Create a deep copy since AVFrame will be freed
                     QImage imgCopy = img.copy();
+
+                    // Apply rotation
+                    if (rotation != 0.0) {
+                        QTransform transform;
+                        transform.rotate(rotation);
+                        imgCopy = imgCopy.transformed(transform);
+                    }
 
                     // Scale to requested size
                     /*
