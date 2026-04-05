@@ -40,6 +40,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           cd lib/idevice-rs
+          git pull
           git switch idescriptor-compat
 
       - name: Set up Go
