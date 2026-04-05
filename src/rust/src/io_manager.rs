@@ -68,6 +68,25 @@ mod qobject {
         );
 
         #[qinvokable]
+        fn start_import_with_afc2(
+            self: Pin<&mut IOManager>,
+            udid: &QString,
+            job_id: &QUuid,
+            local_paths: &QList_QString,
+            destination_dir: &QString,
+        );
+
+        #[qinvokable]
+        fn start_import_with_hause_arrest_afc(
+            self: Pin<&mut IOManager>,
+            udid: &QString,
+            job_id: &QUuid,
+            local_paths: &QList_QString,
+            destination_dir: &QString,
+            hause_arrest_afc: &QString,
+        );
+
+        #[qinvokable]
         fn cancel_job(self: Pin<&mut IOManager>, job_id: &QUuid);
 
         #[qinvokable]
@@ -202,7 +221,6 @@ impl qobject::IOManager {
                     Err(e) => {
                         eprintln!("Failed to create AFC2 client: {e}");
                         //FIXME: create failed signal
-                        //and remove job from map
                         let _ = qt_thread.queue(move |mgr| {
                             mgr.export_job_finished(&job_id_for_task, true, 0, 0, 0);
                         });
@@ -433,138 +451,230 @@ impl qobject::IOManager {
         let qt_thread = self.qt_thread();
         let jobs_map_for_task = jobs_map.clone();
         let job_id_for_task = job_id.clone();
+        let items_for_task = items.clone();
+        let cancel_flag_for_task = cancel_flag.clone();
 
         RUNTIME.spawn(async move {
-            let maybe_device = APP_DEVICE_STATE.lock().await.get(&udid_str).cloned();
-            let device = match maybe_device {
-                Some(d) => d,
-                None => {
-                    eprintln!("IOManager (import): device {udid_str} not found");
-                    let _ = qt_thread.queue(move |mgr| {
-                        mgr.import_job_finished(&job_id_for_task, true, 0, 0, 0);
-                    });
-                    let mut guard = jobs_map_for_task
-                        .lock()
-                        .expect("IOManager jobs map mutex poisoned");
-                    guard.remove(&job_id_str);
-                    return;
+            let mut afc = {
+                let maybe_device = APP_DEVICE_STATE.lock().await.get(&udid_str).cloned();
+                let device = match maybe_device {
+                    Some(d) => d,
+                    None => {
+                        eprintln!("IOManager (import): device {udid_str} not found");
+                        let job_id_signal = job_id_for_task.clone();
+                        qt_thread
+                            .queue(move |mgr| {
+                                mgr.import_job_finished(&job_id_signal, true, 0, 0, 0);
+                            })
+                            .ok();
+                        let mut guard = jobs_map_for_task
+                            .lock()
+                            .expect("IOManager jobs map mutex poisoned");
+                        guard.remove(&job_id_str);
+                        return;
+                    }
+                };
+
+                match AfcClient::connect(device.provider.lock().await.as_ref()).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Failed to create AFC client for import: {e}");
+                        let job_id_signal = job_id_for_task.clone();
+                        qt_thread
+                            .queue(move |mgr| {
+                                mgr.import_job_finished(&job_id_signal, true, 0, 0, 0);
+                            })
+                            .ok();
+                        let mut guard = jobs_map_for_task
+                            .lock()
+                            .expect("IOManager jobs map mutex poisoned");
+                        guard.remove(&job_id_str);
+                        return;
+                    }
                 }
             };
 
-            let afc_arc = device.afc.clone();
-            let mut afc_guard = afc_arc.lock().await;
+            handle_start_import(
+                &mut afc,
+                &job_id_for_task,
+                &items_for_task,
+                dest_dir_device_str,
+                &qt_thread,
+                &jobs_map_for_task,
+                &cancel_flag_for_task,
+            )
+            .await;
+        });
+    }
 
-            let mut successful = 0_i32;
-            let mut failed = 0_i32;
-            let mut total_bytes = 0_i64;
-            let mut cancelled = false;
+    fn start_import_with_afc2(
+        self: Pin<&mut Self>,
+        udid: &qobject::QString,
+        job_id: &qobject::QUuid,
+        local_paths: &qobject::QList_QString,
+        destination_dir: &qobject::QString,
+    ) {
+        let udid_str = udid.to_string();
+        let dest_dir_device_str = destination_dir.to_string();
 
-            for local_path in items {
-                if cancel_flag.load(Ordering::Relaxed) {
-                    cancelled = true;
-                    break;
-                }
-
-                let res = import_single_item(
-                    &mut afc_guard,
-                    &local_path,
-                    &dest_dir_device_str,
-                    &job_id_for_task,
-                    &qt_thread,
-                    &cancel_flag,
-                )
-                .await;
-
-                match res {
-                    Ok(r) if r.success => {
-                        successful += 1;
-                        total_bytes += r.bytes_transferred;
-                        let file_name = Path::new(&local_path)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(&local_path)
-                            .to_string();
-                        let job_id_signal = job_id_for_task.clone();
-                        let dest_clone = r.destination_path.clone();
-                        qt_thread
-                            .queue(move |mgr| {
-                                mgr.import_item_finished(
-                                    &job_id_signal,
-                                    &qobject::QString::from(file_name),
-                                    &qobject::QString::from(dest_clone),
-                                    true,
-                                    r.bytes_transferred,
-                                    &qobject::QString::from(""),
-                                );
-                            })
-                            .ok();
-                    }
-                    Ok(r) => {
-                        failed += 1;
-                        let file_name = Path::new(&local_path)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(&local_path)
-                            .to_string();
-                        let err_msg = r
-                            .error_message
-                            .unwrap_or_else(|| "Unknown error".to_string());
-                        let job_id_signal = job_id_for_task.clone();
-                        let dest_clone = r.destination_path.clone();
-                        qt_thread
-                            .queue(move |mgr| {
-                                mgr.import_item_finished(
-                                    &job_id_signal,
-                                    &qobject::QString::from(file_name),
-                                    &qobject::QString::from(dest_clone),
-                                    false,
-                                    r.bytes_transferred,
-                                    &qobject::QString::from(err_msg),
-                                );
-                            })
-                            .ok();
-                    }
-                    Err(err) => {
-                        failed += 1;
-                        let file_name = Path::new(&local_path)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(&local_path)
-                            .to_string();
-                        let job_id_signal = job_id_for_task.clone();
-                        qt_thread
-                            .queue(move |mgr| {
-                                mgr.import_item_finished(
-                                    &job_id_signal,
-                                    &qobject::QString::from(file_name),
-                                    &qobject::QString::from(""),
-                                    false,
-                                    0,
-                                    &qobject::QString::from(err),
-                                );
-                            })
-                            .ok();
-                    }
-                }
+        let mut items = Vec::with_capacity(local_paths.len() as usize);
+        for i in 0..local_paths.len() {
+            if let Some(p) = local_paths.get(i) {
+                items.push(p.to_string());
             }
+        }
 
-            let job_id_signal = job_id_for_task.clone();
-            qt_thread
-                .queue(move |mgr| {
-                    mgr.import_job_finished(
-                        &job_id_signal,
-                        cancelled,
-                        successful,
-                        failed,
-                        total_bytes,
-                    );
-                })
-                .ok();
+        let job_id_str = job_id.to_string();
 
-            let mut guard = jobs_map_for_task
-                .lock()
-                .expect("IOManager jobs map mutex poisoned");
-            guard.remove(&job_id_str);
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        let jobs_map = self.as_ref().rust().jobs.clone();
+        {
+            let mut guard = jobs_map.lock().expect("IOManager jobs map mutex poisoned");
+            guard.insert(job_id_str.clone(), cancel_flag.clone());
+        }
+
+        let qt_thread = self.qt_thread();
+        let jobs_map_for_task = jobs_map.clone();
+        let job_id_for_task = job_id.clone();
+        let items_for_task = items.clone();
+        let cancel_flag_for_task = cancel_flag.clone();
+
+        RUNTIME.spawn(async move {
+            let mut afc = {
+                let maybe_device = APP_DEVICE_STATE.lock().await.get(&udid_str).cloned();
+                let device = match maybe_device {
+                    Some(d) => d,
+                    None => {
+                        eprintln!("IOManager (import): device {udid_str} not found");
+                        let job_id_signal = job_id_for_task.clone();
+                        qt_thread
+                            .queue(move |mgr| {
+                                mgr.import_job_finished(&job_id_signal, true, 0, 0, 0);
+                            })
+                            .ok();
+                        let mut guard = jobs_map_for_task
+                            .lock()
+                            .expect("IOManager jobs map mutex poisoned");
+                        guard.remove(&job_id_str);
+                        return;
+                    }
+                };
+                match AfcClient::new_afc2(device.provider.lock().await.as_ref()).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Failed to create AFC2 client for import: {e}");
+                        let job_id_signal = job_id_for_task.clone();
+                        qt_thread
+                            .queue(move |mgr| {
+                                mgr.import_job_finished(&job_id_signal, true, 0, 0, 0);
+                            })
+                            .ok();
+                        let mut guard = jobs_map_for_task
+                            .lock()
+                            .expect("IOManager jobs map mutex poisoned");
+                        guard.remove(&job_id_str);
+                        return;
+                    }
+                }
+            };
+
+            handle_start_import(
+                &mut afc,
+                &job_id_for_task,
+                &items_for_task,
+                dest_dir_device_str,
+                &qt_thread,
+                &jobs_map_for_task,
+                &cancel_flag_for_task,
+            )
+            .await;
+        });
+    }
+
+    fn start_import_with_hause_arrest_afc(
+        self: Pin<&mut Self>,
+        udid: &qobject::QString,
+        job_id: &qobject::QUuid,
+        local_paths: &qobject::QList_QString,
+        destination_dir: &qobject::QString,
+        hause_arrest_afc: &qobject::QString,
+    ) {
+        let udid_str = udid.to_string();
+        let dest_dir_device_str = destination_dir.to_string();
+
+        let mut items = Vec::with_capacity(local_paths.len() as usize);
+        for i in 0..local_paths.len() {
+            if let Some(p) = local_paths.get(i) {
+                items.push(p.to_string());
+            }
+        }
+
+        let job_id_str = job_id.to_string();
+
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        let jobs_map = self.as_ref().rust().jobs.clone();
+        {
+            let mut guard = jobs_map.lock().expect("IOManager jobs map mutex poisoned");
+            guard.insert(job_id_str.clone(), cancel_flag.clone());
+        }
+
+        let qt_thread = self.qt_thread();
+        let jobs_map_for_task = jobs_map.clone();
+        let job_id_for_task = job_id.clone();
+        let items_for_task = items.clone();
+        let cancel_flag_for_task = cancel_flag.clone();
+        let bundle_id_str = hause_arrest_afc.to_string();
+
+        RUNTIME.spawn(async move {
+            let mut hause_arrest_afc = {
+                let maybe_device = APP_DEVICE_STATE.lock().await.get(&udid_str).cloned();
+                let device = match maybe_device {
+                    Some(d) => d,
+                    None => {
+                        eprintln!("IOManager: device {udid_str} not found");
+                        let _ = qt_thread.queue(move |mgr| {
+                            mgr.export_job_finished(&job_id_for_task, true, 0, 0, 0);
+                        });
+                        let mut guard = jobs_map_for_task
+                            .lock()
+                            .expect("IOManager jobs map mutex poisoned");
+                        guard.remove(&job_id_str);
+                        return;
+                    }
+                };
+
+                let provider_guard = device.provider.lock().await;
+
+                match utils::vend_app_documents(provider_guard.as_ref(), &bundle_id_str).await {
+                    Ok(afc_client) => afc_client,
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to initialize HouseArrest session for {}: {}",
+                            bundle_id_str, e
+                        );
+                        eprintln!("Failed to create AFC2 client: {e}");
+                        let _ = qt_thread.queue(move |mgr| {
+                            mgr.export_job_finished(&job_id_for_task, true, 0, 0, 0);
+                        });
+                        let mut guard = jobs_map_for_task
+                            .lock()
+                            .expect("IOManager jobs map mutex poisoned");
+                        guard.remove(&job_id_str);
+                        return;
+                    }
+                }
+            };
+
+            handle_start_import(
+                &mut hause_arrest_afc,
+                &job_id_for_task,
+                &items_for_task,
+                dest_dir_device_str,
+                &qt_thread,
+                &jobs_map_for_task,
+                &cancel_flag_for_task,
+            )
+            .await;
         });
     }
 
@@ -819,6 +929,132 @@ async fn export_single_item(
         destination_path: output_path_str,
         error_message: None,
     })
+}
+
+async fn handle_start_import(
+    afc: &mut AfcClient,
+    job_id: &qobject::QUuid,
+    local_paths: &Vec<String>,
+    destination_dir_on_device: String,
+    qt_thread: &cxx_qt::CxxQtThread<qobject::IOManager>,
+    jobs_map_for_task: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    cancel_flag: &Arc<AtomicBool>,
+) {
+    let mut items = Vec::with_capacity(local_paths.len() as usize);
+    for i in 0..local_paths.len() {
+        if let Some(p) = local_paths.get(i) {
+            items.push(p.to_string());
+        }
+    }
+
+    let job_id_str = job_id.to_string();
+    let job_id_for_task = job_id.clone();
+
+    let mut successful = 0_i32;
+    let mut failed = 0_i32;
+    let mut total_bytes = 0_i64;
+    let mut cancelled = false;
+
+    for local_path in items {
+        if cancel_flag.load(Ordering::Relaxed) {
+            cancelled = true;
+            break;
+        }
+
+        let res = import_single_item(
+            afc,
+            &local_path,
+            &destination_dir_on_device,
+            &job_id_for_task,
+            qt_thread,
+            cancel_flag,
+        )
+        .await;
+
+        match res {
+            Ok(r) if r.success => {
+                successful += 1;
+                total_bytes += r.bytes_transferred;
+                let file_name = Path::new(&local_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&local_path)
+                    .to_string();
+                let job_id_signal = job_id_for_task.clone();
+                let dest_clone = r.destination_path.clone();
+                qt_thread
+                    .queue(move |mgr| {
+                        mgr.import_item_finished(
+                            &job_id_signal,
+                            &qobject::QString::from(file_name),
+                            &qobject::QString::from(dest_clone),
+                            true,
+                            r.bytes_transferred,
+                            &qobject::QString::from(""),
+                        );
+                    })
+                    .ok();
+            }
+            Ok(r) => {
+                failed += 1;
+                let file_name = Path::new(&local_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&local_path)
+                    .to_string();
+                let err_msg = r
+                    .error_message
+                    .unwrap_or_else(|| "Unknown error".to_string());
+                let job_id_signal = job_id_for_task.clone();
+                let dest_clone = r.destination_path.clone();
+                qt_thread
+                    .queue(move |mgr| {
+                        mgr.import_item_finished(
+                            &job_id_signal,
+                            &qobject::QString::from(file_name),
+                            &qobject::QString::from(dest_clone),
+                            false,
+                            r.bytes_transferred,
+                            &qobject::QString::from(err_msg),
+                        );
+                    })
+                    .ok();
+            }
+            Err(err) => {
+                failed += 1;
+                let file_name = Path::new(&local_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&local_path)
+                    .to_string();
+                let job_id_signal = job_id_for_task.clone();
+                qt_thread
+                    .queue(move |mgr| {
+                        mgr.import_item_finished(
+                            &job_id_signal,
+                            &qobject::QString::from(file_name),
+                            &qobject::QString::from(""),
+                            false,
+                            0,
+                            &qobject::QString::from(err),
+                        );
+                    })
+                    .ok();
+            }
+        }
+    }
+
+    let job_id_signal = job_id_for_task.clone();
+    qt_thread
+        .queue(move |mgr| {
+            mgr.import_job_finished(&job_id_signal, cancelled, successful, failed, total_bytes);
+        })
+        .ok();
+
+    let mut guard = jobs_map_for_task
+        .lock()
+        .expect("IOManager jobs map mutex poisoned");
+    guard.remove(&job_id_str);
 }
 
 async fn import_single_item(
