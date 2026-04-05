@@ -6,7 +6,8 @@ use idevice::{
     heartbeat,
     lockdown::LockdownClient,
     pairing_file::PairingFile,
-    provider::TcpProvider,
+    provider::{IdeviceProvider, TcpProvider},
+    IdeviceError,
     usbmuxd::{Connection, UsbmuxdAddr, UsbmuxdConnection, UsbmuxdListenEvent},
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,7 +43,7 @@ const APP_LABEL: &str = "iDescriptor";
 const EV_CONNECTED: u32 = 1;
 const EV_DISCONNECTED: u32 = 2;
 const EV_PAIRING_PENDING: u32 = 3;
-const EV_FAIL_KIND: u32 = 4;
+const EV_FAIL: u32 = 4;
 
 #[derive(Clone)]
 pub struct DeviceServices {
@@ -162,7 +163,7 @@ impl qobject::Core {
                                             device_map.insert(device_id, udid.clone());
 
                                             let qt_thread = qt_t.clone();
-                                            tokio::spawn(async move {
+                                            RUNTIME.spawn(async move {
                                                 let already_paired = {
                                                     let mut u2 =
                                                         match UsbmuxdConnection::default().await {
@@ -241,14 +242,15 @@ impl qobject::Core {
                                                     udid: String,
                                                     reason : &str,
                                                 )  {
-                                                    let reason_clone = reason.to_string();
+                                                    // let reason_clone = reason.to_string();
+                                                    //TODO: listen for this event
                                                     qt_thread
                                                         .queue(move |core_qobj| {
                                                             core_qobj.device_event(
-                                                                EV_FAIL_KIND,
+                                                                EV_FAIL,
                                                                 &QString::from(udid),
                                                                 // FIXME: reason is not info
-                                                                &QString::from(reason_clone),
+                                                                &QString::from(""),
                                                             );
                                                         })
                                                         .ok();
@@ -303,7 +305,7 @@ impl qobject::Core {
                                                     }
                                                 };
 
-                                                let mut buid = match uc2.get_buid().await {
+                                                let buid = match uc2.get_buid().await {
                                                     Ok(b) => b,
                                                     Err(_) => {
                                                         let udid_for_event = udid.clone();
@@ -312,29 +314,46 @@ impl qobject::Core {
                                                     }
                                                 };
 
-                                                if let Some(first) = buid.chars().next() {
-                                                    let mut chars: Vec<char> =
-                                                        buid.chars().collect();
-                                                    chars[0] = if first == 'F' { 'A' } else { 'F' };
-                                                    buid = chars.into_iter().collect();
-                                                }
 
                                                 let host_id =
                                                     uuid::Uuid::new_v4().to_string().to_uppercase();
 
-                                                let mut pf = match lc
-                                                    .pair(host_id, buid, None)
-                                                    .await
-                                                {
-                                                    Ok(p) => p,
-                                                    Err(_) => {
-                                                        let udid_for_event = udid.clone();
-                                                        // FIXME: we may not want to emit here
-                                                        // because if user doesnt accept pairing in time, it will be considered a failure
-                                                        emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to pair device");
-                                                        return;
-                                                    }
+                                                println!(
+                                                    "Pairing with device {}, host_id: {}, buid: {}",
+                                                    udid, host_id, buid
+                                                );
+                                                let mut pf = loop {  
+                                                    match lc.pair(host_id.clone(), buid.clone(), None).await {  
+                                                        Ok(p) => {  
+                                                            println!("Pairing successful with device {}, host_id: {}, buid: {}", udid, host_id, buid);
+                                                            break p;  
+                                                        }  
+                                                        Err(IdeviceError::PairingDialogResponsePending) => {  
+                                                            /* wait */
+                                                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;  
+                                                            continue;  
+                                                        }
+                                                        Err(IdeviceError::PasswordProtected) => {
+                                                            /* wait */
+                                                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;  
+                                                            continue;
+                                                        }
+                                                        Err(IdeviceError::InvalidHostID) =>{
+                                                            /* wait */
+                                                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;  
+                                                            continue;
+                                                        }
+                                                        // TODO: we can also check for CanceledByUser or UserDeniedPairing
+                                                        Err(e) => {  
+                                                            // Actual error occurred  
+                                                            eprintln!("Pairing failed for device {}: {e:?}", udid);
+                                                            let udid_for_event = udid.clone();  
+                                                            emit_pairing_failed(qt_thread.clone(), udid_for_event, "Failed to pair device");  
+                                                            return;  
+                                                        }  
+                                                    }  
                                                 };
+                                                println!("Paired with device {}, pairing file obtained", udid);
                                                 pf.udid = Some(udid.clone());
 
                                                 let bytes = match pf.serialize() {
@@ -354,6 +373,10 @@ impl qobject::Core {
                                                     return;
                                                 }
 
+                                                println!(
+                                                    "Pairing record saved to usbmuxd for device {}. Emitting connected event.",
+                                                    udid
+                                                );
                                                 emit_connected(qt_thread.clone(), udid).await;
                                             });
                                         }
@@ -561,7 +584,6 @@ async fn clean_device_from_app_state(udid: &str) {
     }
 }
 
-//FIXME: dont spawn hb if init fails
 async fn init_idescriptor_device<
     T: idevice::provider::IdeviceProvider + Send + Sync + Clone + 'static,
 >(
@@ -579,12 +601,6 @@ async fn init_idescriptor_device<
         }
     };
     eprintln!("init_idescriptor_device: Pairing file obtained.");
-
-    let mut hb_task = None;
-    let mut hb = None;
-
-    let provider_for_hb = provider.clone();
-    let qt_thread_for_hb = qt_thread.clone();
 
     let mut lc = match LockdownClient::connect(&provider).await {
         Ok(lc) => lc,
@@ -621,10 +637,11 @@ async fn init_idescriptor_device<
         eprintln!("init_idescriptor_device: UDID is empty.");
         return None;
     }
-
+    let mut hb = None;
+    
     if is_wireless {
         eprintln!("init_idescriptor_device: Attempting to connect to HeartbeatClient.");
-        hb = match heartbeat::HeartbeatClient::connect(&provider_for_hb).await {
+        hb = match heartbeat::HeartbeatClient::connect(&provider).await {
             Ok(h) => Some(h),
             Err(e) => {
                 eprintln!("heartbeat: connect failed: {e:?}");
@@ -632,71 +649,6 @@ async fn init_idescriptor_device<
             }
         };
         eprintln!("init_idescriptor_device: Connected to HeartbeatClient.");
-    }
-
-    if is_wireless {
-        let mut hb_for_task = hb.take().unwrap();
-        let udid_for_hb = udid.clone();
-        hb_task = Some(Arc::new(RUNTIME.spawn(async move {
-            eprintln!("heartbeat: starting heartbeat task ");
-            let mut interval = 15u64;
-            let mut fails = 0;
-            loop {
-                eprintln!("heartbeat:  Getting marco (interval: {interval}s)");
-                match hb_for_task.get_marco(interval).await {
-                    Ok(next) => {
-                        interval = next;
-                        fails = 0; // Reset failures on success
-                        eprintln!("heartbeat:  Received marco, new interval: {interval}s");
-                    }
-                    Err(e) => {
-                        fails += 1;
-                        eprintln!("heartbeat:  get_marco failed (fail count: {fails}): {e:?}");
-                        if fails >= 3 {
-                            eprintln!("heartbeat: too many failures for  giving up");
-                            clean_device_from_app_state(&udid_for_hb).await;
-
-                            let udid_for_event = udid_for_hb.clone();
-                            let _ = qt_thread_for_hb.queue(move |core_qobj| {
-                                core_qobj.device_event(
-                                    EV_DISCONNECTED,
-                                    &QString::from(udid_for_event),
-                                    &QString::from(""),
-                                );
-                            });
-                            break;
-                        }
-                        continue;
-                    }
-                }
-
-                eprintln!("heartbeat:  Sending polo.");
-                if let Err(e) = hb_for_task.send_polo().await {
-                    fails += 1;
-                    eprintln!("heartbeat:  send_polo failed (fail count: {fails}): {e:?}");
-                    if fails >= 3 {
-                        eprintln!("heartbeat: too many failures for , giving up");
-                        clean_device_from_app_state(&udid_for_hb).await;
-
-                        let udid_for_event = udid_for_hb.clone();
-                        let _ = qt_thread_for_hb.queue(move |core_qobj| {
-                            core_qobj.device_event(
-                                EV_DISCONNECTED,
-                                &QString::from(udid_for_event),
-                                &QString::from(""),
-                            );
-                        });
-                        break;
-                    }
-
-                    continue;
-                }
-                eprintln!("heartbeat:  Polo sent successfully.");
-                interval += 5;
-            }
-
-            eprintln!("heartbeat: heartbeat task ended.");
-        })));
     }
 
     // FIXME: this cannot be done when paired wirelessly
@@ -798,13 +750,13 @@ async fn init_idescriptor_device<
         );
     }
 
-    //Store device services in AppDeviceState
+
     eprintln!("init_idescriptor_device: Storing device services.");
     let device_services = DeviceServices {
         afc: Arc::new(Mutex::new(afc_client)),
         afc2,
         diag: Arc::new(Mutex::new(diag_relay)),
-        heartbeat_task: hb_task,
+        heartbeat_task: None,
         video_streams: Arc::new(Mutex::new(HashMap::new())),
         provider: Arc::new(Mutex::new(Box::new(provider))),
         lockdown: Arc::new(Mutex::new(lc)),
@@ -815,6 +767,32 @@ async fn init_idescriptor_device<
         .await
         .insert(udid.to_string(), device_services);
 
+    if is_wireless {
+        match hb {
+            Some(hb_client) => {
+                eprintln!("init_idescriptor_device: Spawning heartbeat task.");
+                match spawn_heartbeat_task(hb_client, qt_thread.clone(), udid.clone()).await {
+                    Ok(task) => {
+                        let mut state = APP_DEVICE_STATE.lock().await;
+                        if let Some(svc) = state.get_mut(&udid) {
+                            svc.heartbeat_task = Some(task);
+                        }
+                    }
+                    Err(()) => {
+                        eprintln!("init_idescriptor_device: Failed to spawn heartbeat task.");
+                        return None;
+                    }
+                }
+            }
+            None => {
+                eprintln!(
+                    "init_idescriptor_device: Heartbeat client is None, cannot spawn heartbeat task."
+                );
+                return None;
+            }
+        }
+    }
+
     let mut buf = Vec::new();
     if def_vals.to_writer_xml(&mut buf).is_err() {
         eprintln!("init_idescriptor_device: Failed to serialize default values to XML.");
@@ -824,4 +802,72 @@ async fn init_idescriptor_device<
     eprintln!("init_idescriptor_device: Device has been initialized.");
 
     Some((udid, info))
+}
+
+async fn spawn_heartbeat_task(
+    mut hb_client: heartbeat::HeartbeatClient,
+    qt_thread: cxx_qt::CxxQtThread<Core>,
+    udid: String,
+) -> Result<Arc<JoinHandle<()>>, ()> {
+    let udid_for_hb = udid.clone();
+    Ok(Arc::new(RUNTIME.spawn(async move {
+        eprintln!("heartbeat: starting heartbeat task ");
+        let mut interval = 15u64;
+        let mut fails = 0;
+        loop {
+            eprintln!("heartbeat:  Getting marco (interval: {interval}s)");
+            match hb_client.get_marco(interval).await {
+                Ok(next) => {
+                    interval = next;
+                    fails = 0;
+                    eprintln!("heartbeat:  Received marco, new interval: {interval}s");
+                }
+                Err(e) => {
+                    fails += 1;
+                    eprintln!("heartbeat:  get_marco failed (fail count: {fails}): {e:?}");
+                    if fails >= 3 {
+                        eprintln!("heartbeat: too many failures for  giving up");
+                        clean_device_from_app_state(&udid_for_hb).await;
+
+                        let udid_for_event = udid_for_hb.clone();
+                        let _ = qt_thread.queue(move |core_qobj| {
+                            core_qobj.device_event(
+                                EV_DISCONNECTED,
+                                &QString::from(udid_for_event),
+                                &QString::from(""),
+                            );
+                        });
+                        break;
+                    }
+                    continue;
+                }
+            }
+
+            eprintln!("heartbeat:  Sending polo.");
+            if let Err(e) = hb_client.send_polo().await {
+                fails += 1;
+                eprintln!("heartbeat:  send_polo failed (fail count: {fails}): {e:?}");
+                if fails >= 3 {
+                    eprintln!("heartbeat: too many failures for , giving up");
+                    clean_device_from_app_state(&udid_for_hb).await;
+
+                    let udid_for_event = udid_for_hb.clone();
+                    let _ = qt_thread.queue(move |core_qobj| {
+                        core_qobj.device_event(
+                            EV_DISCONNECTED,
+                            &QString::from(udid_for_event),
+                            &QString::from(""),
+                        );
+                    });
+                    break;
+                }
+
+                continue;
+            }
+            eprintln!("heartbeat:  Polo sent successfully.");
+            interval += 5;
+        }
+
+        eprintln!("heartbeat: heartbeat task ended.");
+    })))
 }
