@@ -71,14 +71,14 @@ impl cxx_qt::Constructor<(QString, u32)> for qobject::ScreenshotBackend {
 }
 
 impl qobject::ScreenshotBackend {
-    fn get_udid(&self) -> &QString {
-        use cxx_qt::CxxQtType;
-        &self.rust().udid
-    }
-    fn get_ios_version(&self) -> u32 {
-        use cxx_qt::CxxQtType;
-        self.rust().ios_version
-    }
+    // fn get_udid(&self) -> &QString {
+    //     use cxx_qt::CxxQtType;
+    //     &self.rust().udid
+    // }
+    // fn get_ios_version(&self) -> u32 {
+    //     use cxx_qt::CxxQtType;
+    //     self.rust().ios_version
+    // }
 
     fn set_udid(mut self: Pin<&mut Self>, udid: &QString) {
         use cxx_qt::CxxQtType;
@@ -150,7 +150,7 @@ async fn run_capture_ios17_and_above(
         }
     };
 
-    let rsd_port = proxy.handshake.server_rsd_port;
+    let rsd_port = proxy.tunnel_info().server_rsd_port;
     let mut adapter = match proxy.create_software_tunnel() {
         Ok(a) => a.to_async_handle(),
         Err(e) => {

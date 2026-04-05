@@ -6,7 +6,7 @@ use idevice::{
     heartbeat,
     lockdown::LockdownClient,
     pairing_file::PairingFile,
-    provider::{IdeviceProvider, TcpProvider},
+    provider::{TcpProvider},
     IdeviceError,
     usbmuxd::{Connection, UsbmuxdAddr, UsbmuxdConnection, UsbmuxdListenEvent},
 };
@@ -240,7 +240,7 @@ impl qobject::Core {
                                                 fn emit_pairing_failed(
                                                     qt_thread: cxx_qt::CxxQtThread<Core>,
                                                     udid: String,
-                                                    reason : &str,
+                                                    _reason : &str,
                                                 )  {
                                                     // let reason_clone = reason.to_string();
                                                     //TODO: listen for this event

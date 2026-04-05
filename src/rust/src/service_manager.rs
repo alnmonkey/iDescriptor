@@ -1145,21 +1145,21 @@ async fn set_device_location_lockdown(
 }
 
 // iOS 17+:
-async fn set_device_location_rsd(
-    proxy: CoreDeviceProxy,
-    latitude: f64,
-    longitude: f64,
-) -> Result<(), idevice::IdeviceError> {
-    let rsd_port = proxy.handshake.server_rsd_port;
-    let adapter = proxy.create_software_tunnel()?;
-    let mut adapter = adapter.to_async_handle();
-    let stream = adapter.connect(rsd_port).await?;
-
-    let mut handshake = RsdHandshake::new(stream).await?;
-
-    let mut remote_server = RemoteServerClient::connect_rsd(&mut adapter, &mut handshake).await?;
-    remote_server.read_message(0).await?;
-
-    let mut location_client = LocationSimulationClient::new(&mut remote_server).await?;
-    location_client.set(latitude, longitude).await
+async fn set_device_location_rsd(  
+    proxy: CoreDeviceProxy,  
+    latitude: f64,  
+    longitude: f64,  
+) -> Result<(), idevice::IdeviceError> {  
+    let rsd_port = proxy.tunnel_info().server_rsd_port;
+    let adapter = proxy.create_software_tunnel()?;  
+    let mut adapter = adapter.to_async_handle();  
+    let stream = adapter.connect(rsd_port).await?;  
+  
+    let mut handshake = RsdHandshake::new(stream).await?;  
+  
+    let mut remote_server = RemoteServerClient::connect_rsd(&mut adapter, &mut handshake).await?;  
+    remote_server.read_message(0).await?;  
+  
+    let mut location_client = LocationSimulationClient::new(&mut remote_server).await?;  
+    location_client.set(latitude, longitude).await  
 }

@@ -1,15 +1,7 @@
-use crate::{DeviceServices, run_sync};
 use cxx_qt_lib::{QMap, QMapPair_QString_QVariant, QString, QVariant};
-use idevice::{
-    provider::IdeviceProvider,
-    services::afc::{AfcClient, opcode::AfcFopenMode},
-};
-use std::{io::SeekFrom, pin::Pin};
-use tokio::{
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter},
-    net::TcpListener,
-    sync::{Semaphore, oneshot},
-};
+use idevice::services::afc::{AfcClient, opcode::AfcFopenMode};
+use std::io::SeekFrom;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 // FIXME: resolve symlinks
 pub async fn check_is_dir_and_list(

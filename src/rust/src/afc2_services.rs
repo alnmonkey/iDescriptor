@@ -2,16 +2,13 @@ use cxx_qt::Threading;
 use cxx_qt_lib::{QByteArray, QList, QMap, QMapPair_QString_QVariant, QString};
 
 use crate::{APP_DEVICE_STATE, RUNTIME, VIDEO_STREAMS, afc, run_sync};
-use idevice::{
-    IdeviceService,
-    afc::{AfcClient, opcode::AfcFopenMode},
-};
+use idevice::afc::{AfcClient, opcode::AfcFopenMode};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{io::SeekFrom, pin::Pin};
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::net::TcpListener;
-use tokio::sync::{Semaphore, oneshot};
+use tokio::sync::oneshot;
 
 #[cxx_qt::bridge(namespace = "CXX")]
 mod qobject {
@@ -749,7 +746,7 @@ impl qobject::Afc2Backend {
                             let provider = device.provider.lock().await;
                             match AfcClient::new_afc2(provider.as_ref()).await {
                                 Ok(c) => c,
-                                Err(e) => {
+                                Err(_) => {
                                     //FIXME
                                     // eprintln!(
                                     //     "handle_http_connection: AfcClient::connect failed for {}: {:?}",

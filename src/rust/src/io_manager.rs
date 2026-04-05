@@ -28,7 +28,7 @@ mod qobject {
 
     extern "RustQt" {
         #[qobject]
-        type IOManager = super::R_IOManager;
+        type IOManager = super::RIOManager;
 
         #[qinvokable]
         fn start_export(
@@ -158,7 +158,7 @@ struct ExportItemResult {
 }
 
 #[derive(Default)]
-pub struct R_IOManager {
+pub struct RIOManager {
     jobs: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 

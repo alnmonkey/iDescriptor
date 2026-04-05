@@ -55,10 +55,8 @@ mod qobject {
         fn start_video_stream(self: &HauseArrest, file_path: &QString) -> QString;
     }
 
-    // Required for CXX-Qt objects that will interact with a separate (Tokio) thread
     impl cxx_qt::Threading for HauseArrest {}
 
-    // Custom constructor to initialize with device UDID and iOS version
     impl cxx_qt::Constructor<(QString, QString), NewArguments = (QString, QString)> for HauseArrest {}
 }
 
@@ -81,7 +79,7 @@ impl cxx_qt::Constructor<(QString, QString)> for qobject::HauseArrest {
         Self::BaseArguments,
         Self::InitializeArguments,
     ) {
-        (args, (), ()) // Pass the tuple through  
+        (args, (), ())
     }
 
     fn new(args: (QString, QString)) -> RHauseArrestBackend {
@@ -94,11 +92,6 @@ impl cxx_qt::Constructor<(QString, QString)> for qobject::HauseArrest {
 }
 
 impl qobject::HauseArrest {
-    fn get_udid(&self) -> &QString {
-        use cxx_qt::CxxQtType;
-        &self.rust().udid
-    }
-
     fn get_bundle_id(&self) -> &QString {
         use cxx_qt::CxxQtType;
         &self.rust().bundle_id
