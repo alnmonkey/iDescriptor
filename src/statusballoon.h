@@ -40,7 +40,7 @@ struct ProcessItem {
     QDateTime endTime;
     QString destinationPath;
     // QUuid jobId;
-
+    std::optional<std::function<void()>> onComplete;
     BalloonProcess *processWidget = nullptr;
 };
 
@@ -92,9 +92,10 @@ public:
     static StatusBalloon *sharedInstance();
 
     // Process management
-    QUuid startProcess(const QString &title, int totalItems,
-                       const QString &destinationPath, ProcessType type,
-                       const QUuid &jobId);
+    QUuid startProcess(
+        const QString &title, int totalItems, const QString &destinationPath,
+        ProcessType type, const QUuid &jobId,
+        std::optional<std::function<void()>> onComplete = std::nullopt);
 
     void onFileTransferProgress(const QUuid &processId,
                                 const QString &currentFile,

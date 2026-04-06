@@ -30,7 +30,7 @@ IOManagerClient::IOManagerClient(QObject *parent) : QObject(parent) {}
 void IOManagerClient::startExport(
     const std::shared_ptr<iDescriptorDevice> device,
     const QList<QString> &items, const QString &destinationPath,
-    const QString &exportTitle)
+    const QString &exportTitle, std::optional<std::function<void()>> onComplete)
 {
     qDebug() << "startExport() entry - items:" << items.size()
              << "dest:" << destinationPath;
@@ -63,7 +63,8 @@ void IOManagerClient::startExport(
     QUuid jobId = QUuid::createUuid();
 
     StatusBalloon::sharedInstance()->startProcess(
-        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId);
+        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId,
+        onComplete);
 
     AppContext::sharedInstance()->ioManager->start_export(
         device->udid, jobId, items, destinationPath);
@@ -76,7 +77,8 @@ void IOManagerClient::startExport(
 void IOManagerClient::startExport(
     const std::shared_ptr<iDescriptorDevice> device,
     const QList<QString> &items, const QString &destinationPath,
-    const QString &exportTitle, const QString &bundleId)
+    const QString &exportTitle, const QString &bundleId,
+    std::optional<std::function<void()>> onComplete)
 {
     qDebug() << "startExport() hause_arrest entry - items:" << items.size()
              << "dest:" << destinationPath;
@@ -109,7 +111,8 @@ void IOManagerClient::startExport(
     QUuid jobId = QUuid::createUuid();
 
     StatusBalloon::sharedInstance()->startProcess(
-        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId);
+        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId,
+        onComplete);
 
     AppContext::sharedInstance()->ioManager->start_export_with_hause_arrest_afc(
         device->udid, jobId, items, destinationPath, bundleId);
@@ -122,9 +125,10 @@ void IOManagerClient::startExport(
 void IOManagerClient::startExport(
     const std::shared_ptr<iDescriptorDevice> device,
     const QList<QString> &items, const QString &destinationPath,
-    const QString &exportTitle, bool useAfc2)
+    const QString &exportTitle, bool useAfc2,
+    std::optional<std::function<void()>> onComplete)
 {
-    qDebug() << "startExport() hause_arrest entry - items:" << items.size()
+    qDebug() << "startExport() afc2 - items:" << items.size()
              << "dest:" << destinationPath;
     if (!device) {
         qWarning() << "Invalid device provided to ExportManager";
@@ -155,7 +159,8 @@ void IOManagerClient::startExport(
     QUuid jobId = QUuid::createUuid();
 
     StatusBalloon::sharedInstance()->startProcess(
-        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId);
+        exportTitle, items.size(), destinationPath, ProcessType::Export, jobId,
+        onComplete);
 
     AppContext::sharedInstance()->ioManager->start_export_with_afc2(
         device->udid, jobId, items, destinationPath);
@@ -167,9 +172,9 @@ void IOManagerClient::startExport(
 void IOManagerClient::startImport(
     const std::shared_ptr<iDescriptorDevice> device,
     const QList<QString> &items, const QString &destinationPath,
-    const QString &importTitle, std::optional<bool> altAfc)
+    const QString &importTitle, std::optional<std::function<void()>> onComplete)
 {
-    qDebug() << "startExport() entry - items:" << items.size()
+    qDebug() << "startImport() entry - items:" << items.size()
              << "dest:" << destinationPath;
     if (!device) {
         qWarning() << "Invalid device provided to ExportManager";
@@ -188,9 +193,82 @@ void IOManagerClient::startImport(
     QUuid jobId = QUuid::createUuid();
 
     StatusBalloon::sharedInstance()->startProcess(
-        importTitle, items.size(), destinationPath, ProcessType::Import, jobId);
+        importTitle, items.size(), destinationPath, ProcessType::Import, jobId,
+        onComplete);
 
     AppContext::sharedInstance()->ioManager->start_import(
+        device->udid, jobId, items, destinationPath);
+
+    qDebug() << "Started import job" << jobId << "for" << items.size()
+             << "items";
+}
+
+/* hause_arrest */
+void IOManagerClient::startImport(
+    const std::shared_ptr<iDescriptorDevice> device,
+    const QList<QString> &items, const QString &destinationPath,
+    const QString &importTitle, const QString &bundleId,
+    std::optional<std::function<void()>> onComplete)
+{
+    qDebug() << "startImport() entry - items:" << items.size()
+             << "dest:" << destinationPath;
+    if (!device) {
+        qWarning() << "Invalid device provided to ExportManager";
+        QMessageBox::critical(nullptr, "Import Error",
+                              "Invalid device specified for import.");
+        return;
+    }
+
+    if (items.isEmpty()) {
+        qWarning() << "No items provided for export";
+        QMessageBox::information(nullptr, "Import Error",
+                                 "No items selected for import.");
+        return;
+    }
+
+    QUuid jobId = QUuid::createUuid();
+
+    StatusBalloon::sharedInstance()->startProcess(
+        importTitle, items.size(), destinationPath, ProcessType::Import, jobId,
+        onComplete);
+
+    AppContext::sharedInstance()->ioManager->start_import_with_hause_arrest_afc(
+        device->udid, jobId, items, destinationPath, bundleId);
+
+    qDebug() << "Started import job" << jobId << "for" << items.size()
+             << "items";
+}
+
+/* afc2 */
+void IOManagerClient::startImport(
+    const std::shared_ptr<iDescriptorDevice> device,
+    const QList<QString> &items, const QString &destinationPath,
+    const QString &importTitle, bool useAfc2,
+    std::optional<std::function<void()>> onComplete)
+{
+    qDebug() << "startImport() entry - items:" << items.size()
+             << "dest:" << destinationPath;
+    if (!device) {
+        qWarning() << "Invalid device provided to ExportManager";
+        QMessageBox::critical(nullptr, "Import Error",
+                              "Invalid device specified for import.");
+        return;
+    }
+
+    if (items.isEmpty()) {
+        qWarning() << "No items provided for export";
+        QMessageBox::information(nullptr, "Import Error",
+                                 "No items selected for import.");
+        return;
+    }
+
+    QUuid jobId = QUuid::createUuid();
+
+    StatusBalloon::sharedInstance()->startProcess(
+        importTitle, items.size(), destinationPath, ProcessType::Import, jobId,
+        onComplete);
+
+    AppContext::sharedInstance()->ioManager->start_import_with_afc2(
         device->udid, jobId, items, destinationPath);
 
     qDebug() << "Started import job" << jobId << "for" << items.size()

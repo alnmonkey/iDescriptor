@@ -53,6 +53,9 @@ mod qobject {
 
         #[qinvokable]
         fn start_video_stream(self: &HauseArrest, file_path: &QString) -> QString;
+
+        #[qinvokable]
+        fn delete_path(self: &HauseArrest, path: &QString) -> bool;
     }
 
     impl cxx_qt::Threading for HauseArrest {}
@@ -152,7 +155,6 @@ impl qobject::HauseArrest {
         });
     }
 
-    // change signature to need &mut self
     fn check_is_dir_and_list(self: &Self, path: &QString) {
         let qt_t = self.qt_thread();
         let path_str = path.to_string();
@@ -331,5 +333,26 @@ impl qobject::HauseArrest {
         });
 
         QString::from(url_clone_for_log)
+    }
+    fn delete_path(&self, path: &QString) -> bool {
+        let path_str = path.to_string();
+        let afc_opt = self.rust().afc_handle.clone();
+
+        run_sync(async move {
+            let Some(afc_handle) = afc_opt else {
+                eprintln!("HouseArrest: AfcClient not initialized");
+                return false;
+            };
+
+            let mut afc_client = afc_handle.lock().await;
+
+            match afc_client.remove(&path_str).await {
+                Ok(_) => true,
+                Err(e) => {
+                    eprintln!("delete_path: failed to delete {}: {}", path_str, e);
+                    false
+                }
+            }
+        })
     }
 }

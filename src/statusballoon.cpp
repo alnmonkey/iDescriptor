@@ -165,6 +165,13 @@ void BalloonProcess::updateUI()
         statusText = m_item->currentFile.isEmpty() ? "Starting..." : "Running";
     } else if (m_item->status == ProcessStatus::Completed) {
         statusText = "Completed successfully";
+
+        QTimer::singleShot(1000, this, [this]() {
+            if (m_item->onComplete.has_value() && m_item->onComplete.value()) {
+                m_item->onComplete.value()();
+            }
+        });
+
     } else if (m_item->status == ProcessStatus::Failed) {
         statusText = "Failed";
     } else if (m_item->status == ProcessStatus::Cancelled) {
@@ -300,6 +307,7 @@ StatusBalloon::StatusBalloon(QWidget *parent) : QBalloonTip(parent)
     // Header label
     m_headerLabel = new QLabel("Processes");
     m_headerLabel->hide();
+    m_headerLabel->setWordWrap(true);
     QFont headerFont = m_headerLabel->font();
     headerFont.setPointSize(headerFont.pointSize() + 2);
     headerFont.setBold(true);
@@ -467,9 +475,10 @@ void StatusBalloon::onItemImported(const QUuid &job_id,
     updateHeader();
 }
 
-QUuid StatusBalloon::startProcess(const QString &title, int totalItems,
-                                  const QString &destinationPath,
-                                  ProcessType type, const QUuid &jobId)
+QUuid StatusBalloon::startProcess(
+    const QString &title, int totalItems, const QString &destinationPath,
+    ProcessType type, const QUuid &jobId,
+    std::optional<std::function<void()>> onComplete)
 {
     handleShow(true);
 
@@ -481,6 +490,7 @@ QUuid StatusBalloon::startProcess(const QString &title, int totalItems,
     item->totalItems = totalItems;
     item->startTime = QDateTime::currentDateTime();
     item->destinationPath = destinationPath;
+    item->onComplete = std::move(onComplete);
 
     {
         QMutexLocker locker(&m_processesMutex);
@@ -521,7 +531,7 @@ void StatusBalloon::updateHeader()
     }
     int total = running + completed + failed + canceled;
 
-    QString headerText = QString("Processes: %1 running").arg(running);
+    QString headerText = QString("Processes:\n %1 running").arg(running);
     if (completed > 0 || failed > 0 || canceled > 0) {
         headerText += QString(" • %1 completed").arg(completed);
         if (failed > 0) {
@@ -545,6 +555,21 @@ void StatusBalloon::updateHeader()
 
 void StatusBalloon::handleShow(bool forceVisible)
 {
+    /* required on Wayland */
+    QWidget *anchorWindow =
+        m_button ? m_button->window() : QApplication::activeWindow();
+    if (!anchorWindow) {
+        if (m_button)
+            m_button->setIndicatorVisible(true);
+        return;
+    }
+
+    // ensure popup has a real QWidget parent.
+    if (parentWidget() != anchorWindow) {
+        setParent(anchorWindow, Qt::ToolTip);
+    }
+    /**/
+
     QPoint pos = m_button->mapToGlobal(
         QPoint(m_button->width() / 2, m_button->height()));
 

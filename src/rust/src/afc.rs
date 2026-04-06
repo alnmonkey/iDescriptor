@@ -13,6 +13,10 @@ pub async fn check_is_dir_and_list(
     match afc.list_dir(&path_str).await {
         Ok(list) => {
             for name in list {
+                // ui already has up/down buttons maybe unnecessary
+                if name == "." || name == ".." {
+                    continue;
+                }
                 let full_path = format!("{}/{}", path_str, name);
                 let is_dir = match afc.get_file_info(&full_path).await {
                     Ok(info) => info.st_ifmt == "S_IFDIR",

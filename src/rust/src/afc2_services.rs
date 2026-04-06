@@ -75,6 +75,9 @@ mod qobject {
 
         #[qinvokable]
         fn is_available(self: &Afc2Backend) -> bool;
+
+        #[qinvokable]
+        fn delete_path(self: &Afc2Backend, path: &QString) -> bool;
     }
 
     impl cxx_qt::Threading for Afc2Backend {}
@@ -210,6 +213,10 @@ impl qobject::Afc2Backend {
 
         let mut qlist: QList<QString> = QList::default();
         for name in list {
+            // ui already has up/down buttons maybe unnecessary
+            if name == "." || name == ".." {
+                continue;
+            }
             qlist.append(QString::from(name));
         }
         qlist
@@ -774,5 +781,42 @@ impl qobject::Afc2Backend {
         });
 
         QString::from(url_clone_for_log)
+    }
+
+    fn delete_path(self: &Self, path: &QString) -> bool {
+        let udid = self.get_udid().to_string();
+        let path_str = path.to_string();
+
+        run_sync(async move {
+            let afc_arc = {
+                let maybe_device = APP_DEVICE_STATE.lock().await.get(udid.as_str()).cloned();
+
+                let device = match maybe_device {
+                    Some(d) => d,
+                    None => {
+                        eprintln!("delete_path: device {udid} not found");
+                        return false;
+                    }
+                };
+
+                match device.afc2 {
+                    Some(afc) => afc.clone(),
+                    None => {
+                        eprintln!("AFC2 service not available for device {}", udid);
+                        return false;
+                    }
+                }
+            };
+
+            let mut afc = afc_arc.lock().await;
+
+            match afc.remove(path_str).await {
+                Ok(_) => true,
+                Err(e) => {
+                    eprintln!("delete_path: remove_path failed: {e}");
+                    false
+                }
+            }
+        })
     }
 }

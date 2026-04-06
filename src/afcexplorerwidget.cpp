@@ -18,7 +18,6 @@
  */
 
 #include "afcexplorerwidget.h"
-// #include "exportmanager.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "mediapreviewdialog.h"
@@ -152,8 +151,8 @@ void AfcExplorerWidget::onItemDoubleClicked(QListWidgetItem *item)
     } else {
         const bool isPreviewable = iDescriptor::Utils::isPreviewableFile(name);
         if (isPreviewable) {
-            auto *previewDialog =
-                new MediaPreviewDialog(m_device, nextPath, m_hauseArrest);
+            auto *previewDialog = new MediaPreviewDialog(
+                m_device, nextPath, m_hauseArrest, m_useAfc2, this);
             previewDialog->setAttribute(Qt::WA_DeleteOnClose);
             previewDialog->show();
         } else {
@@ -349,8 +348,6 @@ void AfcExplorerWidget::onExportClicked()
 
 void AfcExplorerWidget::handleExport(QList<QListWidgetItem *> filesToExport)
 {
-
-    // Ask user for a directory to save all files
     QString dir =
         QFileDialog::getExistingDirectory(this, "Select Export Directory");
     if (dir.isEmpty())
@@ -381,7 +378,7 @@ void AfcExplorerWidget::handleExport(QList<QListWidgetItem *> filesToExport)
             m_hauseArrest.value()->get_bundle_id());
     } else {
         IOManagerClient::sharedInstance()->startExport(
-            m_device, exportItems, dir, "Exporting from File Explorer", true);
+            m_device, exportItems, dir, "Exporting from File Explorer");
     }
 }
 
@@ -394,64 +391,72 @@ void AfcExplorerWidget::exportAndOpenSelectedFile(QListWidgetItem *item,
         return;
     }
 
-    QString fileName = item->text();
+    QList<QString> exportItems;
     QString currPath = "/";
     if (!m_history.isEmpty())
         currPath = m_history.top();
     if (!currPath.endsWith("/"))
         currPath += "/";
-    QString devicePath = currPath == "/" ? "/" + fileName : currPath + fileName;
-    qDebug() << "Exporting file:" << devicePath;
 
-    // FIXME
-    //  // Start export
-    //  QList<ExportItem> exportItems;
-    //  exportItems.append(ExportItem(
-    //      devicePath, fileName, m_device->udid,
-    //      [this, fileName, directory](const ExportResult &result) {
-    //          if (result.success) {
-    //              QString localPath = QDir(directory).filePath(fileName);
-    //              QDesktopServices::openUrl(QUrl::fromLocalFile(localPath));
-    //          } else {
-    //              QMessageBox::critical(this, "Error",
-    //                                    "Failed to export file for opening.");
-    //          }
-    //      }));
-    //  ExportManager::sharedInstance()->startExport(
-    //      m_device, exportItems, directory, "Exporting to open file", m_afc);
+    QString fileName = item->text();
+    QString devicePath = currPath == "/" ? "/" + fileName : currPath + fileName;
+    exportItems.append(devicePath);
+
+    QString localPath = QDir(directory).filePath(fileName);
+
+    std::function<void()> onExportFinished = [localPath]() {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(localPath));
+    };
+
+    if (m_useAfc2) {
+        IOManagerClient::sharedInstance()->startExport(
+            m_device, exportItems, directory,
+            "Exporting from File Explorer <AFC2>", true, onExportFinished);
+    } else if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
+        IOManagerClient::sharedInstance()->startExport(
+            m_device, exportItems, directory,
+            "Exporting from File Explorer (App Container)",
+            m_hauseArrest.value()->get_bundle_id(), onExportFinished);
+    } else {
+        IOManagerClient::sharedInstance()->startExport(
+            m_device, exportItems, directory, "Exporting from File Explorer",
+            onExportFinished);
+    }
 }
 
-// FIXME: should be disabled if there is an error loading afc
 void AfcExplorerWidget::onImportClicked()
 {
-    // FIXME
-    //  QStringList fileNames = QFileDialog::getOpenFileNames(this, "Import
-    //  Files"); if (fileNames.isEmpty())
-    //      return;
+    QStringList fileNames = QFileDialog::getOpenFileNames(this, "Import Files");
+    if (fileNames.isEmpty())
+        return;
 
-    // QString currPath = "/";
-    // if (!m_history.isEmpty())
-    //     currPath = m_history.top();
-    // if (!currPath.endsWith("/"))
-    //     currPath += "/";
+    QString currPath = "/";
+    if (!m_history.isEmpty())
+        currPath = m_history.top();
+    if (!currPath.endsWith("/"))
+        currPath += "/";
 
-    // QList<ImportItem> importItems;
-
-    // for (const QString &localPath : fileNames) {
-    //     importItems.append(
-    //         ImportItem(localPath, currPath + QFileInfo(localPath).fileName(),
-    //                    m_device->udid, [this](const ImportResult &result) {
-    //                        if (result.success) {
-    //                            // Refresh file list
-    //                            QTimer::singleShot(100, this, [this]() {
-    //                                if (!m_history.isEmpty())
-    //                                    loadPath(m_history.top());
-    //                            });
-    //                        }
-    //                    }));
-    // }
-    // ExportManager::sharedInstance()->startImport(
-    //     m_device, importItems, currPath, "Importing Files", m_afc);
+    QPointer safeThis(this);
+    std::function<void()> onImportFinished = [this, currPath, safeThis]() {
+        if (!safeThis || safeThis.isNull())
+            return;
+        QTimer::singleShot(100, this, [this]() {
+            if (!m_history.isEmpty())
+                loadPath(m_history.top());
+        });
+    };
+    if (m_useAfc2) {
+        IOManagerClient::sharedInstance()->startImport(
+            m_device, fileNames, currPath, "Importing <AFC2>", true,
+            onImportFinished);
+    } else if (m_hauseArrest.has_value() && m_hauseArrest.value() != nullptr) {
+        IOManagerClient::sharedInstance()->startImport(
+            m_device, fileNames, currPath, "Importing to App Container",
+            m_hauseArrest.value()->get_bundle_id(), onImportFinished);
+    } else {
+        IOManagerClient::sharedInstance()->startImport(
+            m_device, fileNames, currPath, "Importing", onImportFinished);
+    }
 }
 
 void AfcExplorerWidget::setupFileExplorer()
@@ -822,27 +827,27 @@ void AfcExplorerWidget::onDeleteClicked()
             .arg(pathsToDelete.size()),
         QMessageBox::Yes | QMessageBox::No);
 
-    bool errorOccurred = false;
-    // FIXME
-    // IdeviceFfiError *err = nullptr;
-    // if (reply == QMessageBox::Yes) {
-    //     for (const QString &path : pathsToDelete) {
-    //         err = ServiceManager::deletePath(m_device,
-    //                                          path.toStdString().c_str(),
-    //                                          m_afc);
-    //         if (err) {
-    //             errorOccurred = true;
-    //             qWarning() << "Failed to delete path:" << path
-    //                        << "Error:" << err->message;
-    //             idevice_error_free(err);
-    //         }
-    //     }
-    //     if (errorOccurred) {
-    //         QMessageBox::warning(
-    //             this, "Deletion Error",
-    //             "Some items could not be deleted. Check logs for details.");
-    //     }
-    //     QTimer::singleShot(100, this,
-    //                        [this, currPath]() { loadPath(currPath); });
-    // }
+    bool success = false;
+
+    for (const QString &path : pathsToDelete) {
+        if (m_useAfc2) {
+            success = m_device->afc2_backend->delete_path(path);
+        } else if (m_hauseArrest.has_value() &&
+                   m_hauseArrest.value() != nullptr) {
+            success = m_hauseArrest.value()->delete_path(path);
+        } else {
+            success = m_device->afc_backend->delete_path(path);
+        }
+    }
+
+    if (!success) {
+        QMessageBox::critical(this, "Error",
+                              "Failed to delete one or more items.");
+    } else {
+        // Refresh the current directory after deletion
+        QTimer::singleShot(100, this, [this]() {
+            if (!m_history.isEmpty())
+                loadPath(m_history.top());
+        });
+    }
 }

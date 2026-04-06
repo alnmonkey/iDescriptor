@@ -1,5 +1,7 @@
 use cxx_qt::Threading;
-use cxx_qt_lib::{QByteArray, QList, QMap, QMapPair_QString_QVariant, QString};
+use cxx_qt_lib::{
+    QByteArray, QDateTime, QList, QMap, QMapPair_QString_QVariant, QString, QTimeZone, QVariant,
+};
 
 use crate::{APP_DEVICE_STATE, RUNTIME, VIDEO_STREAMS, afc, run_sync};
 use idevice::{
@@ -22,6 +24,7 @@ mod qobject {
         include!("cxx-qt-lib/qbytearray.h");
         include!("cxx-qt-lib/qmap.h");
         include!("cxx-qt-lib/qvariant.h");
+        include!("cxx-qt-lib/qdatetime.h");
 
         type QString = cxx_qt_lib::QString;
         type QList_QString = cxx_qt_lib::QList<QString>;
@@ -56,6 +59,7 @@ mod qobject {
 
         #[qinvokable]
         fn check_is_dir_and_list(self: &AfcBackend, path: &QString);
+
         #[qsignal]
         fn check_is_dir_and_list_finished(
             self: Pin<&mut AfcBackend>,
@@ -74,6 +78,12 @@ mod qobject {
 
         #[qinvokable]
         fn start_video_stream(self: &AfcBackend, file_path: &QString) -> QString;
+
+        #[qinvokable]
+        fn list_dir_with_creation_date(self: &AfcBackend, path: &QString) -> QMap_QString_QVariant;
+
+        #[qinvokable]
+        fn delete_path(self: &AfcBackend, path: &QString) -> bool;
     }
 
     impl cxx_qt::Threading for AfcBackend {}
@@ -179,6 +189,11 @@ impl qobject::AfcBackend {
 
         let mut qlist: QList<QString> = QList::default();
         for name in list {
+            // ui already has up/down buttons maybe unnecessary
+            if name == "." || name == ".." {
+                continue;
+            }
+
             qlist.append(QString::from(name));
         }
         qlist
@@ -693,5 +708,100 @@ impl qobject::AfcBackend {
         });
 
         QString::from(url_clone_for_log)
+    }
+
+    fn list_dir_with_creation_date(self: &Self, path: &QString) -> QMap<QMapPair_QString_QVariant> {
+        let udid = self.get_udid().to_string();
+        let dir_str = path.to_string();
+
+        let entries: Vec<(String, i64)> = run_sync(async move {
+            let afc_arc = {
+                let maybe_device = APP_DEVICE_STATE.lock().await.get(udid.as_str()).cloned();
+
+                let device = match maybe_device {
+                    Some(d) => d,
+                    None => {
+                        eprintln!("list_dir_with_creation_date: device {udid} not found");
+                        return Vec::new();
+                    }
+                };
+
+                device.afc.clone()
+            };
+
+            let mut afc = afc_arc.lock().await;
+
+            let names = match afc.list_dir(&dir_str).await {
+                Ok(list) => list,
+                Err(e) => {
+                    eprintln!("list_dir_with_creation_date: list_dir({dir_str}) failed: {e}");
+                    return Vec::new();
+                }
+            };
+
+            let mut result = Vec::new();
+            for name in names {
+                if name == "." || name == ".." {
+                    continue;
+                }
+
+                let full_path = format!("{}/{}", dir_str, name);
+                match afc.get_file_info(full_path.clone()).await {
+                    Ok(info) => {
+                        // use creation time; could also choose info.modified
+                        let creation_utc = info.creation.and_utc();
+                        let msecs = creation_utc.timestamp_millis();
+                        result.push((name, msecs));
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "list_dir_with_creation_date: get_file_info({full_path}) failed: {e}"
+                        );
+                        continue;
+                    }
+                }
+            }
+            result
+        });
+
+        // Build QMap<QString, QVariant(QDateTime)>
+        let mut map: QMap<QMapPair_QString_QVariant> = QMap::default();
+        for (full_path, msecs) in entries {
+            let dt = QDateTime::from_msecs_since_epoch(msecs, &QTimeZone::utc());
+            let var = QVariant::from(&dt);
+            map.insert(QString::from(full_path), var);
+        }
+        map
+    }
+
+    fn delete_path(self: &Self, path: &QString) -> bool {
+        let udid = self.get_udid().to_string();
+        let path_str = path.to_string();
+
+        run_sync(async move {
+            let afc_arc = {
+                let maybe_device = APP_DEVICE_STATE.lock().await.get(udid.as_str()).cloned();
+
+                let device = match maybe_device {
+                    Some(d) => d,
+                    None => {
+                        eprintln!("delete_path: device {udid} not found");
+                        return false;
+                    }
+                };
+
+                device.afc.clone()
+            };
+
+            let mut afc = afc_arc.lock().await;
+
+            match afc.remove(&path_str).await {
+                Ok(_) => true,
+                Err(e) => {
+                    eprintln!("delete_path: delete({path_str}) failed: {e}");
+                    false
+                }
+            }
+        })
     }
 }

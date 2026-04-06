@@ -456,8 +456,8 @@ void GalleryWidget::setupPhotoGalleryView()
                     return;
 
                 qDebug() << "Opening preview for" << filePath;
-                auto *previewDialog =
-                    new MediaPreviewDialog(m_device, filePath);
+                auto *previewDialog = new MediaPreviewDialog(
+                    m_device, filePath, std::nullopt, false, this);
                 previewDialog->show();
             });
 
@@ -487,7 +487,8 @@ void GalleryWidget::onAlbumListLoaded(const QList<QString> &dcimTree)
         QString fullPath = QString("/DCIM/%1").arg(albumName);
         item->setData(fullPath, Qt::UserRole);
 
-        item->setIcon(QIcon::fromTheme("folder"));
+        item->setIcon(QIcon(":/resources/icons/"
+                            "MaterialSymbolsLightImageOutlineSharp.png"));
         m_albumModel->appendRow(item);
 
         loadAlbumThumbnailAsync(fullPath, item);

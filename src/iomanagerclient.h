@@ -41,24 +41,41 @@ public:
     IOManagerClient(const IOManagerClient &) = delete;
     IOManagerClient &operator=(const IOManagerClient &) = delete;
 
-    void startExport(const std::shared_ptr<iDescriptorDevice> device,
-                     const QList<QString> &items,
-                     const QString &destinationPath, const QString &jobTitle);
+    void
+    startExport(const std::shared_ptr<iDescriptorDevice> device,
+                const QList<QString> &items, const QString &destinationPath,
+                const QString &jobTitle,
+                std::optional<std::function<void()>> onComplete = std::nullopt);
     /* afc2 */
-    void startExport(const std::shared_ptr<iDescriptorDevice> device,
-                     const QList<QString> &items,
-                     const QString &destinationPath, const QString &jobTitle,
-                     bool useAfc2);
+    void
+    startExport(const std::shared_ptr<iDescriptorDevice> device,
+                const QList<QString> &items, const QString &destinationPath,
+                const QString &jobTitle, bool useAfc2,
+                std::optional<std::function<void()>> onComplete = std::nullopt);
     /* hause_arrest_afc*/
-    void startExport(const std::shared_ptr<iDescriptorDevice> device,
-                     const QList<QString> &items,
-                     const QString &destinationPath, const QString &exportTitle,
-                     const QString &bundleId);
+    void
+    startExport(const std::shared_ptr<iDescriptorDevice> device,
+                const QList<QString> &items, const QString &destinationPath,
+                const QString &exportTitle, const QString &bundleId,
+                std::optional<std::function<void()>> onComplete = std::nullopt);
 
-    void startImport(const std::shared_ptr<iDescriptorDevice> device,
-                     const QList<QString> &items,
-                     const QString &destinationPath, const QString &jobTitle,
-                     std::optional<bool> altAfc = std::nullopt);
+    void
+    startImport(const std::shared_ptr<iDescriptorDevice> device,
+                const QList<QString> &items, const QString &destinationPath,
+                const QString &jobTitle,
+                std::optional<std::function<void()>> onComplete = std::nullopt);
+    /* hause_arrest_afc */
+    void
+    startImport(const std::shared_ptr<iDescriptorDevice> device,
+                const QList<QString> &items, const QString &destinationPath,
+                const QString &jobTitle, const QString &bundleId,
+                std::optional<std::function<void()>> onComplete = std::nullopt);
+    /* afc2 */
+    void
+    startImport(const std::shared_ptr<iDescriptorDevice> device,
+                const QList<QString> &items, const QString &destinationPath,
+                const QString &jobTitle, bool useAfc2,
+                std::optional<std::function<void()>> onComplete = std::nullopt);
 
     void cancel(const QUuid &jobId);
     void cancelAllJobs();

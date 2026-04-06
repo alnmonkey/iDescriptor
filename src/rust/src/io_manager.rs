@@ -1,4 +1,4 @@
-use crate::{APP_DEVICE_STATE, RUNTIME, VIDEO_STREAMS, afc, utils};
+use crate::{APP_DEVICE_STATE, RUNTIME, VIDEO_STREAMS, utils};
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QUuid;
 use idevice::{IdeviceService, afc::AfcClient, services::afc::opcode::AfcFopenMode};
@@ -869,13 +869,13 @@ async fn export_single_item(
         .unwrap_or_else(|| base_path.to_str().unwrap_or(""))
         .to_string();
 
-    let file_size = match afc::get_file_size(afc_client, device_path.to_string()).await {
-        Some(size) => size,
-        None => {
-            //return on error
-            return Err(format!("Failed to get file size for {device_path}"));
-        }
-    };
+    // Use AFC get_file_info for size and timestamps
+    let info = afc_client
+        .get_file_info(device_path.to_string())
+        .await
+        .map_err(|e| format!("Failed to get file info for {device_path}: {e}"))?;
+    let file_size = info.size as i64;
+    let modified = info.modified;
 
     let mut remote = afc_client
         .open(device_path, AfcFopenMode::RdOnly)
@@ -917,10 +917,24 @@ async fn export_single_item(
                     &job_id_signal,
                     &qobject::QString::from(file_name_owned),
                     transferred_now,
-                    file_size as i64,
+                    file_size,
                 );
             })
             .ok();
+    }
+
+    /* preserve original modification time on exported file */
+    if transferred > 0 {
+        use filetime::FileTime;
+
+        let modified_utc = modified.and_utc();
+        let mtime = FileTime::from_unix_time(
+            modified_utc.timestamp(),
+            modified_utc.timestamp_subsec_nanos(),
+        );
+
+        // ignore errors
+        let _ = filetime::set_file_times(&output_path, mtime, mtime);
     }
 
     Ok(ExportItemResult {
@@ -1138,8 +1152,6 @@ async fn import_single_item(
     })
 }
 
-/// Generate a unique local output path by appending a numeric suffix.
-/// Mirrors ExportManagerThread::generateUniqueOutputPath logic.
 async fn generate_unique_output_path(base: &Path) -> PathBuf {
     if fs::metadata(base).await.is_err() {
         return base.to_path_buf();
