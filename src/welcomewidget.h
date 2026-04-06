@@ -20,6 +20,7 @@
 #ifndef WELCOMEWIDGET_H
 #define WELCOMEWIDGET_H
 
+#include "howtoconnectdialog.h"
 #include "iDescriptor-ui.h"
 #include <QHBoxLayout>
 #include <QLabel>
@@ -45,6 +46,9 @@ private:
     QLabel *m_imageLabel;
     ZLabel *m_instructionLabel;
     ZLabel *m_githubLabel;
+    ZLabel *m_howToConnectLabel;
+
+    void showHowToConnectDialog();
 };
 
 #endif // WELCOMEWIDGET_H

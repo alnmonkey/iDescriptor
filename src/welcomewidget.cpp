@@ -64,9 +64,23 @@ void WelcomeWidget::setupUI()
     m_imageLabel->setAlignment(Qt::AlignCenter);
 
     imageAndWirelessDevicesLayout->addWidget(m_imageLabel, 0, Qt::AlignHCenter);
+    QVBoxLayout *explorerWithIntructionLayout = new QVBoxLayout();
     NetworkDevicesToConnectWidget *networkDevicesWidget =
         new NetworkDevicesToConnectWidget();
-    imageAndWirelessDevicesLayout->addWidget(networkDevicesWidget);
+    m_howToConnectLabel = createStyledLabel("How to connect a wireless device?",
+                                            12, true, COLOR_HYPERLINK);
+    m_howToConnectLabel->setWordWrap(false);
+    QPalette howToConnectLabelPalette = m_howToConnectLabel->palette();
+    howToConnectLabelPalette.setColor(QPalette::WindowText, COLOR_HYPERLINK);
+    m_howToConnectLabel->setPalette(howToConnectLabelPalette);
+    m_howToConnectLabel->setCursor(Qt::PointingHandCursor);
+
+    connect(m_howToConnectLabel, &ZLabel::clicked, this,
+            &WelcomeWidget::showHowToConnectDialog);
+    explorerWithIntructionLayout->addWidget(networkDevicesWidget);
+    explorerWithIntructionLayout->addWidget(m_howToConnectLabel, 0,
+                                            Qt::AlignCenter);
+    imageAndWirelessDevicesLayout->addLayout(explorerWithIntructionLayout);
 
     m_mainLayout->addLayout(imageAndWirelessDevicesLayout);
     m_mainLayout->addSpacing(10);
@@ -134,4 +148,9 @@ ZLabel *WelcomeWidget::createStyledLabel(const QString &text, int fontSize,
 #endif
 
     return label;
+}
+
+void WelcomeWidget::showHowToConnectDialog()
+{
+    HowToConnectDialog(this).exec();
 }
