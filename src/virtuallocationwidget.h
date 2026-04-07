@@ -20,15 +20,30 @@
 #ifndef VIRTUAL_LOCATION_H
 #define VIRTUAL_LOCATION_H
 
+#include "appcontext.h"
 #include "devdiskimagehelper.h"
+#include "devdiskmanager.h"
 #include "devmodewidget.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
+#include "settingsmanager.h"
+#include <QDebug>
+#include <QDoubleValidator>
+#include <QGeoCoordinate>
+#include <QGridLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQuickItem>
+#include <QQuickView>
 #include <QQuickWidget>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 

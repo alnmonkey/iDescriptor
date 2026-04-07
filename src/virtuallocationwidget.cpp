@@ -18,29 +18,6 @@
  */
 
 #include "virtuallocationwidget.h"
-#include "appcontext.h"
-#include "devdiskimagehelper.h"
-#include "devdiskmanager.h"
-#include "iDescriptor.h"
-#include "settingsmanager.h"
-#include <QDebug>
-#include <QDoubleValidator>
-#include <QGeoCoordinate>
-#include <QGridLayout>
-#include <QGroupBox>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QLineEdit>
-#include <QMessageBox>
-#include <QPushButton>
-#include <QQmlApplicationEngine>
-#include <QQmlContext>
-#include <QQuickItem>
-#include <QQuickView>
-#include <QQuickWidget>
-#include <QUrl>
-#include <QVBoxLayout>
-#include <QWidget>
 
 // FIXME: on macOS setupToolFrame in Tool widget does nothing
 // probably because we are using a QQuickWidget
@@ -293,7 +270,7 @@ void VirtualLocation::updateInputsFromMap(const QString &latitude,
 
 void VirtualLocation::restoreButtons()
 {
-    QTimer::singleShot(1000, this, [this]() {
+    QTimer::singleShot(300, this, [this]() {
         m_applyButton->setText("Apply Location");
         m_applyButton->setEnabled(true);
     });
