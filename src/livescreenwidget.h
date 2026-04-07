@@ -20,12 +20,23 @@
 #ifndef LIVESCREEN_H
 #define LIVESCREEN_H
 
+#include "appcontext.h"
+#include "devdiskimagehelper.h"
+#include "devdiskmanager.h"
+#include "devmodewidget.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
+#include "zloadingwidget.h"
+#include <QDebug>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QThread>
 #include <QTimer>
+#include <QTransform>
+#include <QVBoxLayout>
 #include <QWidget>
 
 class LiveScreenWidget : public Tool
@@ -46,6 +57,7 @@ private:
     QLabel *m_imageLabel;
     QLabel *m_statusLabel;
     CXX::ScreenshotBackend *m_client;
+    ZLoadingWidget *m_loadingWidget;
 
     // controls for rotation / mirroring
     QWidget *m_controlsWidget = nullptr;
@@ -57,6 +69,7 @@ private:
     QPixmap m_lastPixmap;
     int m_rotationDegrees = 0; // 0, 90, 180, 270
     bool m_mirrorHorizontal = false;
+    int m_tries = 0;
 
 private:
     void startInitialization();

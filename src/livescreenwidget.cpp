@@ -18,19 +18,6 @@
  */
 
 #include "livescreenwidget.h"
-#include "appcontext.h"
-#include "devdiskimagehelper.h"
-#include "devdiskmanager.h"
-#include "iDescriptor.h"
-#include <QDebug>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QMessageBox>
-#include <QPushButton>
-#include <QSpinBox>
-#include <QTimer>
-#include <QTransform>
-#include <QVBoxLayout>
 
 LiveScreenWidget::LiveScreenWidget(
     const std::shared_ptr<iDescriptorDevice> device, QWidget *parent)
@@ -47,21 +34,28 @@ LiveScreenWidget::LiveScreenWidget(
                 }
             });
 
-    // Setup UI
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(10, 10, 10, 10);
-    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_loadingWidget = new ZLoadingWidget(true, this);
+    mainLayout->addWidget(m_loadingWidget);
+
+    // Setup UI
+    QVBoxLayout *contentLayout = new QVBoxLayout(this);
+    contentLayout->setContentsMargins(10, 10, 10, 10);
+    contentLayout->setSpacing(10);
+    m_loadingWidget->setupContentWidget(contentLayout);
 
     // Status label
     m_statusLabel = new QLabel("Connecting to screenshot service...");
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(m_statusLabel);
+    contentLayout->addWidget(m_statusLabel);
 
     // Screenshot display
     m_imageLabel = new QLabel();
     m_imageLabel->setMinimumSize(300, 600);
     m_imageLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(m_imageLabel, 1);
+    contentLayout->addWidget(m_imageLabel, 1);
 
     // Controls (rotate / mirror), initially hidden, shown when capturing starts
     m_controlsWidget = new QWidget(this);
@@ -79,7 +73,7 @@ LiveScreenWidget::LiveScreenWidget(
     controlsLayout->addStretch(1);
 
     m_controlsWidget->setVisible(false);
-    mainLayout->addWidget(m_controlsWidget);
+    contentLayout->addWidget(m_controlsWidget);
 
     // button actions
     connect(m_rotateCwButton, &QPushButton::clicked, this, [this]() {
@@ -104,14 +98,18 @@ LiveScreenWidget::LiveScreenWidget(
                 applyTransformAndDisplay();
             });
 
+    connect(m_loadingWidget, &ZLoadingWidget::retryClicked, this, [this]() {
+        m_loadingWidget->showLoading();
+        QTimer::singleShot(200, this, &LiveScreenWidget::startInitialization);
+    });
     connect(m_client, &CXX::ScreenshotBackend::init_failed, this,
             &LiveScreenWidget::handleFailedInitialization);
-    QTimer::singleShot(0, this, &LiveScreenWidget::startInitialization);
+    QTimer::singleShot(200, this, &LiveScreenWidget::startInitialization);
 }
 
 void LiveScreenWidget::startInitialization()
 {
-
+    m_loadingWidget->stop();
     m_client->start_capture();
 
     m_statusLabel->setText("Capturing");
@@ -120,9 +118,15 @@ void LiveScreenWidget::startInitialization()
 
 void LiveScreenWidget::handleFailedInitialization()
 {
+    m_loadingWidget->showLoading();
     bool dvt = m_device->ios_version >= 17;
     if (!dvt) {
-        // Start the initialization process - auto-mount mode
+        if (m_tries >= 2) {
+            m_loadingWidget->showError(
+                "Failed to initialize screenshot capture");
+            return;
+        }
+        ++m_tries;
         auto *helper = new DevDiskImageHelper(m_device, this);
 
         connect(helper, &DevDiskImageHelper::mountingCompleted, this,
@@ -139,7 +143,10 @@ void LiveScreenWidget::handleFailedInitialization()
         helper->start();
 
     } else {
-        // TODO: need a widget here to show how to enable DEV mode on device
+        DevModeWidget(m_device, this).exec();
+        m_loadingWidget->showError(
+            "Failed to initialize screenshot capture. Please ensure the device "
+            "has developer mode enabled.");
     }
 }
 
