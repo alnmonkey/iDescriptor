@@ -477,6 +477,14 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool, bool requiresDevice)
     } break;
 #ifndef __APPLE__
     case iDescriptorTool::iFuse: {
+        bool canOpen = iFuseWidget::canOpenForDevice(device);
+        if (!canOpen) {
+            QMessageBox::warning(this, "Unsupported Device",
+                                 "iFuse mounting is not supported for wireless "
+                                 "devices.");
+            return;
+        }
+
         if (!m_ifuseWidget) {
             m_ifuseWidget = new iFuseWidget(device);
             m_ifuseWidget->setAttribute(Qt::WA_DeleteOnClose);

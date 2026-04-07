@@ -42,6 +42,8 @@ class iFuseWidget : public Tool
     Q_OBJECT
 
 public:
+    static bool
+    canOpenForDevice(const std::shared_ptr<iDescriptorDevice> &device);
     explicit iFuseWidget(const std::shared_ptr<iDescriptorDevice> device,
                          QWidget *parent = nullptr);
 

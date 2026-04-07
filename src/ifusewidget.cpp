@@ -506,3 +506,9 @@ void iFuseWidget::onDeviceChanged(const QString &text)
         }
     }
 }
+
+bool iFuseWidget::canOpenForDevice(
+    const std::shared_ptr<iDescriptorDevice> &device)
+{
+    return !device->deviceInfo.isWireless;
+}
