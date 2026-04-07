@@ -25,7 +25,7 @@ HowToConnectDialog::HowToConnectDialog(QWidget *parent) : QDialog{parent}
                                           ":/resources/trust.png")); // second
     m_stackedWidget->addWidget(
         createPage("You can now unplug it iDescriptor will connect to it "
-                   "automatically (iOS 17 or later is required)",
+                   "automatically (iOS 15 or later is required)",
                    ":/resources/ios-version.png")); // third
     contentLayout->addWidget(m_stackedWidget, 1);
 
