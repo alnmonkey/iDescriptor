@@ -56,14 +56,19 @@ void WelcomeWidget::setupUI()
 
     QHBoxLayout *imageAndWirelessDevicesLayout = new QHBoxLayout();
 
-    m_imageLabel = new QLabel();
+    m_imageLabel = new ResponsiveQLabel();
     m_imageLabel->setPixmap(QPixmap(":/resources/connect.png"));
-    m_imageLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    m_imageLabel->setMinimumSize(QSize(400, 0));
+    m_imageLabel->setMinimumWidth(200);
+
+    m_imageLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
     m_imageLabel->setStyleSheet("background: transparent; border: none;");
     m_imageLabel->setAlignment(Qt::AlignCenter);
 
+    imageAndWirelessDevicesLayout->addSpacing(40);
     imageAndWirelessDevicesLayout->addWidget(m_imageLabel, 0, Qt::AlignHCenter);
+    imageAndWirelessDevicesLayout->addSpacing(40);
+
     QVBoxLayout *explorerWithIntructionLayout = new QVBoxLayout();
     NetworkDevicesToConnectWidget *networkDevicesWidget =
         new NetworkDevicesToConnectWidget();

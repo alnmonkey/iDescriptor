@@ -4,6 +4,9 @@ DevModeWidget::DevModeWidget(std::shared_ptr<iDescriptorDevice> device,
                              QWidget *parent)
     : QDialog{parent}
 {
+#ifdef WIN32
+    setupWinWindow(this);
+#endif
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 20, 0, 0);
     mainLayout->setSpacing(0);

@@ -34,6 +34,7 @@ using u_int64_t = uint64_t;
 #include <QThread>
 #include <QtCore/QObject>
 
+#include "service.h"
 #include <mutex>
 #include <pugixml.hpp>
 #include <string>
@@ -43,8 +44,7 @@ using u_int64_t = uint64_t;
 #define TOOL_NAME "iDescriptor"
 #define APP_LABEL "iDescriptor"
 #define APP_COPYRIGHT                                                          \
-    "© 2025 The iDescriptor Project contributors. See AUTHORS for details."
-#define AFC2_SERVICE_NAME "com.apple.afc2"
+    "© 2026 The iDescriptor Project contributors. See AUTHORS for details."
 #define RECOVERY_CLIENT_CONNECTION_TRIES 3
 #define APPLE_VENDOR_ID 0x05ac
 #define REPO_URL "https://github.com/iDescriptor/iDescriptor"
@@ -264,14 +264,6 @@ void init_idescriptor_recovery_device(uint64_t ecid,
                                       iDescriptorInitDeviceResultRecovery &res);
 #endif
 
-struct TakeScreenshotResult {
-    bool success = false;
-    QImage img;
-};
-
-void warn(const QString &message, const QString &title = "Warning",
-          QWidget *parent = nullptr);
-
 enum class AddType {
     Regular,
     Pairing,
@@ -281,22 +273,6 @@ enum class AddType {
 };
 
 std::string parse_product_type(const std::string &productType);
-
-struct MediaEntry {
-    std::string name;
-    bool isDir;
-};
-
-struct AFCFileTree {
-    std::vector<MediaEntry> entries;
-    bool success;
-    std::string currentPath;
-};
-
-struct WirelessInitArgs {
-    const QString ip;
-    const QString pairing_file;
-};
 
 enum class ImageCompatibility {
     Compatible,      // Exact match or known compatible version
@@ -410,139 +386,6 @@ inline QJsonObject getVersionedConfig(const QJsonObject &rootObj)
     }
     return QJsonObject();
 }
-
-inline void free_directory_listing(char **entries, size_t count)
-{
-    if (!entries)
-        return;
-    for (size_t i = 0; i < count; i++) {
-        if (entries[i]) {
-            // FIXME: crashes on Windows
-            //  free(entries[i]);
-        }
-    }
-    // FIXME: crashes on Windows
-    //  free(entries);
-}
-
-inline int read_file(const char *filename, uint8_t **data, size_t *length)
-{
-    FILE *file = fopen(filename, "rb");
-    if (!file) {
-        perror("Failed to open file");
-        return 0;
-    }
-
-    fseek(file, 0, SEEK_END);
-    *length = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    *data = (uint8_t *)malloc(*length);
-    if (!*data) {
-        perror("Failed to allocate memory");
-        fclose(file);
-        return 0;
-    }
-
-    if (fread(*data, 1, *length, file) != *length) {
-        perror("Failed to read file");
-        free(*data);
-        fclose(file);
-        return 0;
-    }
-
-    fclose(file);
-    return 1;
-}
-
-struct ExportResult {
-    QString sourceFilePath;
-    QString outputFilePath;
-    bool success = false;
-    bool cancelled = false;
-    QString errorMessage;
-    qint64 bytesTransferred = 0;
-};
-
-struct ExportJobSummary {
-    QUuid jobId;
-    int totalItems = 0;
-    int successfulItems = 0;
-    int failedItems = 0;
-    qint64 totalBytesTransferred = 0;
-    QString destinationPath;
-    bool wasCancelled = false;
-};
-
-struct ImportResult;
-
-template <typename ResultT> class PItem
-{
-public:
-    QString sourcePathOnDevice;
-    QString suggestedFileName;
-    QString d_udid;
-    std::function<void(const ResultT &)> callback;
-
-    PItem() = default;
-    PItem(const QString &sourcePath, const QString &fileName,
-          const QString &d_udid,
-          std::function<void(const ResultT &)> callback = nullptr)
-        : sourcePathOnDevice(sourcePath), suggestedFileName(fileName),
-          d_udid(std::move(d_udid)), callback(std::move(callback))
-    {
-    }
-};
-
-struct ExportItem : public PItem<ExportResult> {
-    using PItem<ExportResult>::PItem;
-};
-
-struct ImportItem : public PItem<ImportResult> {
-    using PItem<ImportResult>::PItem;
-};
-
-class JobBase
-{
-public:
-    QUuid jobId;
-    QString destinationPath;
-    std::optional<bool> altAfc;
-    std::atomic<bool> cancelRequested{false};
-    QUuid statusBalloonProcessId;
-    // device udid
-    QString d_udid;
-
-    virtual ~JobBase() = default;
-};
-
-template <typename ItemT> class Job : public JobBase
-{
-public:
-    QList<QString> items;
-};
-
-// Concrete aliases
-using ExportJob = Job<ExportItem>;
-using ImportJob = Job<ImportItem>;
-
-struct ImportResult {
-    QString sourceFilePath;
-    QString outputFilePath;
-    bool success = false;
-    QString errorMessage;
-    qint64 bytesTransferred = 0;
-};
-
-struct ImportJobSummary {
-    QUuid jobId;
-    int totalItems = 0;
-    int successfulItems = 0;
-    int failedItems = 0;
-    qint64 totalBytesTransferred = 0;
-    QString destinationPath;
-    bool wasCancelled = false;
-};
 
 struct XmlPlistDict {
     pugi::xml_node current_node;

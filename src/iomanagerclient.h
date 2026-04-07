@@ -83,7 +83,6 @@ public:
 
 private:
     explicit IOManagerClient(QObject *parent = nullptr);
-    void executeExportJob(ExportJob *job);
 };
 
 #endif // IOMANAGERCLIENT_H

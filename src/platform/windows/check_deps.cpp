@@ -19,6 +19,36 @@
 
 #include "win_common.h"
 #include <string>
+#include <windows.h>
+#include <winsvc.h>
+
+bool IsServiceRunning(LPCSTR serviceName)
+{
+    SC_HANDLE scm = OpenSCManagerA(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm) {
+        return false;
+    }
+
+    SC_HANDLE svc = OpenServiceA(scm, serviceName, SERVICE_QUERY_STATUS);
+    if (!svc) {
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    SERVICE_STATUS_PROCESS status;
+    DWORD bytesNeeded = 0;
+    bool isRunning = false;
+
+    if (QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
+                             reinterpret_cast<LPBYTE>(&status), sizeof(status),
+                             &bytesNeeded)) {
+        isRunning = (status.dwCurrentState == SERVICE_RUNNING);
+    }
+
+    CloseServiceHandle(svc);
+    CloseServiceHandle(scm);
+    return isRunning;
+}
 
 bool CheckRegistry(HKEY hKeyRoot, LPCSTR subKey, LPCSTR displayNameToFind)
 {
@@ -67,36 +97,56 @@ bool CheckRegistryKeyExists(HKEY hKeyRoot, LPCSTR subKey)
     return false;
 }
 
-bool IsAppleMobileDeviceSupportInstalled()
+SERVICE_AVAILABILITY IsAppleMobileDeviceSupportInstalled()
 {
+    bool installed = false;
+
     if (CheckRegistry(HKEY_LOCAL_MACHINE,
                       "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
                       "Apple Mobile Device Support")) {
-        return true;
+        installed = true;
+    } else if (CheckRegistry(HKEY_LOCAL_MACHINE,
+                             "SOFTWARE\\WOW6432Node\\Microsoft\\Wi"
+                             "ndows\\CurrentVersion\\Uninstall",
+                             "Apple Mobile Device Support")) {
+        installed = true;
     }
-    if (CheckRegistry(HKEY_LOCAL_MACHINE,
-                      "SOFTWARE\\WOW6432Node\\Microsoft\\Wi"
-                      "ndows\\CurrentVersion\\Uninstall",
-                      "Apple Mobile Device Support")) {
-        return true;
+
+    if (!installed) {
+        return SERVICE_UNAVAILABLE;
     }
-    return false;
+
+    if (IsServiceRunning("Apple Mobile Device Service")) {
+        return SERVICE_AVAILABLE;
+    }
+
+    return SERVICE_AVAILABLE_BUT_NOT_RUNNING;
 }
 
-bool IsWinFspInstalled()
+SERVICE_AVAILABILITY IsWinFspInstalled()
 {
+    bool installed = false;
+
     if (CheckRegistry(HKEY_LOCAL_MACHINE,
                       "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
                       "WinFsp 2025")) {
-        return true;
+        installed = true;
+    } else if (CheckRegistry(HKEY_LOCAL_MACHINE,
+                             "SOFTWARE\\WOW6432Node\\Microsoft\\Wi"
+                             "ndows\\CurrentVersion\\Uninstall",
+                             "WinFsp 2025")) {
+        installed = true;
     }
-    if (CheckRegistry(HKEY_LOCAL_MACHINE,
-                      "SOFTWARE\\WOW6432Node\\Microsoft\\Wi"
-                      "ndows\\CurrentVersion\\Uninstall",
-                      "WinFsp 2025")) {
-        return true;
+
+    if (!installed) {
+        return SERVICE_UNAVAILABLE;
     }
-    return false;
+
+    if (IsServiceRunning("WinFsp.Launcher")) {
+        return SERVICE_AVAILABLE;
+    }
+
+    return SERVICE_AVAILABLE_BUT_NOT_RUNNING;
 }
 
 bool is_iDescriptorInstalled()
@@ -115,12 +165,130 @@ bool is_iDescriptorInstalled()
     return false;
 }
 
-bool IsBonjourServiceInstalled()
+bool StartServiceByName(LPCSTR serviceName, DWORD timeoutMs = 30000)
 {
-    if (CheckRegistryKeyExists(HKEY_LOCAL_MACHINE,
-                               "SOFTWARE\\Apple Inc.\\Bonjour")) {
+    SC_HANDLE scm = OpenSCManagerA(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm) {
+        return false;
+    }
+
+    SC_HANDLE svc = OpenServiceA(scm, serviceName,
+                                 SERVICE_START | SERVICE_QUERY_STATUS |
+                                     SERVICE_CHANGE_CONFIG);
+    if (!svc) {
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    // set startup type to Automatic
+    ChangeServiceConfigA(svc,
+                         SERVICE_NO_CHANGE,  // service type
+                         SERVICE_AUTO_START, // start type
+                         SERVICE_NO_CHANGE,  // error control
+                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr);
+
+    SERVICE_STATUS_PROCESS status;
+    DWORD bytesNeeded = 0;
+
+    if (!QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
+                              reinterpret_cast<LPBYTE>(&status), sizeof(status),
+                              &bytesNeeded)) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    if (status.dwCurrentState == SERVICE_RUNNING) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return true;
+    }
+
+    if (!StartServiceA(svc, 0, nullptr)) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    DWORD startTick = GetTickCount();
+    do {
+        Sleep(500);
+
+        if (!QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
+                                  reinterpret_cast<LPBYTE>(&status),
+                                  sizeof(status), &bytesNeeded)) {
+            break;
+        }
+
+        if (status.dwCurrentState == SERVICE_RUNNING) {
+            CloseServiceHandle(svc);
+            CloseServiceHandle(scm);
+            return true;
+        }
+
+    } while (GetTickCount() - startTick < timeoutMs &&
+             (status.dwCurrentState == SERVICE_START_PENDING));
+
+    CloseServiceHandle(svc);
+    CloseServiceHandle(scm);
+    return false;
+}
+
+SERVICE_AVAILABILITY IsBonjourServiceInstalled()
+{
+    bool installed = CheckRegistryKeyExists(HKEY_LOCAL_MACHINE,
+                                            "SOFTWARE\\Apple Inc.\\Bonjour");
+    if (!installed) {
+        return SERVICE_UNAVAILABLE;
+    }
+
+    // Modern Bonjour service name
+    if (IsServiceRunning("Bonjour Service")) {
+        return SERVICE_AVAILABLE;
+    }
+
+    // Fallback for older installs
+    if (IsServiceRunning("mDNSResponder")) {
+        return SERVICE_AVAILABLE;
+    }
+
+    return SERVICE_AVAILABLE_BUT_NOT_RUNNING;
+}
+
+bool StartBonjourService()
+{
+    // Modern Bonjour service name
+    if (IsServiceRunning("Bonjour Service")) {
+        return true;
+    }
+    if (StartServiceByName("Bonjour Service")) {
+        return true;
+    }
+
+    // Apparently it used to be called mDNSResponder
+    if (IsServiceRunning("mDNSResponder")) {
+        return true;
+    }
+    if (StartServiceByName("mDNSResponder")) {
         return true;
     }
 
     return false;
+}
+
+bool StartAppleMobileDeviceService()
+{
+    if (IsServiceRunning("Apple Mobile Device Service")) {
+        return true;
+    }
+    return StartServiceByName("Apple Mobile Device Service");
+}
+
+bool StartWinFspService()
+{
+    if (IsServiceRunning("WinFsp.Launcher")) {
+        return true;
+    }
+    return StartServiceByName("WinFsp.Launcher");
 }

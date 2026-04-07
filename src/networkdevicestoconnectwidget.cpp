@@ -215,10 +215,9 @@ void NetworkDevicesToConnectWidget::setupUI()
     // Scroll area
     m_scrollArea = new QScrollArea();
     m_scrollArea->setWidgetResizable(true);
-    m_scrollArea->setMinimumHeight(400);
-    m_scrollArea->setMaximumHeight(400);
     m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_scrollArea->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }");
     /* FIXME: We need a better approach to theme awareness   */
@@ -236,10 +235,9 @@ void NetworkDevicesToConnectWidget::setupUI()
     m_deviceLayout->addStretch();
 
     m_scrollArea->setWidget(m_scrollContent);
-    groupLayout->addWidget(m_scrollArea);
+    groupLayout->addWidget(m_scrollArea, 1);
 
-    mainLayout->addWidget(m_deviceGroup);
-    mainLayout->addStretch();
+    mainLayout->addWidget(m_deviceGroup, 1);
 }
 
 void NetworkDevicesToConnectWidget::createDeviceCard(

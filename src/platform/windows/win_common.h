@@ -28,15 +28,20 @@
 #include <winternl.h>
 #include <ws2tcpip.h>
 
+#include "../../service.h"
+
 enum WIN_BACKDROP { MICA = 2, ACRYLIC = 3, MICA_ALT = 4 };
 
-bool IsAppleMobileDeviceSupportInstalled();
-bool IsWinFspInstalled();
+SERVICE_AVAILABILITY IsAppleMobileDeviceSupportInstalled();
+SERVICE_AVAILABILITY IsWinFspInstalled();
 bool is_iDescriptorInstalled();
-bool IsBonjourServiceInstalled();
+SERVICE_AVAILABILITY IsBonjourServiceInstalled();
+
+bool StartAppleMobileDeviceService();
+bool StartWinFspService();
+bool StartBonjourService();
 
 void enableAcrylic(HWND hwnd);
-void setupTitleBar(HWND hwnd);
 void enableMica(HWND hwnd);
 
 inline QString getWindowsAccentColor()

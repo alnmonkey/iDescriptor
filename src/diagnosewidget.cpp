@@ -23,27 +23,9 @@
 #include <archive.h>
 #include <archive_entry.h>
 #endif
-#include "iDescriptor-ui.h"
-#include <QApplication>
-#include <QCoreApplication>
-#include <QCryptographicHash>
-#include <QDesktopServices>
-#include <QDir>
-#include <QFile>
-#include <QFrame>
-#include <QMessageBox>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QProcess>
-#include <QRegularExpression>
-#include <QStandardPaths>
-#include <QTextStream>
-#include <QTimer>
-#include <QUrl>
 
 DependencyItem::DependencyItem(const QString &name, const QString &description,
-                               QWidget *parent)
+                               bool optional, QWidget *parent)
     : QWidget(parent), m_name(name)
 {
     QHBoxLayout *layout = new QHBoxLayout(this);
@@ -58,6 +40,9 @@ DependencyItem::DependencyItem(const QString &name, const QString &description,
     m_nameLabel->setFont(nameFont);
 
     m_descriptionLabel = new QLabel(QString("(%1)").arg(description));
+    if (optional) {
+        m_descriptionLabel->setText(m_descriptionLabel->text() + " (Optional)");
+    }
     m_descriptionLabel->setWordWrap(false);
 
     infoLayout->addWidget(m_nameLabel);
@@ -92,12 +77,17 @@ DependencyItem::DependencyItem(const QString &name, const QString &description,
     layout->addLayout(actionLayout);
 }
 
-void DependencyItem::setInstalled(bool installed, bool isRequired)
+void DependencyItem::setInstalled(SERVICE_AVAILABILITY availability,
+                                  bool isRequired)
 {
     setChecking(false);
+    m_availability = availability;
 
-    if (installed) {
-        if (m_name == "Avahi Daemon") {
+    const bool isInstalled = (availability != SERVICE_UNAVAILABLE);
+    const bool isRunning = (availability == SERVICE_AVAILABLE);
+
+    if (isRunning) {
+        if (m_name == "Avahi Daemon" || m_name == "Bonjour Service") {
             m_statusLabel->setText("Activated");
         } else {
             m_statusLabel->setText("Installed");
@@ -112,6 +102,14 @@ void DependencyItem::setInstalled(bool installed, bool isRequired)
             QString("QLabel { color: %1; }").arg(COLOR_GREEN.name())));
 #endif
         m_installButton->setVisible(false);
+        return;
+    }
+
+    // Not running or not installed
+    if (isInstalled) {
+        // Installed but not running (only meaningful for services)
+        m_statusLabel->setText("Installed but not running");
+        m_installButton->setText("Enable");
     } else {
         if (m_name == "Avahi Daemon") {
             m_statusLabel->setText("Not activated");
@@ -124,19 +122,19 @@ void DependencyItem::setInstalled(bool installed, bool isRequired)
             }
             m_installButton->setText("Install");
         }
-#ifndef WIN32
-        if (isRequired) {
-            m_statusLabel->setStyleSheet("color: red;");
-        }
-#else
-        // FIXME: if we call this multiple times, the styles will keep stacking
-        // and become a mess, need a better way to handle this
-        m_statusLabel->setStyleSheet(mergeStyles(
-            m_statusLabel,
-            QString("QLabel { color: %1; }").arg(COLOR_RED.name())));
-#endif
-        m_installButton->setVisible(true);
     }
+
+#ifndef WIN32
+    if (isRequired) {
+        m_statusLabel->setStyleSheet("color: red;");
+    }
+#else
+    // FIXME: if we call this multiple times, the styles will keep stacking
+    // and become a mess, need a better way to handle this
+    m_statusLabel->setStyleSheet(mergeStyles(
+        m_statusLabel, QString("QLabel { color: %1; }").arg(COLOR_RED.name())));
+#endif
+    m_installButton->setVisible(true);
 }
 
 void DependencyItem::setChecking(bool checking)
@@ -164,13 +162,30 @@ void DependencyItem::setInstalling(bool installing)
     }
 }
 
+void DependencyItem::setActivating(bool activating)
+{
+    if (activating) {
+        m_statusLabel->setText("Activating...");
+        m_statusLabel->setStyleSheet("color: gray;");
+        m_installButton->setVisible(false);
+        m_processIndicator->setVisible(true);
+        m_processIndicator->start();
+    } else {
+        m_processIndicator->stop();
+        m_processIndicator->setVisible(false);
+    }
+}
+
 void DependencyItem::setProgress(const QString &message)
 {
     m_statusLabel->setText(message);
     m_statusLabel->setStyleSheet("color: gray;");
 }
 
-void DependencyItem::onInstallClicked() { emit installRequested(m_name); }
+void DependencyItem::onInstallClicked()
+{
+    emit installRequested(m_name, m_availability);
+}
 
 DiagnoseWidget::DiagnoseWidget(QWidget *parent)
     : QWidget(parent), m_isExpanded(false)
@@ -183,14 +198,15 @@ DiagnoseWidget::DiagnoseWidget(QWidget *parent)
         "Required for AirPlay, wireless devices and network service discovery");
     addDependencyItem("Apple Mobile Device Support",
                       "Required for iOS device communication");
-    addDependencyItem("WinFsp", "Required for mounting your device as a drive");
+    addDependencyItem("WinFsp", "Required for mounting your device as a drive",
+                      true);
 #endif
 
 #ifdef __linux__
 #ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
-    addDependencyItem(
-        "UDEV rules",
-        "Required for recovery devices requires manual setup (optional)");
+    addDependencyItem("UDEV rules",
+                      "Required for recovery devices requires manual setup",
+                      true);
 #endif
     addDependencyItem(
         "Avahi Daemon",
@@ -225,8 +241,10 @@ void DiagnoseWidget::setupUI()
             [this]() { checkDependencies(false); });
 
     // Toggle button
-    m_toggleButton = new QPushButton("▼");
-    m_toggleButton->setFixedSize(24, 24);
+    m_toggleButton = new ZIconWidget(
+        QIcon(":/resources/icons/MaterialSymbolsLightKeyboardArrowDown.png"),
+        "Expand/Collapse");
+    // m_toggleButton->setFixedSize(24, 24);
     m_toggleButton->setCheckable(true);
     connect(m_toggleButton, &QPushButton::clicked, this,
             &DiagnoseWidget::onToggleExpand);
@@ -249,14 +267,16 @@ void DiagnoseWidget::setupUI()
 }
 
 void DiagnoseWidget::addDependencyItem(const QString &name,
-                                       const QString &description)
+                                       const QString &description,
+                                       bool optional)
 {
-    DependencyItem *item = new DependencyItem(name, description);
+    DependencyItem *item = new DependencyItem(name, description, optional);
     item->setProperty("name", name);
+    item->setProperty("optional", optional);
     connect(item, &DependencyItem::installRequested, this,
             &DiagnoseWidget::onInstallRequested);
 
-    m_dependencyItems.append(item);
+    m_dependencyItems[name] = item;
 
     // Insert before the stretch
     m_itemsLayout->insertWidget(m_itemsLayout->count() - 1, item);
@@ -274,9 +294,11 @@ void DiagnoseWidget::checkDependencies(bool autoExpand)
     QTimer::singleShot(500, [this, autoExpand]() {
         int installedCount = 0;
         int totalCount = 0;
+        int optionalInstalledCount = 0;
+        int optionalTotalCount = 0;
 
         for (DependencyItem *item : m_dependencyItems) {
-            bool installed = false;
+            SERVICE_AVAILABILITY installed = SERVICE_UNAVAILABLE;
             QString itemName = item->property("name").toString();
 
 #ifdef WIN32
@@ -297,27 +319,36 @@ void DiagnoseWidget::checkDependencies(bool autoExpand)
             }
 #endif
 
-            bool isRequired = true;
-#ifdef __linux__
-            if (itemName == "UDEV rules") {
-                isRequired = false;
-            }
-#endif
-            item->setInstalled(installed, isRequired);
-
-            if (isRequired) {
+            bool isRequired = item->property("optional").toBool() == false;
+            if (!isRequired) {
+                ++optionalTotalCount;
+                if (installed == SERVICE_AVAILABILITY::SERVICE_AVAILABLE) {
+                    ++optionalInstalledCount;
+                }
+            } else {
                 ++totalCount;
-                if (installed)
+                if (installed == SERVICE_AVAILABILITY::SERVICE_AVAILABLE) {
                     ++installedCount;
+                }
             }
+
+            item->setInstalled(installed, isRequired);
         }
 
         if (installedCount == totalCount) {
-            m_summaryLabel->setText(
-                QString(
-                    "All required dependencies are installed/activated (%1/%2)")
-                    .arg(installedCount)
-                    .arg(totalCount));
+            if (optionalTotalCount != optionalInstalledCount) {
+                int optionalMissingCount =
+                    optionalTotalCount - optionalInstalledCount;
+                QString optionalText = optionalMissingCount == 1
+                                           ? "optional capability is"
+                                           : "optional capabilities are";
+                m_summaryLabel->setText(QString("%1 %2 available")
+                                            .arg(optionalMissingCount)
+                                            .arg(optionalText));
+            } else {
+                m_summaryLabel->setText(
+                    "All required dependencies are installed");
+            }
             m_summaryLabel->setStyleSheet(
                 QString("color: %1; font-weight: bold;")
                     .arg(COLOR_GREEN.name()));
@@ -342,23 +373,55 @@ void DiagnoseWidget::checkDependencies(bool autoExpand)
 
 void DiagnoseWidget::onInstallRequested(const QString &name)
 {
+    DependencyItem *itemToInstall = m_dependencyItems.value(name);
+    if (!itemToInstall) {
+        QMessageBox::warning(this, "Error",
+                             "Dependency item not found: " + name);
+        return;
+    }
+    SERVICE_AVAILABILITY availability = itemToInstall->availability();
 #ifdef WIN32
     if (name == "Bonjour Service") {
+        if (availability == SERVICE_AVAILABLE_BUT_NOT_RUNNING) {
+            qDebug() << "Attempting to start Bonjour Service...";
+            itemToInstall->setActivating(true);
+            QTimer::singleShot(100, [this, itemToInstall, name]() {
+                bool success = StartBonjourService();
+                itemToInstall->setActivating(false);
+
+                if (!success) {
+                    QMessageBox::warning(
+                        this, "Activation Failed",
+                        "Failed to start the service. Please try to start it "
+                        "manually from the Services app (services.msc)");
+                }
+                checkDependencies(false);
+            });
+            return;
+        }
+
         installBonjourRuntime();
         return;
     }
 
     if (name == "Apple Mobile Device Support") {
-        DependencyItem *itemToInstall = nullptr;
-        for (DependencyItem *item : m_dependencyItems) {
-            if (item->property("name").toString() == name) {
-                itemToInstall = item;
-                break;
-            }
-        }
+        if (availability == SERVICE_AVAILABLE_BUT_NOT_RUNNING) {
+            qDebug() << "Attempting to start Apple Mobile Device Service...";
+            itemToInstall->setActivating(true);
+            QTimer::singleShot(100, [this, itemToInstall, name]() {
+                bool success = StartWinFspService();
+                itemToInstall->setActivating(false);
 
-        if (!itemToInstall)
+                if (!success) {
+                    QMessageBox::warning(
+                        this, "Activation Failed",
+                        "Failed to start the service. Please try to start it "
+                        "manually from the Services app (services.msc)");
+                }
+                checkDependencies(false);
+            });
             return;
+        }
 
         itemToInstall->setInstalling(true);
 
@@ -366,45 +429,31 @@ void DiagnoseWidget::onInstallRequested(const QString &name)
                              "/install-apple-drivers.ps1";
 
         QProcess *installProcess = new QProcess(this);
-        connect(
-            installProcess, &QProcess::finished, this,
-            [this, installProcess,
-             itemToInstall](int exitCode, QProcess::ExitStatus exitStatus) {
-                if (exitStatus != QProcess::NormalExit || exitCode != 0) {
-                    QString errorOutput =
-                        installProcess->readAllStandardError();
-                    if (errorOutput.isEmpty()) {
-                        errorOutput = installProcess->readAllStandardOutput();
+        connect(installProcess, &QProcess::finished, this,
+                [this, installProcess,
+                 itemToInstall](int exitCode, QProcess::ExitStatus exitStatus) {
+                    if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+                        QString errorOutput =
+                            installProcess->readAllStandardError();
+                        if (errorOutput.isEmpty()) {
+                            errorOutput =
+                                installProcess->readAllStandardOutput();
+                        }
+                        QMessageBox::warning(
+                            this, "Installation Failed",
+                            "This might be a "
+                            "permissions issue or an internal error.\n\n"
+                            "Details: " +
+                                errorOutput.trimmed());
                     }
-                    QMessageBox::warning(
-                        this, "Installation Failed",
-                        "Failed to launch the installation script. This "
-                        "might be a "
-                        "permissions issue or an internal error.\n\n"
-                        "Details: " +
-                            errorOutput.trimmed());
-                    checkDependencies(false); // Revert UI on failure
-                } else {
-                    // FIXME: we need to track process completion
-                    QMessageBox::information(
-                        this, "Installation Started",
-                        "The installation process has been started.\n"
-                        "Please approve the administrator prompt (UAC) if it "
-                        "appears.\n"
-                        "After installation, please re-run the dependency "
-                        "check");
+                    checkDependencies(false);
+                    installProcess->deleteLater();
+                });
 
-                    itemToInstall->setInstalling(false);
-                }
-                installProcess->deleteLater();
-            });
-
-        // Correctly launch powershell.exe elevated, and pass the script to it.
-        // The -Wait parameter is removed as it does not work with -Verb RunAs.
         QString command =
             QString("Start-Process -FilePath powershell.exe -Verb RunAs "
                     "-ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "
-                    "\"%1\"'")
+                    "\"%1\"' -Wait")
                 .arg(scriptPath);
 
         QStringList args;
@@ -606,7 +655,11 @@ void DiagnoseWidget::onToggleExpand()
 {
     m_isExpanded = !m_isExpanded;
     m_itemsWidget->setVisible(m_isExpanded);
-    m_toggleButton->setText(m_isExpanded ? "▲" : "▼");
+    m_toggleButton->setIcon(
+        m_isExpanded
+            ? QIcon(":/resources/icons/MaterialSymbolsLightKeyboardArrowUp.png")
+            : QIcon(":/resources/icons/"
+                    "MaterialSymbolsLightKeyboardArrowDown.png"));
     m_itemsWidget->updateGeometry();
     adjustSize();
 }
@@ -614,13 +667,7 @@ void DiagnoseWidget::onToggleExpand()
 #ifdef WIN32
 void DiagnoseWidget::installBonjourRuntime()
 {
-    DependencyItem *itemToInstall = nullptr;
-    for (DependencyItem *item : m_dependencyItems) {
-        if (item->property("name").toString() == "Bonjour Service") {
-            itemToInstall = item;
-            break;
-        }
-    }
+    DependencyItem *itemToInstall = m_dependencyItems.value("Bonjour Service");
 
     if (!itemToInstall)
         return;

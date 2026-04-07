@@ -172,7 +172,7 @@ void DiskUsageWidget::setupUI()
                               "border: none; padding: 0; margin: 0; }");
     m_galleryBar->setStyleSheet(
         "QWidget#galleryBar { background-color: #9b59b6; border: 1px solid "
-        "#8e44ad;  border-radius:0px; padding: 0; margin: 0; }");
+        "#b36cd1;  border-radius:0px; padding: 0; margin: 0; }");
     m_othersBar->setStyleSheet(
         "QWidget#othersBar { background-color: #a28729; border: 1px solid "
         "#c4a32d;  border-radius:0px; padding: 0; margin: 0; }");
