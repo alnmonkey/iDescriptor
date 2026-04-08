@@ -19,6 +19,7 @@
 
 #include "dnssd_service.h"
 #include <QDebug>
+#include <QMessageBox>
 #include <QMutexLocker>
 #include <cstring>
 
@@ -53,6 +54,10 @@ void DnssdService::startBrowsing()
 
     if (err != kDNSServiceErr_NoError) {
         qWarning() << "DNSServiceBrowse failed:" << err;
+        QMessageBox::warning(nullptr, "DNSSD failed to launch",
+                             "Failed to start DNSSD browsing this means you "
+                             "cannot use wireless devices and AirPlay please "
+                             "solve this issue from dependency check area");
         return;
     }
 
