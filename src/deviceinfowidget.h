@@ -56,7 +56,7 @@ private slots:
 private:
     const std::shared_ptr<iDescriptorDevice> m_device;
     void updateBatteryInfo(const QString &diagnostics);
-    void updateChargingStatusIcon();
+    void updateChargingStatus();
     QLabel *m_chargingStatusLabel;
     QLabel *m_chargingWattsWithCableTypeLabel;
     BatteryWidget *m_batteryWidget;

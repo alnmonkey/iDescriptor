@@ -140,7 +140,6 @@ DeviceInfoWidget::DeviceInfoWidget(
     m_lightningIconLabel =
         new ZIconLabel(QIcon(":/resources/icons/MdiLightningBolt.png"),
                        " Charging", 1.0, this);
-    updateChargingStatusIcon();
 
     m_batteryWidget = new BatteryWidget(
         qBound<int>(1, device->deviceInfo.batteryInfo.currentBatteryLevel, 100),
@@ -151,12 +150,9 @@ DeviceInfoWidget::DeviceInfoWidget(
     chargingLayout->addWidget(m_lightningIconLabel);
     chargingLayout->addWidget(m_batteryWidget);
 
-    m_chargingWattsWithCableTypeLabel = new QLabel(
-        QString::number(device->deviceInfo.batteryInfo.watts) + "W" + "/" +
-        (device->deviceInfo.batteryInfo.usbConnectionType ==
-                 BatteryInfo::ConnectionType::USB
-             ? "USB"
-             : "USB-C"));
+    m_chargingWattsWithCableTypeLabel = new QLabel();
+
+    updateChargingStatus();
 
     headerLayout->addWidget(devProductType);
     headerLayout->addWidget(diskCapacityLabel);
@@ -374,20 +370,35 @@ void DeviceInfoWidget::updateBatteryInfo(const QString &diagnostics)
     else
         parseDeviceBattery(xml_doc, d);
     /*UI*/
-    updateChargingStatusIcon();
-    m_chargingWattsWithCableTypeLabel->setText(
-        QString::number(d.batteryInfo.watts) + "W" + "/" +
-        (d.batteryInfo.usbConnectionType == BatteryInfo::ConnectionType::USB
-             ? "USB"
-             : "USB-C"));
+    updateChargingStatus();
+}
+
+void DeviceInfoWidget::updateChargingStatus()
+{
+    auto &d = m_device->deviceInfo;
+    int watts = d.batteryInfo.watts;
+
+    auto setValues = [this, d]() {
+        m_chargingWattsWithCableTypeLabel->setText(
+            QString::number(d.batteryInfo.watts) + "W" + "/" +
+            (d.batteryInfo.usbConnectionType == BatteryInfo::ConnectionType::USB
+                 ? "USB"
+                 : "USB-C"));
+    };
+
+    // watts can be 0 device is not charging
+    if (watts) {
+        setValues();
+    } else if (d.isWireless) {
+        m_chargingWattsWithCableTypeLabel->setText("Wireless");
+    } else {
+        setValues();
+    }
 
     m_batteryWidget->updateContext(
         d.batteryInfo.isCharging,
         qBound<int>(1, d.batteryInfo.currentBatteryLevel, 100));
-}
 
-void DeviceInfoWidget::updateChargingStatusIcon()
-{
     if (m_device->deviceInfo.batteryInfo.isCharging) {
         m_chargingStatusLabel->setText("Charging");
         m_chargingStatusLabel->setStyleSheet(
