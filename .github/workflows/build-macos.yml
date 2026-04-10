@@ -78,7 +78,8 @@ jobs:
             gst-plugins-bad \
             gst-plugins-ugly \
             gst-libav \
-            create-dmg
+            create-dmg \
+            jpeg-xl
 
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
