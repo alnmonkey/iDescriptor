@@ -151,6 +151,7 @@ void CableInfoWidget::analyzeCableInfo()
             "Failed to find plist dictionary in response.");
         return;
     }
+    m_cableInfo.isOldDevice = !ioreg["ConnectionActive"].valid();
     m_cableInfo.isConnected = ioreg["ConnectionActive"].getBool();
 
     // Check if genuine (Apple manufacturer and valid model info)
@@ -254,7 +255,8 @@ void CableInfoWidget::updateUI()
         delete item;
     }
 
-    if (!m_cableInfo.isConnected) {
+    // old devices don't report ConnectionActive
+    if (!m_cableInfo.isConnected && !m_cableInfo.isOldDevice) {
         m_loadingWidget->showError(
             QString("%1 does not seem to be connected to any cable.")
                 .arg(QString::fromStdString(m_device->deviceInfo.productType)));

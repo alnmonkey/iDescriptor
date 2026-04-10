@@ -67,6 +67,8 @@ private:
         QStringList supportedTransports;
         QStringList activeTransports;
         bool isFakeInfo = false;
+        bool isOldDevice =
+            false; // devices that don't report ConnectionActive are likely old
     };
 
     // UI components
