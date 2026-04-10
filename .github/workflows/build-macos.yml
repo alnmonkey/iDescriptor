@@ -79,7 +79,8 @@ jobs:
             gst-plugins-ugly \
             gst-libav \
             create-dmg \
-            jpeg-xl
+            jpeg-xl \
+            sqlite
 
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
