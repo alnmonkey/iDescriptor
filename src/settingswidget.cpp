@@ -46,6 +46,7 @@ SettingsWidget::SettingsWidget(QWidget *parent) : QDialog{parent}
 {
 #ifdef WIN32
     m_backDropTypeCombo = nullptr;
+    m_disableMicaCheckBox = nullptr;
 #endif
     setupUI();
     loadSettings();
@@ -144,6 +145,10 @@ void SettingsWidget::setupUI()
         backDropTypeLayout->addStretch();
 
         generalLayout->addLayout(backDropTypeLayout);
+
+        m_disableMicaCheckBox =
+            new QCheckBox("Disable Mica effects (also disables WinUI styles)");
+        generalLayout->addWidget(m_disableMicaCheckBox);
     }
 #endif
 
@@ -350,6 +355,9 @@ void SettingsWidget::loadSettings()
             m_backDropTypeCombo->setCurrentIndex(0);
         }
     }
+    if (m_disableMicaCheckBox) {
+        m_disableMicaCheckBox->setChecked(sm->disableMica());
+    }
 #endif
 }
 
@@ -425,6 +433,12 @@ void SettingsWidget::connectSignals()
                     m_restartRequired = true;
                     onSettingChanged();
                 });
+    }
+    if (m_disableMicaCheckBox) {
+        connect(m_disableMicaCheckBox, &QCheckBox::toggled, this, [this]() {
+            m_restartRequired = true;
+            onSettingChanged();
+        });
     }
 #endif
 }
@@ -533,6 +547,9 @@ void SettingsWidget::saveSettings()
         } else {
             sm->setWinBackdropType(static_cast<WIN_BACKDROP>(data.toInt()));
         }
+    }
+    if (m_disableMicaCheckBox) {
+        sm->setDisableMica(m_disableMicaCheckBox->isChecked());
     }
 #endif
 }

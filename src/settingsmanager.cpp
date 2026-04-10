@@ -24,6 +24,10 @@
 #include <QSettings>
 #include <QStandardPaths>
 
+#ifdef WIN32
+#include "platform/windows/win_common.h"
+#endif
+
 const QString SEEN_DEVICE_PREFIX = "seenDevices/";
 
 SettingsManager *SettingsManager::sharedInstance()
@@ -283,6 +287,7 @@ void SettingsManager::resetToDefaults()
 
 #ifdef WIN32
     setWinBackdropType(ACRYLIC);
+    setDisableMica(false);
 #endif
 }
 
@@ -521,6 +526,17 @@ WIN_BACKDROP SettingsManager::winBackdropType() const
     return static_cast<WIN_BACKDROP>(
         m_settings->value("winBackdropType", static_cast<int>(ACRYLIC))
             .toInt());
+}
+
+bool SettingsManager::disableMica() const
+{
+    return m_settings->value("disableMica", false).toBool();
+}
+
+void SettingsManager::setDisableMica(bool disabled)
+{
+    m_settings->setValue("disableMica", disabled);
+    m_settings->sync();
 }
 #endif
 

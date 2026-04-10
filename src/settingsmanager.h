@@ -140,6 +140,9 @@ public:
 #ifdef WIN32
     void setWinBackdropType(WIN_BACKDROP type);
     WIN_BACKDROP winBackdropType() const;
+
+    bool disableMica() const;
+    void setDisableMica(bool disabled);
 #endif
 
     bool isSleepyDeviceWarningDismissed() const;

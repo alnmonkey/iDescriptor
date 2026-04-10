@@ -81,6 +81,7 @@ private:
 
 #ifdef WIN32
     QComboBox *m_backDropTypeCombo;
+    QCheckBox *m_disableMicaCheckBox;
 #endif
 
     // Buttons

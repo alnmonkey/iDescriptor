@@ -45,10 +45,18 @@ int main(int argc, char *argv[])
                                  "their default values.");
     }
 #ifdef WIN32
+
+    bool enableMica = !a.arguments().contains("--disable-mica") &&
+                      !SettingsManager::sharedInstance()->disableMica();
+    if (!enableMica) {
+        SettingsManager::sharedInstance()->setDisableMica(true);
+        qDebug() << "Mica effect disabled";
+    }
+
     QApplication::setEffectEnabled(Qt::UI_AnimateCombo, false);
 
     QOperatingSystemVersion osVersion = QOperatingSystemVersion::current();
-    if (osVersion >= QOperatingSystemVersion::Windows11) {
+    if (enableMica && osVersion >= QOperatingSystemVersion::Windows11) {
         QFile styleFile(detectDarkModeWindows() ? ":/resources/win.dark.qcss"
                                                 : ":/resources/win.light.qcss");
         if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
@@ -58,8 +66,7 @@ int main(int argc, char *argv[])
             a.setStyleSheet(style);
         }
     } else {
-        qDebug() << "Windows version is older than 11, not applying winui "
-                    "stylesheet.";
+        qDebug() << "Not applying WinUI stylesheet.";
     }
 
     QString appPath = QCoreApplication::applicationDirPath();

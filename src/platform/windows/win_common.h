@@ -41,9 +41,16 @@ SERVICE_AVAILABILITY IsBonjourServiceInstalled();
 // bool StartAppleMobileDeviceService();
 // bool StartWinFspService();
 // bool StartBonjourService();
-
-void enableAcrylic(HWND hwnd);
 void enableMica(HWND hwnd);
+void setupWinWindow(QWidget *window);
+
+enum CornerPreference : int {
+    Corner_Default = DWMWCP_DEFAULT,
+    Corner_NoRound = DWMWCP_DONOTROUND,
+    Corner_Round = DWMWCP_ROUND,
+    Corner_RoundSmall = DWMWCP_ROUNDSMALL
+};
+void SetCorner(HWND hwnd, CornerPreference corner);
 
 inline QString getWindowsAccentColor()
 {
@@ -96,39 +103,4 @@ inline bool detectDarkModeWindows()
         RegCloseKey(hKey);
     }
     return true; // Default to dark mode if detection fails
-}
-
-inline void setupWinWindow(QWidget *window)
-{
-    QOperatingSystemVersion osVersion = QOperatingSystemVersion::current();
-    if (osVersion < QOperatingSystemVersion::Windows11)
-        return;
-    window->setAttribute(Qt::WA_TranslucentBackground);
-    HWND hwnd = reinterpret_cast<HWND>(window->winId());
-    enableMica(hwnd);
-
-    /*
-        normally we had plans to enable acrylic on win 10 but since it's
-       untested and may cause issues, we'll just enable mica on win 11 and above
-       for now
-    */
-    // enableAcrylic(hwnd);
-}
-
-enum CornerPreference : int {
-    Corner_Default = DWMWCP_DEFAULT,
-    Corner_NoRound = DWMWCP_DONOTROUND,
-    Corner_Round = DWMWCP_ROUND,
-    Corner_RoundSmall = DWMWCP_ROUNDSMALL
-};
-/* apparently this only works on Win 11 but should not crash on older versions
- */
-inline void SetCorner(HWND hwnd, CornerPreference corner)
-{
-    if (corner != Corner_Default) {
-        DWM_WINDOW_CORNER_PREFERENCE cp =
-            static_cast<DWM_WINDOW_CORNER_PREFERENCE>(corner);
-        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cp,
-                              sizeof(cp));
-    }
 }

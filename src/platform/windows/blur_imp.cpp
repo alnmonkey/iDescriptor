@@ -99,3 +99,33 @@ void enableMica(HWND hwnd)
         DwmSetWindowAttribute(hwnd, DWMWA_MICA_EFFECT, &mica, sizeof(mica));
     }
 }
+
+void setupWinWindow(QWidget *window)
+{
+    QOperatingSystemVersion osVersion = QOperatingSystemVersion::current();
+    if (osVersion < QOperatingSystemVersion::Windows11 ||
+        SettingsManager::sharedInstance()->disableMica())
+        return;
+    window->setAttribute(Qt::WA_TranslucentBackground);
+    HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    enableMica(hwnd);
+
+    /*
+        normally we had plans to enable acrylic on win 10 but since it's
+       untested and may cause issues, we'll just enable mica on win 11 and above
+       for now
+    */
+    // enableAcrylic(hwnd);
+}
+
+/* apparently this only works on Win 11 but should not crash on older versions
+ */
+void SetCorner(HWND hwnd, CornerPreference corner)
+{
+    if (corner != Corner_Default) {
+        DWM_WINDOW_CORNER_PREFERENCE cp =
+            static_cast<DWM_WINDOW_CORNER_PREFERENCE>(corner);
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cp,
+                              sizeof(cp));
+    }
+}
