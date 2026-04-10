@@ -80,6 +80,9 @@ jobs:
             gst-libav \
             create-dmg
 
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
       - name: Compile additional dependencies
         run: |
           git clone https://github.com/lxqt/lxqt-build-tools.git
