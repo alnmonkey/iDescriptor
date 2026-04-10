@@ -18,6 +18,22 @@
  */
 
 #include "appinstalldialog.h"
+#include <QFileInfo>
+#include <cstdlib>
+extern "C" {
+char *IpaToolGetDownloadedFilePath(const char *bundleId);
+}
+static QString ipaPathFromIpatool(const QString &bundleId)
+{
+    QByteArray utf8 = bundleId.toUtf8();
+    char *cPath = IpaToolGetDownloadedFilePath(utf8.constData());
+    if (!cPath) {
+        return {};
+    }
+    QString path = QString::fromUtf8(cPath);
+    std::free(cPath);
+    return path;
+}
 
 AppInstallDialog::AppInstallDialog(const QString &appName,
                                    const QString &description,
@@ -246,41 +262,28 @@ void AppInstallDialog::onInstallClicked()
     }
 
     startDownloadProcess(m_bundleId, m_tempDir->path(), buttonIndex, false,
-                         false);
+                         false, true);
 
-    //  FIXME USE SAFETHIS
     connect(
         this, &AppDownloadBaseDialog::downloadFinished, this,
         [this, selectedDevice](bool success) {
             if (success) {
                 qDebug() << "Download finished, starting installation...";
-                /*
-                    FIXME: libipatool generates random id and appends that
-                   to the downloaded IPA filename, so we need to search for
-                   it.
-                */
-                // Find the actual downloaded IPA file
-                QDir outDir(m_tempDir->path());
-                QStringList filters;
-                filters << m_bundleId + "*.ipa";
-                QStringList matches =
-                    outDir.entryList(filters, QDir::Files, QDir::Time);
-                if (matches.isEmpty()) {
+
+                QString ipaFile = ipaPathFromIpatool(m_bundleId);
+                if (ipaFile.isEmpty()) {
                     m_statusLabel->setText("Download failed - IPA not found");
                     setLabelTextColor(m_statusLabel, Qt::red);
                     QMessageBox::critical(
                         this, "Error",
-                        QString("Downloaded IPA not found in %1")
-                            .arg(outDir.absolutePath()));
+                        QString(
+                            "Downloaded IPA path not reported by libipatool"));
                     return;
                 }
-                qDebug() << "Found downloaded IPA:" << matches.first();
-                QString ipaFile = outDir.filePath(matches.first());
-                performInstallation(ipaFile, matches.first(), selectedDevice);
 
-            } else {
-                m_statusLabel->setText("Download failed");
-                setLabelTextColor(m_statusLabel, Qt::red);
+                QFileInfo fi(ipaFile);
+                qDebug() << "IPA:" << ipaFile;
+                performInstallation(ipaFile, fi.fileName(), selectedDevice);
             }
         });
 }
