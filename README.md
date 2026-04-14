@@ -182,7 +182,7 @@ You need to sign in with your Apple ID to use this feature.
 
 ## Virtual Location
 
-### Simulate GPS location on your iDevice! (iOS 6 - iOS 16)
+### Simulate GPS location on your iDevice!
 
 <p align="center">
     <img src="./resources/repo/virtual-location.png"><br/>
@@ -300,16 +300,19 @@ You can also send a pr to main branch but it should be something related to buil
 
 ## Roadmap
 
-**Planned Features for v0.4.0:**
+**Planned Features**
 
-- Migrate to idevice-rs `99% done`
-- Wireless Connection Support `DONE`
+- Migrate to idevice-rs `DONE` ✅
+- Wireless Connection Support `DONE` ✅
 - Install IPA files directly from the app
-- Virtual Location Support for iOS 17 and above
-- Complete iOS 26 Support
+- Virtual Location Support for iOS 17 and above `DONE` ✅
 - Migrate to UCRT for better performance and stability `Windows`
-- New UI/UX improvements
-- Read gallery from Photos.sqlite (maybe delayed to v0.5.0)
+- New UI/UX improvements `Windows` ✅
+- Read gallery from Photos.sqlite
+- Download any version of any app from app store
+- Implement sideloading
+- Import music
+- Companion app on device 
 
 **You can always become a sponsor/donate to request/prioritize a feature or speed up the development process!**
 
