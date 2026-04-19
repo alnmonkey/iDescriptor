@@ -10,3 +10,6 @@
 [submodule "lib/zupdater"]
 	path = lib/zupdater
 	url = https://github.com/libZQT/zupdater.git
+[submodule "lib/idevice-rs"]
+	path = lib/idevice-rs
+	url = https://github.com/uncor3/idevice
