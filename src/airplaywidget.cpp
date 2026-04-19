@@ -64,6 +64,10 @@
 AirPlaySettings::AirPlaySettings()
     : fps(SettingsManager::sharedInstance()->airplayFps()),
       noHold(SettingsManager::sharedInstance()->airplayNoHold())
+#ifdef __linux__
+      ,
+      useLegacyPorts(SettingsManager::sharedInstance()->airplayUseLegacyPorts())
+#endif
 {
 }
 
@@ -77,6 +81,13 @@ QStringList AirPlaySettings::toArgs() const
     // Allow new connections to take over
     if (noHold)
         args << "-nohold";
+
+#ifdef __linux__
+    // We probably need this only on linux
+    // https://github.com/iDescriptor/iDescriptor/issues/73
+    if (useLegacyPorts)
+        args << "-p";
+#endif
 
     return args;
 }
@@ -120,6 +131,13 @@ void AirPlaySettingsDialog::setupUI()
         SettingsManager::sharedInstance()->airplayNoHold());
     videoLayout->addRow(m_noHoldCheckbox);
 
+#ifdef __linux__
+    m_useLegacyPortsCheckbox = new QCheckBox("Use legacy ports");
+    m_useLegacyPortsCheckbox->setChecked(
+        SettingsManager::sharedInstance()->airplayUseLegacyPorts());
+    videoLayout->addRow(m_useLegacyPortsCheckbox);
+#endif
+
     mainLayout->addWidget(videoGroup);
     // Buttons
     QDialogButtonBox *buttonBox =
@@ -127,14 +145,30 @@ void AirPlaySettingsDialog::setupUI()
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     mainLayout->addWidget(buttonBox);
+    connectSignals();
 }
 
-AirPlaySettings AirPlaySettingsDialog::getSettings() const
+void AirPlaySettingsDialog::connectSignals()
+{
+    connect(m_fpsComboBox, &QComboBox::currentTextChanged, this,
+            [this]() { m_settingsChanged = true; });
+    connect(m_noHoldCheckbox, &QCheckBox::toggled, this,
+            [this]() { m_settingsChanged = true; });
+#ifdef __linux__
+    connect(m_useLegacyPortsCheckbox, &QCheckBox::toggled, this,
+            [this]() { m_settingsChanged = true; });
+#endif
+}
+
+QPair<bool, AirPlaySettings> AirPlaySettingsDialog::getSettings() const
 {
     AirPlaySettings settings;
     settings.fps = m_fpsComboBox->currentText().toInt();
     settings.noHold = m_noHoldCheckbox->isChecked();
-    return settings;
+#ifdef __linux__
+    settings.useLegacyPorts = m_useLegacyPortsCheckbox->isChecked();
+#endif
+    return {m_settingsChanged, settings};
 }
 
 AirPlayWidget::AirPlayWidget(QWidget *parent)
@@ -308,11 +342,20 @@ void AirPlayWidget::showSettingsDialog()
 {
     AirPlaySettingsDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
-        AirPlaySettings newSettings = dialog.getSettings();
+        QPair<bool, AirPlaySettings> result = dialog.getSettings();
+        // if not changed, do nothing
+        if (!result.first) {
+            return;
+        }
+        AirPlaySettings newSettings = result.second;
 
         // Save settings
         SettingsManager::sharedInstance()->setAirplayFps(newSettings.fps);
         SettingsManager::sharedInstance()->setAirplayNoHold(newSettings.noHold);
+#ifdef __linux__
+        SettingsManager::sharedInstance()->setAirplayUseLegacyPorts(
+            newSettings.useLegacyPorts);
+#endif
 
         QMessageBox::information(this, "Settings Saved",
                                  "AirPlay will be restarted to apply the new "

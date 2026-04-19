@@ -76,6 +76,7 @@ private:
     QCheckBox *m_noHoldCheckbox;
 
 #ifdef __linux__
+    QCheckBox *m_useLegacyPortsCheckbox;
     QCheckBox *m_showV4L2CheckBox;
 #endif
 

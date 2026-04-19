@@ -233,6 +233,11 @@ void SettingsWidget::setupUI()
     airplayLayout->addWidget(m_noHoldCheckbox);
 
 #ifdef __linux__
+    m_useLegacyPortsCheckbox = new QCheckBox("Use legacy ports");
+    m_useLegacyPortsCheckbox->setToolTip(
+        "Use legacy AirPlay port behavior for compatibility.");
+    airplayLayout->addWidget(m_useLegacyPortsCheckbox);
+
     m_showV4L2CheckBox = new QCheckBox("Show V4L2 Button on AirPlay Widget");
     airplayLayout->addWidget(m_showV4L2CheckBox);
 #endif
@@ -342,6 +347,7 @@ void SettingsWidget::loadSettings()
     m_fpsComboBox->setCurrentText(QString::number(sm->airplayFps()));
     m_noHoldCheckbox->setChecked(sm->airplayNoHold());
 #ifdef __linux__
+    m_useLegacyPortsCheckbox->setChecked(sm->airplayUseLegacyPorts());
     m_showV4L2CheckBox->setChecked(sm->showV4L2());
 #endif
 
@@ -422,6 +428,8 @@ void SettingsWidget::connectSignals()
     connect(m_noHoldCheckbox, &QCheckBox::toggled, this,
             &SettingsWidget::onSettingChanged);
 #ifdef __linux__
+    connect(m_useLegacyPortsCheckbox, &QCheckBox::toggled, this,
+            &SettingsWidget::onSettingChanged);
     connect(m_showV4L2CheckBox, &QCheckBox::toggled, this,
             &SettingsWidget::onSettingChanged);
 #endif
@@ -534,6 +542,7 @@ void SettingsWidget::saveSettings()
     sm->setAirplayFps(m_fpsComboBox->currentText().toInt());
     sm->setAirplayNoHold(m_noHoldCheckbox->isChecked());
 #ifdef __linux__
+    sm->setAirplayUseLegacyPorts(m_useLegacyPortsCheckbox->isChecked());
     sm->setShowV4L2(m_showV4L2CheckBox->isChecked());
 #endif
     m_applyButton->setEnabled(false);

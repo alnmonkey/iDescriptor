@@ -281,6 +281,7 @@ void SettingsManager::resetToDefaults()
     setAirplayNoHold(true);
     setWirelessFileServerPort(8080);
 #ifdef __linux__
+    setAirplayUseLegacyPorts(true);
     setShowV4L2(false);
 #endif
     setIsSleepyDeviceWarningDismissed(false);
@@ -469,6 +470,17 @@ void SettingsManager::setAirplayNoHold(bool noHold)
 }
 
 #ifdef __linux__
+bool SettingsManager::airplayUseLegacyPorts() const
+{
+    return m_settings->value("airplayUseLegacyPorts", true).toBool();
+}
+
+void SettingsManager::setAirplayUseLegacyPorts(bool enabled)
+{
+    m_settings->setValue("airplayUseLegacyPorts", enabled);
+    m_settings->sync();
+}
+
 bool SettingsManager::showV4L2() const
 {
     return m_settings->value("showV4L2", false).toBool();

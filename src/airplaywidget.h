@@ -76,6 +76,9 @@ public:
     explicit AirPlaySettings();
     int fps;
     bool noHold;
+#ifdef __linux__
+    bool useLegacyPorts;
+#endif
 
     QStringList toArgs() const;
 };
@@ -85,14 +88,19 @@ class AirPlaySettingsDialog : public QDialog
     Q_OBJECT
 public:
     explicit AirPlaySettingsDialog(QWidget *parent = nullptr);
-    AirPlaySettings getSettings() const;
+    QPair<bool, AirPlaySettings> getSettings() const;
 
 private:
     void setupUI();
+    void connectSignals();
 
     QComboBox *m_fpsComboBox;
     QCheckBox *m_noHoldCheckbox;
+#ifdef __linux__
+    QCheckBox *m_useLegacyPortsCheckbox;
+#endif
     AirPlaySettings m_settings;
+    bool m_settingsChanged = false;
 };
 
 class AirPlayWidget : public Tool
